@@ -283,10 +283,25 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               </div>
             )}
             <div className="flex gap-2">
-              <Button onClick={handleApproveGoLive} disabled={approving} className="gap-2 flex-1 bg-emerald-600 hover:bg-emerald-700">
-                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                Approve & Go Live
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex-1">
+                      <Button
+                        onClick={() => setShowGoLiveModal(true)}
+                        disabled={approving || !canGoLive}
+                        className="gap-2 w-full bg-primary hover:bg-primary/90"
+                      >
+                        {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                        Approve & Go Live
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!canGoLive && (
+                    <TooltipContent><p>{goLiveTooltip}</p></TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
               <Button variant="outline" onClick={handleManualReview} className="gap-2">
                 <Wrench className="h-4 w-4" /> I'll work on it
               </Button>
