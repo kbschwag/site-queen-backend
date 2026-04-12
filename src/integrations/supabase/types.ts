@@ -14,16 +14,357 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      applications: {
+        Row: {
+          accepts_commitment: string | null
+          ai_score: number | null
+          brand_vibe: string | null
+          business_name: string
+          business_type: string
+          city_state: string
+          created_at: string
+          email: string
+          has_logo: string | null
+          has_website: string
+          id: string
+          is_decision_maker: boolean
+          lead_temperature: string | null
+          logo_url: string | null
+          monthly_clients: string
+          monthly_revenue: string
+          name: string
+          notes: string | null
+          phone: string | null
+          plan_interest: string | null
+          status: string | null
+          website_goal: string | null
+          years_in_business: string
+        }
+        Insert: {
+          accepts_commitment?: string | null
+          ai_score?: number | null
+          brand_vibe?: string | null
+          business_name: string
+          business_type: string
+          city_state: string
+          created_at?: string
+          email: string
+          has_logo?: string | null
+          has_website: string
+          id?: string
+          is_decision_maker?: boolean
+          lead_temperature?: string | null
+          logo_url?: string | null
+          monthly_clients: string
+          monthly_revenue: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          plan_interest?: string | null
+          status?: string | null
+          website_goal?: string | null
+          years_in_business: string
+        }
+        Update: {
+          accepts_commitment?: string | null
+          ai_score?: number | null
+          brand_vibe?: string | null
+          business_name?: string
+          business_type?: string
+          city_state?: string
+          created_at?: string
+          email?: string
+          has_logo?: string | null
+          has_website?: string
+          id?: string
+          is_decision_maker?: boolean
+          lead_temperature?: string | null
+          logo_url?: string | null
+          monthly_clients?: string
+          monthly_revenue?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          plan_interest?: string | null
+          status?: string | null
+          website_goal?: string | null
+          years_in_business?: string
+        }
+        Relationships: []
+      }
+      change_requests: {
+        Row: {
+          admin_notes: string | null
+          ai_processed: boolean | null
+          attachment_url: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          request_text: string
+          status: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          ai_processed?: boolean | null
+          attachment_url?: string | null
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          request_text: string
+          status?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          ai_processed?: boolean | null
+          attachment_url?: string | null
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          request_text?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_requests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          application_id: string | null
+          business_name: string
+          business_type: string
+          created_at: string
+          id: string
+          join_date: string | null
+          last_active: string | null
+          next_billing_date: string | null
+          plan: string
+          site_status: string | null
+          site_url: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_status: string | null
+          updates_limit: number | null
+          updates_used_this_month: number | null
+          user_id: string | null
+        }
+        Insert: {
+          application_id?: string | null
+          business_name: string
+          business_type: string
+          created_at?: string
+          id?: string
+          join_date?: string | null
+          last_active?: string | null
+          next_billing_date?: string | null
+          plan?: string
+          site_status?: string | null
+          site_url?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          updates_limit?: number | null
+          updates_used_this_month?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          application_id?: string | null
+          business_name?: string
+          business_type?: string
+          created_at?: string
+          id?: string
+          join_date?: string | null
+          last_active?: string | null
+          next_billing_date?: string | null
+          plan?: string
+          site_status?: string | null
+          site_url?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string | null
+          updates_limit?: number | null
+          updates_used_this_month?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      emails_log: {
+        Row: {
+          application_id: string | null
+          client_id: string | null
+          created_at: string
+          email_type: string
+          id: string
+          recipient_email: string
+          status: string | null
+        }
+        Insert: {
+          application_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          email_type: string
+          id?: string
+          recipient_email: string
+          status?: string | null
+        }
+        Update: {
+          application_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          email_type?: string
+          id?: string
+          recipient_email?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emails_log_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emails_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          role?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sites: {
+        Row: {
+          brand_vibe: string | null
+          business_type: string | null
+          client_id: string
+          created_at: string
+          deploy_url: string | null
+          id: string
+          intake_data: Json | null
+          last_updated: string | null
+          logo_url: string | null
+          primary_color: string | null
+          staging_url: string | null
+          template_used: string | null
+        }
+        Insert: {
+          brand_vibe?: string | null
+          business_type?: string | null
+          client_id: string
+          created_at?: string
+          deploy_url?: string | null
+          id?: string
+          intake_data?: Json | null
+          last_updated?: string | null
+          logo_url?: string | null
+          primary_color?: string | null
+          staging_url?: string | null
+          template_used?: string | null
+        }
+        Update: {
+          brand_vibe?: string | null
+          business_type?: string | null
+          client_id?: string
+          created_at?: string
+          deploy_url?: string | null
+          id?: string
+          intake_data?: Json | null
+          last_updated?: string | null
+          logo_url?: string | null
+          primary_color?: string | null
+          staging_url?: string | null
+          template_used?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +491,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const
