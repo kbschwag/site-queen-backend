@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 // Anonymous client for public form submissions (avoids auth token interference)
 const anonClient = createClient(
   import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false } }
 );
 
 export default function Apply() {
