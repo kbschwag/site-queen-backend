@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
+import { WebsiteBuildPanel } from "@/components/operator/WebsiteBuildPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -157,7 +158,8 @@ export default function OperatorClients() {
             <Tabs defaultValue="details" className="mt-4">
               <TabsList className="w-full">
                 <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
-                <TabsTrigger value="brief" className="flex-1">Website Brief</TabsTrigger>
+                <TabsTrigger value="build" className="flex-1">Website Build</TabsTrigger>
+                <TabsTrigger value="brief" className="flex-1">Brief</TabsTrigger>
               </TabsList>
               <TabsContent value="details" className="space-y-4 mt-4">
                 <div className="flex items-center gap-2">
@@ -231,6 +233,9 @@ export default function OperatorClients() {
                     </div>
                   </div>
                 )}
+              </TabsContent>
+              <TabsContent value="build" className="mt-4">
+                <WebsiteBuildPanel clientId={selected.id} businessName={selected.business_name} />
               </TabsContent>
               <TabsContent value="brief" className="mt-4">
                 <WebsiteBriefPanel clientId={selected.id} businessName={selected.business_name} />
