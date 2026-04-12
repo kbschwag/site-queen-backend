@@ -90,7 +90,7 @@ export function StepBusinessBasics({ data, onChange }: Props) {
         {data.location_type && data.location_type !== "online" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <Label>Street Address {data.location_type === "online" ? "(optional)" : ""}</Label>
+              <Label>Street Address</Label>
               <Input value={data.street_address || ""} onChange={(e) => onChange({ street_address: e.target.value })} />
             </div>
             <div><Label>City</Label><Input value={data.city || ""} onChange={(e) => onChange({ city: e.target.value })} /></div>
