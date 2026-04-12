@@ -215,6 +215,7 @@ export type Database = {
           business_type: string
           created_at: string
           id: string
+          intake_completed: boolean
           join_date: string | null
           last_active: string | null
           next_billing_date: string | null
@@ -234,6 +235,7 @@ export type Database = {
           business_type: string
           created_at?: string
           id?: string
+          intake_completed?: boolean
           join_date?: string | null
           last_active?: string | null
           next_billing_date?: string | null
@@ -253,6 +255,7 @@ export type Database = {
           business_type?: string
           created_at?: string
           id?: string
+          intake_completed?: boolean
           join_date?: string | null
           last_active?: string | null
           next_billing_date?: string | null
