@@ -163,10 +163,18 @@ Do not include any explanation, markdown formatting, or code blocks. Return raw 
 
     if (!generatedSite.html) throw new Error("AI response missing html field");
 
-    // If CSS is separate, link it in the HTML
+    // Inline CSS into the HTML so the staging page is fully self-contained
     let finalHTML = generatedSite.html;
-    if (generatedSite.css && !finalHTML.includes("styles.css")) {
-      finalHTML = finalHTML.replace("</head>", `<link rel="stylesheet" href="styles.css">\n</head>`);
+    if (generatedSite.css) {
+      if (finalHTML.includes("</head>")) {
+        finalHTML = finalHTML.replace("</head>", `<style>${generatedSite.css}</style>\n</head>`);
+      } else if (finalHTML.includes("<body")) {
+        finalHTML = finalHTML.replace("<body", `<style>${generatedSite.css}</style>\n<body`);
+      } else {
+        finalHTML = `<style>${generatedSite.css}</style>\n${finalHTML}`;
+      }
+      // Remove any external stylesheet link to styles.css
+      finalHTML = finalHTML.replace(/<link[^>]*href=["']styles\.css["'][^>]*>/gi, "");
     }
 
     // Store generated HTML in Supabase storage
@@ -174,14 +182,6 @@ Do not include any explanation, markdown formatting, or code blocks. Return raw 
     await supabase.storage
       .from("generated-sites")
       .upload(`${clientId}/index.html`, htmlBlob, { upsert: true });
-
-    // Store generated CSS
-    if (generatedSite.css) {
-      const cssBlob = new Blob([generatedSite.css], { type: "text/css" });
-      await supabase.storage
-        .from("generated-sites")
-        .upload(`${clientId}/styles.css`, cssBlob, { upsert: true });
-    }
 
     // Get public staging URL
     const { data: stagingURLData } = supabase.storage
