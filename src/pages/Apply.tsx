@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ const anonClient = createClient(
 const TOTAL_STEPS = 4;
 
 export default function Apply() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<ApplicationFormData>(initialFormData);
@@ -150,9 +152,11 @@ export default function Apply() {
 
       const { score, temperature } = calculateScore(form);
       const flags = checkFlags(form);
-      const status = flags.length > 0 ? "needs_review" : "pending";
+      const isAutoApproved = flags.length === 0;
+      const status = isAutoApproved ? "approved" : "needs_review";
 
       const applicationId = crypto.randomUUID();
+      const bookingUrl = `${window.location.origin}/book-call?name=${encodeURIComponent(form.name)}`;
 
       const { error: insertError } = await anonClient.from("applications").insert([{
         id: applicationId,
@@ -194,20 +198,34 @@ export default function Apply() {
         return;
       }
 
-      // Trigger AI scoring (enhances the basic score)
+      // Trigger AI scoring
       supabase.functions.invoke("score-lead", { body: { applicationId } }).catch(console.error);
 
-      // Trigger confirmation email
-      supabase.functions.invoke("send-email", {
-        body: {
-          to: form.email,
-          template: "application_received",
-          data: { name: form.name, business_name: form.business_name },
-          applicationId,
-        },
-      }).catch(console.error);
+      if (isAutoApproved) {
+        // Send approval email and redirect straight to booking
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: form.email,
+            template: "application_approved",
+            data: { name: form.name, business_name: form.business_name, booking_url: bookingUrl },
+            applicationId,
+          },
+        }).catch(console.error);
 
-      setSubmitted(true);
+        navigate(`/book-call?name=${encodeURIComponent(form.name)}`);
+      } else {
+        // Flagged — needs manual review, show "we'll be in touch" screen
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: form.email,
+            template: "application_received",
+            data: { name: form.name, business_name: form.business_name },
+            applicationId,
+          },
+        }).catch(console.error);
+
+        setSubmitted(true);
+      }
     } catch (err) {
       toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
     }
