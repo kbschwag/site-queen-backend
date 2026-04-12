@@ -352,6 +352,31 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </CardContent>
         </Card>
       )}
+
+      {/* Go Live Confirmation Modal */}
+      <Dialog open={showGoLiveModal} onOpenChange={(open) => { setShowGoLiveModal(open); if (!open) setGoLiveChecked(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Go live confirmation</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will push <strong>{businessName}</strong>'s website live at{" "}
+            <strong>{(clientData as any)?.domain_name || "their domain"}</strong>.
+            This action cannot be undone. Are you sure?
+          </p>
+          <label className="flex items-center gap-2 text-sm cursor-pointer mt-2">
+            <Checkbox checked={goLiveChecked} onCheckedChange={(c) => setGoLiveChecked(!!c)} />
+            I have reviewed the site and it is ready for the client
+          </label>
+          <DialogFooter className="gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShowGoLiveModal(false)}>Cancel</Button>
+            <Button onClick={handleApproveGoLive} disabled={!goLiveChecked || approving} className="gap-2">
+              {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+              Confirm and go live ♛
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
