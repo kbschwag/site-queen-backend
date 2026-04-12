@@ -19,18 +19,34 @@ const EMAIL_TEMPLATES: Record<string, { subject: string; html: (data: Record<str
     `,
   },
   application_approved: {
-    subject: "You're approved! Let's build your website — SiteQueen",
+    subject: "You're approved! Book your discovery call — SiteQueen ♛",
     html: (d) => `
-      <h2>Great news, ${d.name}!</h2>
-      <p>Your application for <strong>${d.business_name}</strong> has been approved.</p>
-      <p>Here's what happens next:</p>
-      <ol>
-        <li>Book your onboarding call</li>
-        <li>We'll gather your brand assets</li>
-        <li>Your site will be live within 48 hours</li>
-      </ol>
-      <p><a href="${d.cal_link || '#'}">Book Your Onboarding Call</a></p>
-      <p>— The SiteQueen Team</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #7c3aed;">Great news, ${d.name}! ♛</h2>
+        <p>Your application for <strong>${d.business_name}</strong> has been approved!</p>
+        <p>Here's what happens next:</p>
+        <ol>
+          <li><strong>Book your discovery call</strong> — we'll go over your website vision</li>
+          <li>We'll gather your brand assets</li>
+          <li>Your site will be live within 48 hours of our call</li>
+        </ol>
+        <p style="text-align: center; margin: 30px 0;">
+          <a href="${d.booking_url || '#'}" style="background: #7c3aed; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Book Your Discovery Call →</a>
+        </p>
+        <p style="color: #666;">Can't click the button? Copy this link: ${d.booking_url || ''}</p>
+        <p>— The SiteQueen Team ♛</p>
+      </div>
+    `,
+  },
+  application_declined: {
+    subject: "Update on your application — SiteQueen",
+    html: (d) => `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Hi ${d.name || "there"},</h2>
+        <p>Thank you for your interest in SiteQueen. After reviewing your application, we don't think we're the right fit right now — but that can change.</p>
+        <p>You're welcome to reapply in the future. We wish you and your business all the best. ♛</p>
+        <p>— The SiteQueen Team</p>
+      </div>
     `,
   },
   application_rejected: {
