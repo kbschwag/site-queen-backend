@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -153,88 +154,88 @@ export default function OperatorClients() {
             <SheetHeader>
               <SheetTitle>{selected.business_name}</SheetTitle>
             </SheetHeader>
-            <div className="mt-4 space-y-4">
-              <div className="flex items-center gap-2">
-                {statusBadge(selected.subscription_status)}
-                {siteBadge(selected.site_status)}
-                <Badge variant="outline">{planLabel(selected.plan)}</Badge>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Business Type</span><span>{selected.business_type}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Joined</span><span>{selected.join_date ? format(new Date(selected.join_date), "MMM d, yyyy") : "—"}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Last Active</span><span>{selected.last_active ? format(new Date(selected.last_active), "MMM d, yyyy") : "—"}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Updates This Month</span><span>{selected.updates_used_this_month ?? 0} / {selected.updates_limit ?? 0}</span></div>
-                {selected.site_url && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Site URL</span>
-                    <a href={selected.site_url} target="_blank" rel="noreferrer" className="text-primary flex items-center gap-1 hover:underline">
-                      {selected.site_url} <ExternalLink className="h-3 w-3" />
-                    </a>
+            <Tabs defaultValue="details" className="mt-4">
+              <TabsList className="w-full">
+                <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+                <TabsTrigger value="brief" className="flex-1">Website Brief</TabsTrigger>
+              </TabsList>
+              <TabsContent value="details" className="space-y-4 mt-4">
+                <div className="flex items-center gap-2">
+                  {statusBadge(selected.subscription_status)}
+                  {siteBadge(selected.site_status)}
+                  <Badge variant="outline">{planLabel(selected.plan)}</Badge>
+                </div>
+                <Separator />
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Business Type</span><span>{selected.business_type}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Joined</span><span>{selected.join_date ? format(new Date(selected.join_date), "MMM d, yyyy") : "—"}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Last Active</span><span>{selected.last_active ? format(new Date(selected.last_active), "MMM d, yyyy") : "—"}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Updates This Month</span><span>{selected.updates_used_this_month ?? 0} / {selected.updates_limit ?? 0}</span></div>
+                  {selected.site_url && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Site URL</span>
+                      <a href={selected.site_url} target="_blank" rel="noreferrer" className="text-primary flex items-center gap-1 hover:underline">
+                        {selected.site_url} <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+                <Separator />
+                {(isOwner) && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-sm">Manage</h3>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Plan</label>
+                      <Select value={selected.plan} onValueChange={(v) => handleUpdateField(selected.id, "plan", v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="starter">Starter</SelectItem>
+                          <SelectItem value="growth">Growth</SelectItem>
+                          <SelectItem value="pro">Pro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Site Status</label>
+                      <Select value={selected.site_status || "building"} onValueChange={(v) => handleUpdateField(selected.id, "site_status", v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="building">Building</SelectItem>
+                          <SelectItem value="live">Live</SelectItem>
+                          <SelectItem value="paused">Paused</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Subscription Status</label>
+                      <Select value={selected.subscription_status || "active"} onValueChange={(v) => handleUpdateField(selected.id, "subscription_status", v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="paused">Paused</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Site URL</label>
+                      <Input
+                        defaultValue={selected.site_url || ""}
+                        placeholder="https://..."
+                        onBlur={(e) => {
+                          if (e.target.value !== (selected.site_url || "")) {
+                            handleUpdateField(selected.id, "site_url", e.target.value);
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
-              </div>
-
-              <Separator />
-
-              {/* Quick actions */}
-              {(isOwner) && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-sm">Manage</h3>
-
-                  <div>
-                    <label className="text-xs text-muted-foreground">Plan</label>
-                    <Select value={selected.plan} onValueChange={(v) => handleUpdateField(selected.id, "plan", v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="starter">Starter</SelectItem>
-                        <SelectItem value="growth">Growth</SelectItem>
-                        <SelectItem value="pro">Pro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-muted-foreground">Site Status</label>
-                    <Select value={selected.site_status || "building"} onValueChange={(v) => handleUpdateField(selected.id, "site_status", v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="building">Building</SelectItem>
-                        <SelectItem value="live">Live</SelectItem>
-                        <SelectItem value="paused">Paused</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-muted-foreground">Subscription Status</label>
-                    <Select value={selected.subscription_status || "active"} onValueChange={(v) => handleUpdateField(selected.id, "subscription_status", v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="paused">Paused</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-muted-foreground">Site URL</label>
-                    <Input
-                      defaultValue={selected.site_url || ""}
-                      placeholder="https://..."
-                      onBlur={(e) => {
-                        if (e.target.value !== (selected.site_url || "")) {
-                          handleUpdateField(selected.id, "site_url", e.target.value);
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+              </TabsContent>
+              <TabsContent value="brief" className="mt-4">
+                <WebsiteBriefPanel clientId={selected.id} businessName={selected.business_name} />
+              </TabsContent>
+            </Tabs>
           </SheetContent>
         </Sheet>
       )}
