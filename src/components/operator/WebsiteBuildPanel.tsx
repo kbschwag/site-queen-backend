@@ -8,8 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
-  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, ExternalLink, Rocket
+  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket
 } from "lucide-react";
+import { SitePreviewFrame } from "./SitePreviewFrame";
 
 interface Props {
   clientId: string;
