@@ -20,13 +20,18 @@ import {
   LogOut,
   Wrench,
   BarChart3,
+  ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
+import { IntakeForm } from "@/components/intake/IntakeForm";
+import type { IntakeData } from "@/components/intake/types";
 
 export default function ClientDashboard() {
   const { user, signOut } = useAuth();
   const queryClient = useQueryClient();
   const [newRequest, setNewRequest] = useState("");
+  const [showIntake, setShowIntake] = useState(false);
 
   const { data: client, isLoading: clientLoading } = useQuery({
     queryKey: ["my-client"],
@@ -94,8 +99,6 @@ export default function ClientDashboard() {
         request_text: newRequest,
       });
       if (error) throw error;
-
-      // Send confirmation email
       supabase.functions.invoke("send-email", {
         body: {
           to: profile?.email || user!.email,
@@ -148,27 +151,151 @@ export default function ClientDashboard() {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="max-w-md w-full text-center">
           <CardHeader>
-            <div className="mx-auto mb-2">
-              <Crown className="h-10 w-10 text-primary" />
-            </div>
+            <div className="mx-auto mb-2"><Crown className="h-10 w-10 text-primary" /></div>
             <CardTitle>Welcome to SiteQueen ♛</CardTitle>
-            <CardDescription>
-              Your client account is being set up. If you just applied, our team will link your account shortly.
-            </CardDescription>
+            <CardDescription>Your client account is being set up. If you just applied, our team will link your account shortly.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" onClick={signOut} className="gap-2">
-              <LogOut className="h-4 w-4" /> Sign Out
-            </Button>
+            <Button variant="outline" onClick={signOut} className="gap-2"><LogOut className="h-4 w-4" /> Sign Out</Button>
           </CardContent>
         </Card>
       </div>
     );
   }
 
+  // Check if intake not completed — cast to access the field
+  const intakeCompleted = (client as any).intake_completed;
+  const intakeData = (site?.intake_data as IntakeData) || {};
+  const intakeProgress = Math.round(((intakeData.completed_steps || []).length / 9) * 100);
+
+  // Show intake form full screen
+  if (showIntake) {
+    return (
+      <IntakeForm
+        clientId={client.id}
+        userId={user!.id}
+        plan={client.plan}
+        businessName={client.business_name}
+        onComplete={() => {
+          setShowIntake(false);
+          queryClient.invalidateQueries({ queryKey: ["my-client"] });
+          queryClient.invalidateQueries({ queryKey: ["my-site"] });
+        }}
+      />
+    );
+  }
+
+  // Onboarding state — intake not completed
+  if (!intakeCompleted && client.site_status === "building") {
+    const firstName = profile?.full_name?.split(" ")[0] || "there";
+    const hasStarted = intakeData.current_step && intakeData.current_step > 1;
+
+    return (
+      <div className="min-h-screen bg-secondary/30">
+        <header className="border-b bg-card">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <Crown className="h-6 w-6 text-primary" />
+              <span className="font-bold">{client.business_name}</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={signOut} className="gap-2 text-muted-foreground">
+              <LogOut className="h-4 w-4" /> Sign Out
+            </Button>
+          </div>
+        </header>
+
+        <main className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <div className="mb-8">
+            <Crown className="h-16 w-16 text-primary mx-auto mb-6" />
+            <h1 className="text-3xl sm:text-4xl font-bold mb-3">
+              Welcome, {firstName}. <br />Let's build your website. ♛
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              This should take about 10-15 minutes. Your progress saves automatically so you can come back anytime.
+            </p>
+          </div>
+
+          {hasStarted ? (
+            <div className="space-y-4">
+              <div className="bg-card rounded-xl border p-6 max-w-sm mx-auto">
+                <p className="text-sm text-muted-foreground mb-2">Your progress</p>
+                <Progress value={intakeProgress} className="h-3 mb-2" />
+                <p className="text-sm font-medium">{intakeProgress}% complete — Step {intakeData.current_step} of 9</p>
+              </div>
+              <Button size="lg" onClick={() => setShowIntake(true)} className="gap-2 text-lg px-8">
+                Continue where you left off <ArrowRight className="h-5 w-5" />
+              </Button>
+            </div>
+          ) : (
+            <Button size="lg" onClick={() => setShowIntake(true)} className="gap-2 text-lg px-8">
+              <Sparkles className="h-5 w-5" /> Start building my website
+            </Button>
+          )}
+
+          <p className="text-xs text-muted-foreground mt-8">
+            Have questions? Email <a href="mailto:hello@sitequeen.ai" className="text-primary hover:underline">hello@sitequeen.ai</a>
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  // Building state — intake completed but site not live
+  if (intakeCompleted && client.site_status === "building") {
+    const tips = [
+      "Tip: Claim your Google Business Profile to boost local SEO 🗺️",
+      "Tip: Start collecting customer testimonials now for your site ⭐",
+      "Tip: Make sure your business hours are up to date on Google 📅",
+      "Fun fact: 75% of users judge a business's credibility by their website design 🎨",
+      "Tip: Set up your business social media accounts while you wait 📱",
+    ];
+    const randomTip = tips[Math.floor(Math.random() * tips.length)];
+
+    return (
+      <div className="min-h-screen bg-secondary/30">
+        <header className="border-b bg-card">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <Crown className="h-6 w-6 text-primary" />
+              <span className="font-bold">{client.business_name}</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={signOut} className="gap-2 text-muted-foreground">
+              <LogOut className="h-4 w-4" /> Sign Out
+            </Button>
+          </div>
+        </header>
+
+        <main className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <div className="relative mx-auto mb-8 w-24 h-24">
+            <div className="absolute inset-0 rounded-full border-4 border-primary/20 animate-pulse" />
+            <div className="absolute inset-2 rounded-full border-4 border-primary/40 animate-pulse" style={{ animationDelay: "0.5s" }} />
+            <div className="absolute inset-4 rounded-full bg-primary/10 flex items-center justify-center">
+              <Crown className="h-8 w-8 text-primary" />
+            </div>
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl font-bold mb-3">Your website is being built. ♛</h1>
+          <p className="text-muted-foreground text-lg mb-8">
+            We'll email you the moment it's live. Average build time is 24 hours.
+          </p>
+
+          <Card className="max-w-md mx-auto text-left">
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">{randomTip}</p>
+            </CardContent>
+          </Card>
+
+          <p className="text-xs text-muted-foreground mt-8">
+            Forgot something? Email <a href="mailto:hello@sitequeen.ai" className="text-primary hover:underline">hello@sitequeen.ai</a>
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  // Regular dashboard — site is live
   return (
     <div className="min-h-screen bg-secondary/30">
-      {/* Header */}
       <header className="border-b bg-card sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -185,7 +312,6 @@ export default function ClientDashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        {/* Status row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card>
             <CardContent className="pt-5 pb-4">
@@ -200,7 +326,6 @@ export default function ClientDashboard() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-5 pb-4">
               <div className="flex items-center gap-3">
@@ -215,7 +340,6 @@ export default function ClientDashboard() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-5 pb-4">
               <div className="flex items-center gap-3">
@@ -231,43 +355,27 @@ export default function ClientDashboard() {
           </Card>
         </div>
 
-        {/* Website info */}
         {site && (site.deploy_url || site.staging_url) && (
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Your Website</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Your Website</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {site.deploy_url && (
-                <a
-                  href={site.deploy_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-2 text-sm text-primary hover:underline"
-                >
+                <a href={site.deploy_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-primary hover:underline">
                   <Globe className="h-4 w-4" /> {site.deploy_url} <ExternalLink className="h-3 w-3" />
                 </a>
               )}
               {site.staging_url && (
-                <a
-                  href={site.staging_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:underline"
-                >
+                <a href={site.staging_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-muted-foreground hover:underline">
                   Staging: {site.staging_url} <ExternalLink className="h-3 w-3" />
                 </a>
               )}
               {site.last_updated && (
-                <p className="text-xs text-muted-foreground">
-                  Last updated: {format(new Date(site.last_updated), "MMM d, yyyy")}
-                </p>
+                <p className="text-xs text-muted-foreground">Last updated: {format(new Date(site.last_updated), "MMM d, yyyy")}</p>
               )}
             </CardContent>
           </Card>
         )}
 
-        {/* Submit change request */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Request a Change</CardTitle>
@@ -281,28 +389,17 @@ export default function ClientDashboard() {
               rows={4}
               className="resize-none"
             />
-            <Button
-              onClick={() => submitRequest.mutate()}
-              disabled={!newRequest.trim() || submitRequest.isPending}
-              className="gap-2"
-            >
-              {submitRequest.isPending ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</>
-              ) : (
-                <><Send className="h-4 w-4" /> Submit Request</>
-              )}
+            <Button onClick={() => submitRequest.mutate()} disabled={!newRequest.trim() || submitRequest.isPending} className="gap-2">
+              {submitRequest.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</> : <><Send className="h-4 w-4" /> Submit Request</>}
             </Button>
           </CardContent>
         </Card>
 
-        {/* Request history */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Request History</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Request History</CardTitle></CardHeader>
           <CardContent>
             {changeRequests.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No requests yet. Submit your first change request above!</p>
+              <p className="text-sm text-muted-foreground py-4 text-center">No requests yet.</p>
             ) : (
               <div className="space-y-3">
                 {changeRequests.map((cr, i) => (
