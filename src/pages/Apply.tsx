@@ -23,6 +23,7 @@ const anonClient = createClient(
 const TOTAL_STEPS = 4;
 
 export default function Apply() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<ApplicationFormData>(initialFormData);
