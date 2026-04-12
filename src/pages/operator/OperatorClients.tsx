@@ -64,7 +64,8 @@ export default function OperatorClients() {
   };
 
   const handleUpdateField = async (clientId: string, field: string, value: any) => {
-    await supabase.from("clients").update({ [field]: value }).eq("id", clientId);
+    const updateData: Record<string, any> = { [field]: value };
+    await supabase.from("clients").update(updateData as any).eq("id", clientId);
     await supabase.from("audit_log").insert({
       user_id: user!.id,
       user_email: user!.email,
