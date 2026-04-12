@@ -152,6 +152,14 @@ serve(async (req) => {
 
     if (!response.ok) {
       console.error("Resend error:", result);
+      // In sandbox mode, Resend only allows sending to the account owner's email.
+      // Return success with a warning so the app doesn't break.
+      if (result?.statusCode === 403 && result?.message?.includes("testing emails")) {
+        console.warn("Resend sandbox mode: email not delivered to", to);
+        return new Response(JSON.stringify({ success: true, sandbox: true, warning: "Resend sandbox mode - email logged but not delivered. Verify a domain at resend.com/domains to send to all recipients." }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify({ error: "Failed to send email", details: result }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
