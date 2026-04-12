@@ -94,53 +94,18 @@ export default function ApplicationDetailPanel({ application, onClose }: Props) 
   const handleConvert = async () => {
     setLoading(true);
     try {
-      const limitsMap: Record<string, number> = { starter: 0, growth: 1, pro: 3 };
-
-      // Create client record
-      const clientId = crypto.randomUUID();
-      const { error: clientError } = await supabase.from("clients").insert({
-        id: clientId,
-        application_id: app.id,
-        business_name: app.business_name,
-        business_type: app.business_type,
-        plan: convertPlan,
-        site_status: "building",
-        updates_limit: limitsMap[convertPlan] || 0,
-        subscription_status: "active",
-      });
-
-      if (clientError) throw clientError;
-
-      // Create site record
-      await supabase.from("sites").insert({
-        client_id: clientId,
-        business_type: app.business_type,
-        brand_vibe: app.brand_vibe,
-        logo_url: app.logo_url,
-      });
-
-      // Update application status
-      await supabase.from("applications").update({ status: "converted" }).eq("id", app.id);
-
-      // Send welcome email
-      const bookingUrl = `${window.location.origin}/book-call?name=${encodeURIComponent(app.name)}`;
-      supabase.functions.invoke("send-email", {
+      // Call the convert-to-client edge function (handles auth account, client, site, email, audit)
+      const { data, error: invokeError } = await supabase.functions.invoke("convert-to-client", {
         body: {
-          to: app.email,
-          template: "application_approved",
-          data: { name: app.name, business_name: app.business_name, booking_url: bookingUrl },
           applicationId: app.id,
-          clientId,
+          plan: convertPlan,
+          callerEmail: user!.email,
+          callerName: user!.user_metadata?.full_name || user!.email,
         },
-      }).catch(console.error);
-
-      // Audit log
-      await supabase.from("audit_log").insert({
-        user_id: user!.id, user_email: user!.email,
-        action: `Converted ${app.business_name} to client (${convertPlan} plan)`,
-        target_table: "clients", target_id: clientId,
-        details: { application_id: app.id, plan: convertPlan },
       });
+
+      if (invokeError) throw invokeError;
+      if (data?.error) throw new Error(data.error);
 
       queryClient.invalidateQueries({ queryKey: ["operator-applications"] });
       queryClient.invalidateQueries({ queryKey: ["operator-dashboard-stats"] });
