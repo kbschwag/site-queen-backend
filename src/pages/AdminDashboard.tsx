@@ -133,9 +133,9 @@ export default function AdminDashboard() {
 
   const updateCRStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const update: Record<string, unknown> = { status };
-      if (status === "completed") update.completed_at = new Date().toISOString();
-      const { error } = await supabase.from("change_requests").update(update).eq("id", id);
+      const updateData: { status: string; completed_at?: string } = { status };
+      if (status === "completed") updateData.completed_at = new Date().toISOString();
+      const { error } = await supabase.from("change_requests").update(updateData).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
