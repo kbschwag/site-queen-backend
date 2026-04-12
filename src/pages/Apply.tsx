@@ -27,17 +27,15 @@ export default function Apply() {
     e.preventDefault();
     setLoading(true);
 
-    // Clear any invalid session to ensure anon insert works
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData.session) {
-      // Verify session is valid by checking if we can query profiles
-      const { error: sessionError } = await supabase.from("profiles").select("id").limit(1);
-      if (sessionError?.code === "PGRST301" || sessionError?.message?.includes("JWT")) {
-        await supabase.auth.signOut();
-      }
-    }
+    let { data, error } = await supabase.from("applications").insert([form]).select().single();
 
-    const { data, error } = await supabase.from("applications").insert([form]).select().single();
+    // If insert fails due to invalid session token, sign out and retry as anon
+    if (error && (error.code === "42501" || error.message?.includes("row-level security"))) {
+      await supabase.auth.signOut();
+      const retry = await supabase.from("applications").insert([form]).select().single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
