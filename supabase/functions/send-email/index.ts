@@ -19,22 +19,32 @@ const EMAIL_TEMPLATES: Record<string, { subject: string; html: (data: Record<str
     `,
   },
   application_approved: {
-    subject: "You're approved! Book your discovery call — SiteQueen ♛",
+    subject: "You're in! Welcome to SiteQueen ♛",
     html: (d) => `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #7c3aed;">Great news, ${d.name}! ♛</h2>
-        <p>Your application for <strong>${d.business_name}</strong> has been approved!</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #7c3aed;">You're in, ${d.name}! Welcome to SiteQueen ♛</h2>
+        <p>Your application for <strong>${d.business_name}</strong> has been approved and your account is ready!</p>
+        
         <p>Here's what happens next:</p>
-        <ol>
+        <ol style="line-height: 1.8;">
           <li><strong>Book your discovery call</strong> — we'll go over your website vision</li>
           <li>We'll gather your brand assets</li>
           <li>Your site will be live within 48 hours of our call</li>
         </ol>
+
         <p style="text-align: center; margin: 30px 0;">
           <a href="${d.booking_url || '#'}" style="background: #7c3aed; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Book Your Discovery Call →</a>
         </p>
-        <p style="color: #666;">Can't click the button? Copy this link: ${d.booking_url || ''}</p>
-        <p>— The SiteQueen Team ♛</p>
+
+        ${d.magic_link ? `
+        <div style="background: #f8f5ff; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+          <p style="margin: 0 0 12px; font-weight: bold; color: #333;">Access Your Client Dashboard</p>
+          <a href="${d.magic_link}" style="background: #333; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Log In to Your Dashboard →</a>
+        </div>
+        ` : ''}
+
+        <p style="color: #666; font-size: 14px;">Can't click? Copy this link: ${d.booking_url || ''}</p>
+        <p style="margin-top: 30px;">— The SiteQueen Team ♛</p>
       </div>
     `,
   },
