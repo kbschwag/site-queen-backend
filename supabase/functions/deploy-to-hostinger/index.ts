@@ -1,0 +1,196 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  let clientId: string | null = null;
+
+  try {
+    const body = await req.json();
+    clientId = body.client_id;
+    if (!clientId) {
+      return new Response(JSON.stringify({ error: "client_id required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Fetch client record
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", clientId)
+      .single();
+
+    if (clientError || !client) throw new Error("Client not found");
+
+    // Safety check 1 — deployment path must be confirmed
+    if (!client.deployment_path_confirmed) {
+      throw new Error("Deployment path not confirmed — aborting to prevent overwriting wrong site");
+    }
+
+    // Safety check 2 — domain must be ready to deploy
+    if (client.domain_status !== "ready_to_deploy") {
+      throw new Error("Domain status is not ready to deploy — aborting");
+    }
+
+    // Safety check 3 — must have a folder path
+    if (!client.hostinger_folder_path) {
+      throw new Error("No Hostinger folder path set — aborting");
+    }
+
+    const folderPath = client.hostinger_folder_path;
+    const domain = client.domain_name;
+    const deployCount = client.deploy_count || 0;
+
+    // Fetch generated HTML from Supabase storage
+    const { data: htmlFile, error: htmlError } = await supabase.storage
+      .from("generated-sites")
+      .download(`${clientId}/index.html`);
+
+    if (htmlError || !htmlFile) throw new Error("Generated HTML not found in storage");
+    const htmlContent = await htmlFile.text();
+
+    // Check for Hostinger API token
+    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
+    if (!hostingerToken) {
+      throw new Error("HOSTINGER_API_TOKEN not configured");
+    }
+
+    // Upload index.html to Hostinger
+    const uploadResponse = await fetch(
+      "https://api.hostinger.com/v1/hosting/files/upload",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${hostingerToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          path: `${folderPath}/index.html`,
+          content: btoa(htmlContent),
+        }),
+      }
+    );
+
+    if (!uploadResponse.ok) {
+      const errText = await uploadResponse.text();
+      throw new Error(`Hostinger API error: ${uploadResponse.status} - ${errText}`);
+    }
+
+    // Plant safety marker file on first deployment
+    if (deployCount === 0) {
+      await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${hostingerToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          path: `${folderPath}/.sitequeen-${clientId}`,
+          content: btoa(clientId),
+        }),
+      });
+    }
+
+    // Update client to live
+    await supabase
+      .from("clients")
+      .update({
+        site_status: "live",
+        deploy_count: deployCount + 1,
+      })
+      .eq("id", clientId);
+
+    // Update sites record
+    await supabase
+      .from("sites")
+      .update({
+        generation_status: "live",
+        deploy_url: `https://${domain}`,
+        last_deployed_at: new Date().toISOString(),
+        deploy_count: deployCount + 1,
+      })
+      .eq("client_id", clientId);
+
+    // Send celebration email
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+
+    if (RESEND_API_KEY && LOVABLE_API_KEY) {
+      try {
+        await fetch("https://connector-gateway.lovable.dev/resend/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "X-Connection-Api-Key": RESEND_API_KEY,
+          },
+          body: JSON.stringify({
+            from: "SiteQueen <hello@sitequeen.ai>",
+            to: [client.email || ""],
+            subject: "Your website is live ♛",
+            html: `<h1>Your website is live. ♛</h1>
+<p>Congratulations — your website is now live at <a href="https://${domain}">${domain}</a></p>
+<p>Welcome to SiteQueen. ♛</p>`,
+          }),
+        });
+      } catch (e) {
+        console.error("Failed to send celebration email:", e);
+      }
+    }
+
+    // Create operator notification
+    await supabase.from("notifications").insert({
+      type: "site_went_live",
+      client_id: clientId,
+      message: `${client.business_name} is now live at ${domain} ♛`,
+      target_role: "operator",
+    });
+
+    // Log deployment
+    await supabase.from("generation_logs").insert({
+      client_id: clientId,
+      status: "deployed",
+    });
+
+    return new Response(
+      JSON.stringify({ success: true, live_url: `https://${domain}` }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("Deployment error:", error);
+
+    if (clientId) {
+      try {
+        const supabase = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+        );
+        await supabase.from("notifications").insert({
+          type: "deployment_failed",
+          client_id: clientId,
+          message: `Deployment failed — ${error.message}`,
+          target_role: "operator",
+        });
+      } catch (e) {
+        console.error("Could not create failure notification:", e);
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
