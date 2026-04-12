@@ -26,6 +26,21 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const queryClient = useQueryClient();
   const [sharing, setSharing] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [showGoLiveModal, setShowGoLiveModal] = useState(false);
+  const [goLiveChecked, setGoLiveChecked] = useState(false);
+
+  const { data: clientData } = useQuery({
+    queryKey: ["operator-client-deploy-status", clientId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("domain_name, domain_status, deployment_path_confirmed")
+        .eq("id", clientId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: site, isLoading } = useQuery({
     queryKey: ["operator-site-build", clientId],
