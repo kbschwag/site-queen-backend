@@ -152,7 +152,10 @@ export default function Apply() {
       const flags = checkFlags(form);
       const status = flags.length > 0 ? "needs_review" : "pending";
 
-      const { data, error: insertError } = await anonClient.from("applications").insert([{
+      const applicationId = crypto.randomUUID();
+
+      const { error: insertError } = await anonClient.from("applications").insert([{
+        id: applicationId,
         business_type: form.business_type,
         business_name: form.business_name,
         industry: form.industry,
@@ -183,7 +186,7 @@ export default function Apply() {
         lead_temperature: temperature,
         status,
         notes: flags.length > 0 ? `FLAGS: ${flags.join(", ")}` : null,
-      }]).select().single();
+      }]);
 
       if (insertError) {
         toast({ title: "Error", description: insertError.message, variant: "destructive" });
@@ -192,7 +195,7 @@ export default function Apply() {
       }
 
       // Trigger AI scoring (enhances the basic score)
-      supabase.functions.invoke("score-lead", { body: { applicationId: data.id } }).catch(console.error);
+      supabase.functions.invoke("score-lead", { body: { applicationId } }).catch(console.error);
 
       // Trigger confirmation email
       supabase.functions.invoke("send-email", {
@@ -200,7 +203,7 @@ export default function Apply() {
           to: form.email,
           template: "application_received",
           data: { name: form.name, business_name: form.business_name },
-          applicationId: data.id,
+          applicationId,
         },
       }).catch(console.error);
 
