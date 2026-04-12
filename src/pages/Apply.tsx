@@ -27,6 +27,16 @@ export default function Apply() {
     e.preventDefault();
     setLoading(true);
 
+    // Clear any invalid session to ensure anon insert works
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData.session) {
+      // Verify session is valid by checking if we can query profiles
+      const { error: sessionError } = await supabase.from("profiles").select("id").limit(1);
+      if (sessionError?.code === "PGRST301" || sessionError?.message?.includes("JWT")) {
+        await supabase.auth.signOut();
+      }
+    }
+
     const { data, error } = await supabase.from("applications").insert([form]).select().single();
 
     if (error) {
