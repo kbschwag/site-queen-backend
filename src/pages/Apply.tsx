@@ -177,9 +177,9 @@ export default function Apply() {
               <Select onValueChange={(v) => update("plan_interest", v)}>
                 <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="starter">Starter ($149/mo)</SelectItem>
-                  <SelectItem value="growth">Growth ($249/mo)</SelectItem>
-                  <SelectItem value="premium">Premium ($399/mo)</SelectItem>
+                  <SelectItem value="starter">Starter ($79/mo)</SelectItem>
+                  <SelectItem value="growth">Growth ($129/mo)</SelectItem>
+                  <SelectItem value="pro">Pro ($199/mo)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
