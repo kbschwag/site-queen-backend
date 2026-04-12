@@ -87,7 +87,7 @@ export function StepBusinessBasics({ data, onChange }: Props) {
           </Select>
         </div>
 
-        {data.location_type !== "online" && (
+        {data.location_type && data.location_type !== "online" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <Label>Street Address {data.location_type === "online" ? "(optional)" : ""}</Label>
