@@ -1,216 +1,271 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { ApplicationFormData, initialFormData, calculateScore, checkInstantDecline, checkFlags } from "@/components/apply/types";
+import StepAboutBusiness from "@/components/apply/StepAboutBusiness";
+import StepBusinessHealth from "@/components/apply/StepBusinessHealth";
+import StepWebsiteVision from "@/components/apply/StepWebsiteVision";
+import StepCommitment from "@/components/apply/StepCommitment";
+import DeclineScreen from "@/components/apply/DeclineScreen";
+import SuccessScreen from "@/components/apply/SuccessScreen";
+import { ArrowLeft, ArrowRight, Send } from "lucide-react";
 
-// Anonymous client for public form submissions (avoids auth token interference)
 const anonClient = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
   { auth: { persistSession: false, autoRefreshToken: false } }
 );
 
+const TOTAL_STEPS = 4;
+
 export default function Apply() {
   const { toast } = useToast();
-  const navigate = useNavigate();
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState<ApplicationFormData>(initialFormData);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    name: "", email: "", phone: "", business_name: "", business_type: "",
-    city_state: "", years_in_business: "", monthly_clients: "", monthly_revenue: "",
-    is_decision_maker: true, has_website: "", website_goal: "", brand_vibe: "",
-    has_logo: "", plan_interest: "", accepts_commitment: "",
-  });
+  const [declined, setDeclined] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
-  const update = (field: string, value: string | boolean) => setForm((p) => ({ ...p, [field]: value }));
+  const update = (field: string, value: any) => setForm((p) => ({ ...p, [field]: value }));
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const validateStep = (): string | null => {
+    switch (step) {
+      case 1:
+        if (!form.business_type) return "Please select your business type.";
+        if (!form.business_name.trim()) return "Please enter your business name.";
+        if (!form.industry) return "Please select your industry.";
+        if (!form.has_website) return "Please tell us about your current website.";
+        return null;
+      case 2:
+        if (!form.years_in_business) return "Please select how long you've been in business.";
+        if (!form.monthly_clients) return "Please select your monthly client range.";
+        if (!form.decision_maker_status) return "Please tell us about decision-making.";
+        if (form.restricted_niches.length === 0) return "Please select at least one option for restricted niches.";
+        if (!form.update_frequency) return "Please select your update frequency preference.";
+        return null;
+      case 3:
+        if (!form.website_goal) return "Please select your website goal.";
+        if (!form.brand_vibe) return "Please pick a brand vibe.";
+        if (!form.has_logo) return "Please tell us about your logo.";
+        return null;
+      case 4:
+        if (!form.plan_interest) return "Please select a plan.";
+        if (!form.accepts_commitment) return "Please answer the commitment question.";
+        if (!form.name.trim()) return "Please enter your full name.";
+        if (!form.email.trim()) return "Please enter your email address.";
+        if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return "Please enter a valid email address.";
+        return null;
+      default:
+        return null;
+    }
+  };
 
-    // Use anonymous client to avoid auth token issues with public form
-    const { data, error } = await anonClient.from("applications").insert([form]).select().single();
-
+  const handleNext = () => {
+    const error = validateStep();
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      setLoading(false);
+      toast({ title: "Hold on", description: error, variant: "destructive" });
       return;
     }
 
-    // Trigger lead scoring
-    supabase.functions.invoke("score-lead", { body: { applicationId: data.id } }).catch(console.error);
+    // Check instant decline after step 1
+    if (step === 1) {
+      const declineReason = checkInstantDecline(form);
+      if (declineReason) {
+        // Submit decline silently
+        submitDecline(declineReason);
+        setDeclined(true);
+        return;
+      }
+    }
 
-    // Trigger confirmation email
-    supabase.functions.invoke("send-email", {
-      body: { to: form.email, template: "application_received", data: { name: form.name, business_name: form.business_name }, applicationId: data.id },
-    }).catch(console.error);
+    setStep((s) => Math.min(s + 1, TOTAL_STEPS));
+  };
 
-    toast({ title: "Application submitted!", description: "We'll review it and get back to you within 24-48 hours." });
-    navigate("/");
+  const handleBack = () => setStep((s) => Math.max(s - 1, 1));
+
+  const uploadFile = async (file: File, folder: string): Promise<string | null> => {
+    const ext = file.name.split(".").pop();
+    const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await anonClient.storage.from("application-uploads").upload(path, file);
+    if (error) {
+      console.error("Upload error:", error);
+      return null;
+    }
+    const { data } = anonClient.storage.from("application-uploads").getPublicUrl(path);
+    return data.publicUrl;
+  };
+
+  const submitDecline = async (reason: string) => {
+    await anonClient.from("applications").insert([{
+      business_type: form.business_type,
+      business_name: form.business_name || "Declined - Ecommerce",
+      industry: form.industry,
+      has_website: form.has_website || "none",
+      city_state: form.city || "",
+      city: form.city,
+      state_province: form.state_province,
+      country: form.country,
+      years_in_business: "N/A",
+      monthly_clients: "N/A",
+      email: "declined@placeholder.com",
+      name: "Declined Applicant",
+      status: "declined",
+      decline_reason: reason,
+      ai_score: 0,
+      lead_temperature: "COLD",
+    }]);
+
+    // Send decline email if we have contact info
+    if (form.email) {
+      supabase.functions.invoke("send-email", {
+        body: { to: form.email, template: "application_declined", data: { name: form.name || "there" } },
+      }).catch(console.error);
+    }
+  };
+
+  const handleSubmit = async () => {
+    const error = validateStep();
+    if (error) {
+      toast({ title: "Hold on", description: error, variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Upload files
+      let logoUrl: string | null = null;
+      let inspirationUrls: string[] = [];
+
+      if (form.logo_file) {
+        logoUrl = await uploadFile(form.logo_file, "logos");
+      }
+      for (const file of form.inspiration_files) {
+        const url = await uploadFile(file, "inspiration");
+        if (url) inspirationUrls.push(url);
+      }
+
+      const { score, temperature } = calculateScore(form);
+      const flags = checkFlags(form);
+      const status = flags.length > 0 ? "needs_review" : "pending";
+
+      const { data, error: insertError } = await anonClient.from("applications").insert([{
+        business_type: form.business_type,
+        business_name: form.business_name,
+        industry: form.industry,
+        city: form.city,
+        state_province: form.state_province,
+        country: form.country,
+        city_state: [form.city, form.state_province].filter(Boolean).join(", "),
+        has_website: form.has_website,
+        years_in_business: form.years_in_business,
+        monthly_clients: form.monthly_clients,
+        decision_maker_status: form.decision_maker_status,
+        is_decision_maker: form.decision_maker_status === "yes",
+        restricted_niches: form.restricted_niches.join(", "),
+        update_frequency: form.update_frequency,
+        website_goal: form.website_goal,
+        brand_vibe: form.brand_vibe,
+        has_logo: form.has_logo,
+        logo_url: logoUrl,
+        logo_file_url: logoUrl,
+        inspiration_urls: inspirationUrls.join(", "),
+        plan_interest: form.plan_interest,
+        accepts_commitment: form.accepts_commitment,
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        additional_notes: form.additional_notes,
+        ai_score: score,
+        lead_temperature: temperature,
+        status,
+        notes: flags.length > 0 ? `FLAGS: ${flags.join(", ")}` : null,
+      }]).select().single();
+
+      if (insertError) {
+        toast({ title: "Error", description: insertError.message, variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      // Trigger AI scoring (enhances the basic score)
+      supabase.functions.invoke("score-lead", { body: { applicationId: data.id } }).catch(console.error);
+
+      // Trigger confirmation email
+      supabase.functions.invoke("send-email", {
+        body: {
+          to: form.email,
+          template: "application_received",
+          data: { name: form.name, business_name: form.business_name },
+          applicationId: data.id,
+        },
+      }).catch(console.error);
+
+      setSubmitted(true);
+    } catch (err) {
+      toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
+    }
+
     setLoading(false);
   };
 
+  if (declined) return <DeclineScreen />;
+  if (submitted) return <SuccessScreen name={form.name} email={form.email} />;
+
   return (
-    <div className="min-h-screen bg-background py-12 px-4">
-      <Card className="max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle>Apply for SiteQueen</CardTitle>
-          <CardDescription>Tell us about your business and we'll get back to you within 24-48 hours.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Full Name *</Label>
-                <Input value={form.name} onChange={(e) => update("name", e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Email *</Label>
-                <Input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input value={form.phone} onChange={(e) => update("phone", e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Business Name *</Label>
-                <Input value={form.business_name} onChange={(e) => update("business_name", e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Business Type *</Label>
-                <Select onValueChange={(v) => update("business_type", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent>
-                    {["Salon/Spa", "Restaurant", "Retail", "Coaching/Consulting", "Health/Wellness", "Real Estate", "Contractor/Trades", "Other"].map((t) => (
-                      <SelectItem key={t} value={t.toLowerCase()}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>City, State *</Label>
-                <Input value={form.city_state} onChange={(e) => update("city_state", e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Years in Business *</Label>
-                <Select onValueChange={(v) => update("years_in_business", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent>
-                    {["Less than 1", "1-2", "3-5", "5-10", "10+"].map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Monthly Clients *</Label>
-                <Select onValueChange={(v) => update("monthly_clients", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent>
-                    {["1-10", "11-50", "51-100", "100+"].map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Monthly Revenue *</Label>
-                <Select onValueChange={(v) => update("monthly_revenue", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent>
-                    {["Under $1k", "$1k-$5k", "$5k-$10k", "$10k+"].map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Do you have a website?</Label>
-                <Select onValueChange={(v) => update("has_website", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
+        <div className="max-w-2xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-muted-foreground">
+              Step {step} of {TOTAL_STEPS}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {step === 1 && "About Your Business"}
+              {step === 2 && "Business Health"}
+              {step === 3 && "Website Vision"}
+              {step === 4 && "Commitment & Contact"}
+            </p>
+          </div>
+          <Progress value={(step / TOTAL_STEPS) * 100} className="h-2" />
+        </div>
+      </div>
 
-            <div className="space-y-2">
-              <Label>What's your main goal for a website?</Label>
-              <Textarea value={form.website_goal} onChange={(e) => update("website_goal", e.target.value)} />
-            </div>
+      {/* Form content */}
+      <div className="max-w-2xl mx-auto px-4 py-8 pb-32">
+        <div className="transition-opacity duration-300">
+          {step === 1 && <StepAboutBusiness form={form} update={update} />}
+          {step === 2 && <StepBusinessHealth form={form} update={update} />}
+          {step === 3 && <StepWebsiteVision form={form} update={update} />}
+          {step === 4 && <StepCommitment form={form} update={update} />}
+        </div>
+      </div>
 
-            <div className="space-y-2">
-              <Label>Brand Vibe</Label>
-              <Select onValueChange={(v) => update("brand_vibe", v)}>
-                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  {["Modern & Minimal", "Bold & Vibrant", "Elegant & Luxurious", "Warm & Friendly", "Professional & Corporate"].map((t) => (
-                    <SelectItem key={t} value={t.toLowerCase()}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Do you have a logo?</Label>
-              <Select onValueChange={(v) => update("has_logo", v)}>
-                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                  <SelectItem value="need_one">I need one</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Plan Interest</Label>
-              <Select onValueChange={(v) => update("plan_interest", v)}>
-                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="starter">Starter ($79/mo)</SelectItem>
-                  <SelectItem value="growth">Growth ($129/mo)</SelectItem>
-                  <SelectItem value="pro">Pro ($199/mo)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="decision_maker"
-                checked={form.is_decision_maker}
-                onCheckedChange={(v) => update("is_decision_maker", !!v)}
-              />
-              <Label htmlFor="decision_maker">I am the decision maker for this business</Label>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Are you ready to commit to a monthly plan?</Label>
-              <Select onValueChange={(v) => update("accepts_commitment", v)}>
-                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="yes">Yes, I'm ready</SelectItem>
-                  <SelectItem value="exploring">Just exploring</SelectItem>
-                  <SelectItem value="need_info">Need more info</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Submitting..." : "Submit Application"}
+      {/* Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t">
+        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
+          {step > 1 ? (
+            <Button variant="ghost" onClick={handleBack} className="gap-2">
+              <ArrowLeft className="w-4 h-4" /> Back
             </Button>
-          </form>
-        </CardContent>
-      </Card>
+          ) : (
+            <div />
+          )}
+          {step < TOTAL_STEPS ? (
+            <Button onClick={handleNext} className="gap-2">
+              Continue <ArrowRight className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button onClick={handleSubmit} disabled={loading} className="gap-2">
+              {loading ? "Submitting..." : <>Submit Application <Send className="w-4 h-4" /></>}
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

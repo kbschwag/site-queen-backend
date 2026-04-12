@@ -17,76 +17,109 @@ export type Database = {
       applications: {
         Row: {
           accepts_commitment: string | null
+          additional_notes: string | null
           ai_score: number | null
           brand_vibe: string | null
           business_name: string
           business_type: string
-          city_state: string
+          city: string | null
+          city_state: string | null
+          country: string | null
           created_at: string
+          decision_maker_status: string | null
+          decline_reason: string | null
           email: string
           has_logo: string | null
           has_website: string
           id: string
+          industry: string | null
+          inspiration_urls: string | null
           is_decision_maker: boolean
           lead_temperature: string | null
+          logo_file_url: string | null
           logo_url: string | null
           monthly_clients: string
-          monthly_revenue: string
+          monthly_revenue: string | null
           name: string
           notes: string | null
           phone: string | null
           plan_interest: string | null
+          restricted_niches: string | null
+          state_province: string | null
           status: string | null
+          update_frequency: string | null
           website_goal: string | null
           years_in_business: string
         }
         Insert: {
           accepts_commitment?: string | null
+          additional_notes?: string | null
           ai_score?: number | null
           brand_vibe?: string | null
           business_name: string
           business_type: string
-          city_state: string
+          city?: string | null
+          city_state?: string | null
+          country?: string | null
           created_at?: string
+          decision_maker_status?: string | null
+          decline_reason?: string | null
           email: string
           has_logo?: string | null
           has_website: string
           id?: string
+          industry?: string | null
+          inspiration_urls?: string | null
           is_decision_maker?: boolean
           lead_temperature?: string | null
+          logo_file_url?: string | null
           logo_url?: string | null
           monthly_clients: string
-          monthly_revenue: string
+          monthly_revenue?: string | null
           name: string
           notes?: string | null
           phone?: string | null
           plan_interest?: string | null
+          restricted_niches?: string | null
+          state_province?: string | null
           status?: string | null
+          update_frequency?: string | null
           website_goal?: string | null
           years_in_business: string
         }
         Update: {
           accepts_commitment?: string | null
+          additional_notes?: string | null
           ai_score?: number | null
           brand_vibe?: string | null
           business_name?: string
           business_type?: string
-          city_state?: string
+          city?: string | null
+          city_state?: string | null
+          country?: string | null
           created_at?: string
+          decision_maker_status?: string | null
+          decline_reason?: string | null
           email?: string
           has_logo?: string | null
           has_website?: string
           id?: string
+          industry?: string | null
+          inspiration_urls?: string | null
           is_decision_maker?: boolean
           lead_temperature?: string | null
+          logo_file_url?: string | null
           logo_url?: string | null
           monthly_clients?: string
-          monthly_revenue?: string
+          monthly_revenue?: string | null
           name?: string
           notes?: string | null
           phone?: string | null
           plan_interest?: string | null
+          restricted_niches?: string | null
+          state_province?: string | null
           status?: string | null
+          update_frequency?: string | null
           website_goal?: string | null
           years_in_business?: string
         }
