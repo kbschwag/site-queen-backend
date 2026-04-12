@@ -1,53 +1,74 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Check } from "lucide-react";
 
 const plans = [
   {
     name: "Starter",
-    price: "$149",
-    description: "Perfect for new businesses getting online",
+    price: "$79",
+    description: "Get online with a professional website — free to build",
     features: [
-      "Custom one-page website",
-      "Mobile responsive design",
-      "Basic SEO setup",
-      "2 content updates/month",
-      "Hosting included",
-      "SSL certificate",
+      "Free professional website build (valued at $3,000+)",
+      "Custom domain included",
+      "Hosting and SSL security",
+      "1 monthly backup",
+      "Self-serve content editor",
+      "Standard email support",
+      "12-month commitment required",
+      "After 12 months: month-to-month flexibility",
     ],
     popular: false,
   },
   {
     name: "Growth",
-    price: "$249",
-    description: "For businesses ready to attract more clients",
+    price: "$129",
+    description: "More support, more updates, more growth",
     features: [
-      "Multi-page website (up to 5)",
-      "Advanced SEO optimization",
-      "Google Business integration",
-      "5 content updates/month",
-      "Blog setup",
-      "Contact form & booking",
-      "Monthly analytics report",
+      "Everything in Starter plus:",
+      "Advanced security monitoring",
+      "Weekly backups",
+      "1 content update per month included (we make the change for you)",
+      "Priority email support",
+      "12-month commitment required",
+      "After 12 months: month-to-month flexibility",
     ],
     popular: true,
   },
   {
-    name: "Premium",
-    price: "$399",
-    description: "Full-service digital presence management",
+    name: "Pro",
+    price: "$199",
+    description: "Full-service management with dedicated support",
     features: [
-      "Unlimited pages",
-      "E-commerce ready",
-      "10 content updates/month",
-      "Social media integration",
-      "Priority support",
-      "Custom features",
-      "Weekly analytics reports",
-      "Logo design included",
+      "Everything in Growth plus:",
+      "3 content updates per month included",
+      "Daily backups",
+      "Dedicated account management",
+      "Professional branding and logo design included",
+      "Fastest priority support",
+      "12-month commitment required",
+      "After 12 months: month-to-month flexibility",
     ],
     popular: false,
+  },
+];
+
+const faqs = [
+  {
+    question: "Why the 12-month commitment?",
+    answer:
+      "We invest significant time building your website for free. The 12-month partnership lets us deliver real long-term results for your business while keeping our prices low for everyone.",
+  },
+  {
+    question: "What happens if I cancel?",
+    answer:
+      "After your 12 months you can cancel anytime with 30 days notice. You keep your domain and receive a full export of your website files.",
+  },
+  {
+    question: "Can I upgrade my plan?",
+    answer:
+      "Absolutely. Upgrade anytime and the new features kick in immediately. Downgrading takes effect at your next billing cycle.",
   },
 ];
 
@@ -59,8 +80,9 @@ export function Pricing() {
           Simple, Transparent Pricing
         </h2>
         <p className="mt-3 text-center text-muted-foreground text-lg max-w-xl mx-auto">
-          Everything you need to get online — no hidden fees
+          Every plan includes a free professional AI website — you just pay to keep it running
         </p>
+
         <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           {plans.map((plan) => (
             <Card
@@ -99,6 +121,29 @@ export function Pricing() {
               </CardContent>
             </Card>
           ))}
+        </div>
+
+        <p className="mt-10 text-center text-muted-foreground text-sm max-w-2xl mx-auto">
+          All plans include a free professional website build. After your 12-month commitment
+          you're free to stay month-to-month, renew annually, or take your website and go.
+          No hard feelings. ♛
+        </p>
+
+        {/* FAQ */}
+        <div className="mt-16 max-w-2xl mx-auto">
+          <h3 className="text-2xl font-bold text-center text-foreground mb-6">
+            Frequently Asked Questions
+          </h3>
+          <Accordion type="single" collapsible className="w-full">
+            {faqs.map((faq, i) => (
+              <AccordionItem key={i} value={`faq-${i}`}>
+                <AccordionTrigger className="text-left">{faq.question}</AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  {faq.answer}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       </div>
     </section>
