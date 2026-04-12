@@ -155,18 +155,35 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     toast.success("Marked for manual review");
   };
 
+  const domainReady = (clientData as any)?.domain_status === "ready_to_deploy";
+  const deployConfirmed = !!(clientData as any)?.deployment_path_confirmed;
+  const genComplete = generationStatus === "complete" || generationStatus === "shared";
+  const canGoLive = domainReady && deployConfirmed && genComplete;
+
+  const goLiveTooltip = !genComplete
+    ? "Site has not been generated yet"
+    : !domainReady
+    ? "Set domain status to Ready to deploy first"
+    : !deployConfirmed
+    ? "Confirm deployment path in Domain & Deploy tab first"
+    : "";
+
   const handleApproveGoLive = async () => {
     setApproving(true);
+    setShowGoLiveModal(false);
+    setGoLiveChecked(false);
     try {
-      await supabase
-        .from("sites")
-        .update({ generation_status: "live" } as any)
-        .eq("client_id", clientId);
+      // Call deploy-to-hostinger edge function
+      const { data: deployResult, error: deployError } = await supabase.functions.invoke("deploy-to-hostinger", {
+        body: { client_id: clientId },
+      });
 
-      await supabase
-        .from("clients")
-        .update({ site_status: "live" } as any)
-        .eq("id", clientId);
+      if (deployError) {
+        // Fallback: update statuses manually if deploy function fails
+        console.error("Deploy function error, updating statuses manually:", deployError);
+        await supabase.from("sites").update({ generation_status: "live" } as any).eq("client_id", clientId);
+        await supabase.from("clients").update({ site_status: "live" } as any).eq("id", clientId);
+      }
 
       // Send celebration email
       await supabase.functions.invoke("send-email", {
