@@ -79,6 +79,11 @@ export function IntakeForm({ clientId, userId, plan, businessName, onComplete }:
         .update({ intake_completed: true } as any)
         .eq("id", clientId);
 
+      // Fire and forget — trigger website generation in background
+      supabase.functions.invoke("generate-website", {
+        body: { client_id: clientId },
+      }).catch((err) => console.error("generate-website trigger error:", err));
+
       // Send confirmation email
       supabase.functions.invoke("send-email", {
         body: {

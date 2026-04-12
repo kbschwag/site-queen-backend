@@ -324,6 +324,85 @@ export type Database = {
           },
         ]
       }
+      generation_logs: {
+        Row: {
+          client_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          status: string
+          template_id: string | null
+          tokens_used: number | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          status?: string
+          template_id?: string | null
+          tokens_used?: number | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          status?: string
+          template_id?: string | null
+          tokens_used?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: string
+          message: string
+          read: boolean
+          staging_url: string | null
+          target_role: string
+          type: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          read?: boolean
+          staging_url?: string | null
+          target_role?: string
+          type: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          read?: boolean
+          staging_url?: string | null
+          target_role?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -361,6 +440,9 @@ export type Database = {
           client_id: string
           created_at: string
           deploy_url: string | null
+          generated_at: string | null
+          generation_error: string | null
+          generation_status: string | null
           id: string
           intake_data: Json | null
           last_updated: string | null
@@ -375,6 +457,9 @@ export type Database = {
           client_id: string
           created_at?: string
           deploy_url?: string | null
+          generated_at?: string | null
+          generation_error?: string | null
+          generation_status?: string | null
           id?: string
           intake_data?: Json | null
           last_updated?: string | null
@@ -389,6 +474,9 @@ export type Database = {
           client_id?: string
           created_at?: string
           deploy_url?: string | null
+          generated_at?: string | null
+          generation_error?: string | null
+          generation_status?: string | null
           id?: string
           intake_data?: Json | null
           last_updated?: string | null

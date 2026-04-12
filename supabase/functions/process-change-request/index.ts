@@ -10,8 +10,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { changeRequestId } = await req.json();
-    if (!changeRequestId) {
+    const { changeRequestId, change_request_id, client_id } = await req.json();
+    const crId = changeRequestId || change_request_id;
+    if (!crId) {
       return new Response(JSON.stringify({ error: "changeRequestId required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -24,7 +25,7 @@ serve(async (req) => {
     const { data: cr, error } = await supabase
       .from("change_requests")
       .select("*")
-      .eq("id", changeRequestId)
+      .eq("id", crId)
       .single();
 
     if (error || !cr) {
@@ -33,8 +34,74 @@ serve(async (req) => {
       });
     }
 
+    const clientId = client_id || cr.client_id;
+
+    // Fetch client info
+    const { data: clientData } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", clientId)
+      .single();
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+    // Check if there's a generated site HTML to modify
+    let currentHTML = "";
+    try {
+      const { data: htmlFile } = await supabase.storage
+        .from("generated-sites")
+        .download(`${clientId}/index.html`);
+      if (htmlFile) currentHTML = await htmlFile.text();
+    } catch {
+      console.log("No existing site HTML found");
+    }
+
+    let aiPrompt: string;
+    let model: string;
+
+    if (currentHTML) {
+      // Has site HTML — try to auto-apply the change
+      model = "google/gemini-2.5-flash";
+      aiPrompt = `You are processing a website change request for a small business.
+
+The client's request in plain English:
+"${cr.request_text}"
+
+Here is their current website HTML:
+${currentHTML}
+
+Instructions:
+1. Identify exactly what needs to change based on the plain English request
+2. Make ONLY that specific change — do not change anything else
+3. If the request is simple and clear — make the change
+4. If the request is unclear, involves new design work, requires new pages, or is too complex — do not make any changes
+
+Return ONLY a valid JSON object with three fields:
+- "status": either "completed" or "needs_review"
+- "html": the complete updated HTML (if completed) or the original unchanged HTML (if needs_review)
+- "explanation": one sentence describing exactly what was changed, or why it needs manual review
+
+Do not include any explanation, markdown formatting, or code blocks. Return raw JSON only.`;
+    } else {
+      // No site HTML — just classify
+      model = "google/gemini-2.5-flash";
+      aiPrompt = `You are a website change request classifier. Analyze the request and determine:
+1. complexity: "simple" (text/image swap, color change, minor tweak) or "complex" (layout change, new section, functionality)
+2. category: one of "text_change", "image_change", "color_change", "layout_change", "new_feature", "bug_fix", "other"
+3. summary: A brief admin-friendly summary of what needs to be done
+4. auto_completable: true if the change is trivially simple (e.g., update phone number, fix typo)
+
+Change request: "${cr.request_text}"
+
+Return ONLY a valid JSON object with these four fields. No explanation or markdown.`;
+    }
+
+    // Update status to processing
+    await supabase
+      .from("change_requests")
+      .update({ status: "processing" })
+      .eq("id", crId);
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -43,36 +110,9 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `You are a website change request classifier. Analyze the request and determine:
-1. complexity: "simple" (text/image swap, color change, minor tweak) or "complex" (layout change, new section, functionality)
-2. category: one of "text_change", "image_change", "color_change", "layout_change", "new_feature", "bug_fix", "other"
-3. summary: A brief admin-friendly summary of what needs to be done
-4. auto_completable: true if the change is trivially simple (e.g., update phone number, fix typo)`,
-          },
-          { role: "user", content: `Change request: "${cr.request_text}"` },
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "classify_request",
-            description: "Classify a website change request",
-            parameters: {
-              type: "object",
-              properties: {
-                complexity: { type: "string", enum: ["simple", "complex"] },
-                category: { type: "string", enum: ["text_change", "image_change", "color_change", "layout_change", "new_feature", "bug_fix", "other"] },
-                summary: { type: "string" },
-                auto_completable: { type: "boolean" },
-              },
-              required: ["complexity", "category", "summary", "auto_completable"],
-            },
-          },
-        }],
-        tool_choice: { type: "function", function: { name: "classify_request" } },
+        model,
+        max_tokens: 16000,
+        messages: [{ role: "user", content: aiPrompt }],
       }),
     });
 
@@ -80,49 +120,95 @@ serve(async (req) => {
       console.error("AI error:", aiResponse.status, await aiResponse.text());
       await supabase.from("change_requests").update({
         ai_processed: true,
-        admin_notes: "AI classification failed - needs manual review",
-      }).eq("id", changeRequestId);
+        status: "needs_review",
+        admin_notes: "AI processing failed - needs manual review",
+      }).eq("id", crId);
       return new Response(JSON.stringify({ classified: false, fallback: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    let classification = { complexity: "complex", category: "other", summary: "Needs review", auto_completable: false };
+    const rawText = aiData.choices?.[0]?.message?.content || "";
 
-    if (toolCall?.function?.arguments) {
-      classification = JSON.parse(toolCall.function.arguments);
+    let result: any;
+    try {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("No JSON");
+      result = JSON.parse(jsonMatch[0]);
+    } catch {
+      result = { status: "needs_review", explanation: "AI response could not be parsed" };
     }
 
-    const updateData: Record<string, unknown> = {
-      ai_processed: true,
-      admin_notes: `[AI] ${classification.complexity.toUpperCase()} | ${classification.category} | ${classification.summary}`,
-    };
+    if (currentHTML && result.status === "completed" && result.html) {
+      // Save updated HTML back to storage
+      const htmlBlob = new Blob([result.html], { type: "text/html" });
+      await supabase.storage
+        .from("generated-sites")
+        .upload(`${clientId}/index.html`, htmlBlob, { upsert: true });
 
-    if (classification.auto_completable) {
-      updateData.status = "completed";
-      updateData.completed_at = new Date().toISOString();
-    } else if (classification.complexity === "simple") {
-      updateData.status = "in_progress";
+      await supabase.from("change_requests").update({
+        status: "completed",
+        ai_processed: true,
+        completed_at: new Date().toISOString(),
+        admin_notes: result.explanation,
+      }).eq("id", crId);
+
+      // Update usage
+      if (clientData) {
+        await supabase.from("clients").update({
+          updates_used_this_month: (clientData.updates_used_this_month || 0) + 1,
+        }).eq("id", clientId);
+      }
+
+      // Notify client
+      await supabase.from("notifications").insert({
+        type: "change_request_completed",
+        client_id: clientId,
+        message: `Your change request has been completed ♛ — ${result.explanation}`,
+        target_role: "client",
+      });
+
+    } else if (currentHTML) {
+      // Needs manual review
+      await supabase.from("change_requests").update({
+        status: "needs_review",
+        ai_processed: false,
+        admin_notes: result.explanation || "Needs manual review",
+      }).eq("id", crId);
+
+      await supabase.from("notifications").insert({
+        type: "change_request_needs_review",
+        client_id: clientId,
+        message: `Change request needs manual review — ${clientData?.business_name}: ${result.explanation}`,
+        target_role: "operator",
+      });
+
+    } else {
+      // Classification only (no site HTML)
+      const classification = result;
+      const updateData: Record<string, unknown> = {
+        ai_processed: true,
+        admin_notes: `[AI] ${(classification.complexity || "unknown").toUpperCase()} | ${classification.category || "other"} | ${classification.summary || "Needs review"}`,
+      };
+
+      if (classification.auto_completable) {
+        updateData.status = "completed";
+        updateData.completed_at = new Date().toISOString();
+      } else if (classification.complexity === "simple") {
+        updateData.status = "in_progress";
+      }
+
+      await supabase.from("change_requests").update(updateData).eq("id", crId);
+
+      if (clientData) {
+        await supabase.from("clients").update({
+          updates_used_this_month: (clientData.updates_used_this_month || 0) + 1,
+        }).eq("id", clientId);
+      }
     }
 
-    await supabase.from("change_requests").update(updateData).eq("id", changeRequestId);
-
-    // Update client's usage count
-    const { data: client } = await supabase
-      .from("clients")
-      .select("updates_used_this_month")
-      .eq("id", cr.client_id)
-      .single();
-
-    if (client) {
-      await supabase.from("clients").update({
-        updates_used_this_month: (client.updates_used_this_month || 0) + 1,
-      }).eq("id", cr.client_id);
-    }
-
-    return new Response(JSON.stringify({ classification }), {
+    return new Response(JSON.stringify({ success: true, status: result.status || "classified" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

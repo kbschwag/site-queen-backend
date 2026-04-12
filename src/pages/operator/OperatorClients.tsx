@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
+import { WebsiteBuildPanel } from "@/components/operator/WebsiteBuildPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -35,6 +36,22 @@ export default function OperatorClients() {
       return data;
     },
   });
+
+  // Fetch sites to check generation_status for notification badges
+  const { data: sites = [] } = useQuery({
+    queryKey: ["operator-sites-status"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sites")
+        .select("client_id, generation_status");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const siteStatusMap = Object.fromEntries(
+    sites.map((s: any) => [s.client_id, s.generation_status])
+  );
 
   const filtered = clients.filter((c: any) => {
     const matchesSearch =
@@ -129,9 +146,16 @@ export default function OperatorClients() {
                 {filtered.map((c: any) => (
                   <TableRow key={c.id} className="cursor-pointer" onClick={() => setSelected(c)}>
                     <TableCell>
-                      <div>
-                        <p className="font-medium">{c.business_name}</p>
-                        <p className="text-xs text-muted-foreground">{c.business_type}</p>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="font-medium">{c.business_name}</p>
+                          <p className="text-xs text-muted-foreground">{c.business_type}</p>
+                        </div>
+                        {siteStatusMap[c.id] === "complete" && (
+                          <Badge className="bg-blue-500/10 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">
+                            Review
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">{planLabel(c.plan)}</TableCell>
@@ -157,7 +181,8 @@ export default function OperatorClients() {
             <Tabs defaultValue="details" className="mt-4">
               <TabsList className="w-full">
                 <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
-                <TabsTrigger value="brief" className="flex-1">Website Brief</TabsTrigger>
+                <TabsTrigger value="build" className="flex-1">Website Build</TabsTrigger>
+                <TabsTrigger value="brief" className="flex-1">Brief</TabsTrigger>
               </TabsList>
               <TabsContent value="details" className="space-y-4 mt-4">
                 <div className="flex items-center gap-2">
@@ -231,6 +256,9 @@ export default function OperatorClients() {
                     </div>
                   </div>
                 )}
+              </TabsContent>
+              <TabsContent value="build" className="mt-4">
+                <WebsiteBuildPanel clientId={selected.id} businessName={selected.business_name} />
               </TabsContent>
               <TabsContent value="brief" className="mt-4">
                 <WebsiteBriefPanel clientId={selected.id} businessName={selected.business_name} />

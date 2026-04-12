@@ -240,8 +240,109 @@ export default function ClientDashboard() {
     );
   }
 
-  // Building state — intake completed but site not live
+  // Building state — intake completed, check generation status
+  const generationStatus = (site as any)?.generation_status || "pending";
+
   if (intakeCompleted && client.site_status === "building") {
+    // Staging shared with client — show preview + feedback
+    if (generationStatus === "shared" && site?.staging_url) {
+      return (
+        <div className="min-h-screen bg-secondary/30">
+          <header className="border-b bg-card">
+            <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <Crown className="h-6 w-6 text-primary" />
+                <span className="font-bold">{client.business_name}</span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={signOut} className="gap-2 text-muted-foreground">
+                <LogOut className="h-4 w-4" /> Sign Out
+              </Button>
+            </div>
+          </header>
+
+          <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+            <div className="text-center mb-6">
+              <Crown className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">Your website is ready to preview! ♛</h1>
+              <p className="text-muted-foreground">Take a look and let us know what you think.</p>
+            </div>
+
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <div className="border rounded-lg overflow-hidden bg-white" style={{ height: 500 }}>
+                  <iframe src={site.staging_url} className="w-full h-full" title="Your website preview" />
+                </div>
+                <a href={site.staging_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-primary hover:underline text-sm">
+                  <Globe className="h-4 w-4" /> Open full preview <ExternalLink className="h-3 w-3" />
+                </a>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">What do you think?</CardTitle>
+                <CardDescription>Any changes before we go live? Let us know below.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  placeholder="e.g., Love it! Can we change the hero image? Also update my phone number to..."
+                  value={newRequest}
+                  onChange={(e) => setNewRequest(e.target.value)}
+                  rows={4}
+                  className="resize-none"
+                />
+                <Button
+                  onClick={() => {
+                    submitRequest.mutate(undefined, {
+                      onSuccess: () => {
+                        toast.success("Feedback submitted! We'll review it shortly.");
+                      },
+                    });
+                  }}
+                  disabled={!newRequest.trim() || submitRequest.isPending}
+                  className="gap-2"
+                >
+                  {submitRequest.isPending ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Sending...</>
+                  ) : (
+                    <><Send className="h-4 w-4" /> Submit Feedback</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {changeRequests.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-base">Your Feedback</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {changeRequests.map((cr, i) => (
+                      <div key={cr.id}>
+                        {i > 0 && <Separator className="mb-3" />}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <div className="mt-0.5">{statusIcon(cr.status)}</div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm">{cr.request_text}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {format(new Date(cr.created_at), "MMM d, yyyy")}
+                              </p>
+                            </div>
+                          </div>
+                          {statusBadge(cr.status)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    // Default building state
     const tips = [
       "Tip: Claim your Google Business Profile to boost local SEO 🗺️",
       "Tip: Start collecting customer testimonials now for your site ⭐",
@@ -250,6 +351,8 @@ export default function ClientDashboard() {
       "Tip: Set up your business social media accounts while you wait 📱",
     ];
     const randomTip = tips[Math.floor(Math.random() * tips.length)];
+
+    const isGenerating = generationStatus === "generating";
 
     return (
       <div className="min-h-screen bg-secondary/30">
@@ -274,9 +377,13 @@ export default function ClientDashboard() {
             </div>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-bold mb-3">Your website is being built. ♛</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-3">
+            {isGenerating ? "Your website is being generated... ♛" : "Your website is being built. ♛"}
+          </h1>
           <p className="text-muted-foreground text-lg mb-8">
-            We'll email you the moment it's live. Average build time is 24 hours.
+            {isGenerating
+              ? "Our AI is crafting your website right now. This usually takes a few minutes."
+              : "We'll email you the moment it's ready to preview. Average build time is 24 hours."}
           </p>
 
           <Card className="max-w-md mx-auto text-left">
