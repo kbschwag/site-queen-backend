@@ -8,7 +8,10 @@ export function useIntakeForm(clientId: string | undefined) {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [localData, setLocalData] = useState<IntakeData>({});
+  const [initialized, setInitialized] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const localDataRef = useRef<IntakeData>({});
 
   const { data: siteRecord, isLoading } = useQuery({
     queryKey: ["intake-site", clientId],
@@ -25,30 +28,36 @@ export function useIntakeForm(clientId: string | undefined) {
     enabled: !!clientId,
   });
 
-  const intakeData: IntakeData = (siteRecord?.intake_data as IntakeData) || {};
-  const currentStep = intakeData.current_step ?? 1;
+  // Initialize local data from DB once
+  useEffect(() => {
+    if (siteRecord && !initialized) {
+      const dbData = (siteRecord.intake_data as IntakeData) || {};
+      setLocalData(dbData);
+      localDataRef.current = dbData;
+      setInitialized(true);
+    }
+  }, [siteRecord, initialized]);
 
-  const saveData = useCallback(
-    async (updates: Partial<IntakeData>) => {
+  const currentStep = localData.current_step ?? 1;
+
+  const persistToDb = useCallback(
+    async (data: IntakeData) => {
       if (!clientId) return;
       setSaving(true);
       try {
-        const merged = { ...intakeData, ...updates };
-
         if (siteRecord) {
           await supabase
             .from("sites")
-            .update({ intake_data: merged as any, last_updated: new Date().toISOString() })
+            .update({ intake_data: data as any, last_updated: new Date().toISOString() })
             .eq("id", siteRecord.id);
         } else {
           await supabase.from("sites").insert({
             client_id: clientId,
-            intake_data: merged as any,
+            intake_data: data as any,
           });
+          queryClient.invalidateQueries({ queryKey: ["intake-site", clientId] });
         }
-
         setLastSaved(new Date());
-        queryClient.invalidateQueries({ queryKey: ["intake-site", clientId] });
       } catch (e) {
         console.error("Save failed:", e);
         toast.error("Failed to save progress");
@@ -56,23 +65,31 @@ export function useIntakeForm(clientId: string | undefined) {
         setSaving(false);
       }
     },
-    [clientId, intakeData, siteRecord, queryClient]
+    [clientId, siteRecord, queryClient]
   );
 
-  const debouncedSave = useCallback(
+  const updateData = useCallback(
     (updates: Partial<IntakeData>) => {
+      const merged = { ...localDataRef.current, ...updates };
+      setLocalData(merged);
+      localDataRef.current = merged;
+
+      // Debounced save to DB
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => saveData(updates), 2000);
+      debounceRef.current = setTimeout(() => persistToDb(merged), 2000);
     },
-    [saveData]
+    [persistToDb]
   );
 
   const immediateSave = useCallback(
     (updates: Partial<IntakeData>) => {
+      const merged = { ...localDataRef.current, ...updates };
+      setLocalData(merged);
+      localDataRef.current = merged;
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      saveData(updates);
+      persistToDb(merged);
     },
-    [saveData]
+    [persistToDb]
   );
 
   useEffect(() => {
@@ -83,20 +100,20 @@ export function useIntakeForm(clientId: string | undefined) {
 
   const setStep = useCallback(
     (step: number) => {
-      immediateSave({ ...intakeData, current_step: step });
+      immediateSave({ current_step: step });
     },
-    [immediateSave, intakeData]
+    [immediateSave]
   );
 
-  const completedStepsCount = (intakeData.completed_steps || []).length;
+  const completedStepsCount = (localData.completed_steps || []).length;
   const progressPercent = Math.round((completedStepsCount / 9) * 100);
 
   return {
-    intakeData,
+    intakeData: localData,
     currentStep,
     setStep,
     saveData: immediateSave,
-    debouncedSave,
+    debouncedSave: updateData,
     saving,
     lastSaved,
     isLoading,
