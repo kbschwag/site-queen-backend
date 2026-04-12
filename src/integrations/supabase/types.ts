@@ -125,10 +125,47 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          target_id: string | null
+          target_table: string | null
+          user_email: string | null
+          user_id: string
+          user_name: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          target_id?: string | null
+          target_table?: string | null
+          user_email?: string | null
+          user_id: string
+          user_name?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          target_id?: string | null
+          target_table?: string | null
+          user_email?: string | null
+          user_id?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
       change_requests: {
         Row: {
           admin_notes: string | null
           ai_processed: boolean | null
+          assigned_to: string | null
           attachment_url: string | null
           client_id: string
           completed_at: string | null
@@ -140,6 +177,7 @@ export type Database = {
         Insert: {
           admin_notes?: string | null
           ai_processed?: boolean | null
+          assigned_to?: string | null
           attachment_url?: string | null
           client_id: string
           completed_at?: string | null
@@ -151,6 +189,7 @@ export type Database = {
         Update: {
           admin_notes?: string | null
           ai_processed?: boolean | null
+          assigned_to?: string | null
           attachment_url?: string | null
           client_id?: string
           completed_at?: string | null
@@ -364,6 +403,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      staff_permissions: {
+        Row: {
+          can_handle_change_requests: boolean
+          can_review_applications: boolean
+          created_at: string
+          id: string
+          is_active: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          can_handle_change_requests?: boolean
+          can_review_applications?: boolean
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          can_handle_change_requests?: boolean
+          can_review_applications?: boolean
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
