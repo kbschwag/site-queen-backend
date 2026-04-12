@@ -6,15 +6,29 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
+import {
+  Crown,
+  Globe,
+  ExternalLink,
+  Send,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  LogOut,
+  Wrench,
+  BarChart3,
+} from "lucide-react";
+import { format } from "date-fns";
 
 export default function ClientDashboard() {
   const { user, signOut } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newRequest, setNewRequest] = useState("");
 
-  const { data: client } = useQuery({
+  const { data: client, isLoading: clientLoading } = useQuery({
     queryKey: ["my-client"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -58,6 +72,20 @@ export default function ClientDashboard() {
     enabled: !!client,
   });
 
+  const { data: profile } = useQuery({
+    queryKey: ["my-profile"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", user!.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
   const submitRequest = useMutation({
     mutationFn: async () => {
       if (!client) throw new Error("No client record");
@@ -66,25 +94,72 @@ export default function ClientDashboard() {
         request_text: newRequest,
       });
       if (error) throw error;
+
+      // Send confirmation email
+      supabase.functions.invoke("send-email", {
+        body: {
+          to: profile?.email || user!.email,
+          template: "change_request_received",
+          data: { business_name: client.business_name },
+          clientId: client.id,
+        },
+      }).catch(console.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-change-requests"] });
       setNewRequest("");
-      toast({ title: "Request submitted!", description: "We'll process it shortly." });
+      toast.success("Request submitted! We'll process it shortly.");
     },
-    onError: (e) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e) => toast.error(e.message),
   });
+
+  const updatesPercent = client
+    ? Math.min(((client.updates_used_this_month ?? 0) / Math.max(client.updates_limit ?? 1, 1)) * 100, 100)
+    : 0;
+
+  const planLabel: Record<string, string> = {
+    starter: "Starter — $79/mo",
+    growth: "Growth — $129/mo",
+    pro: "Pro — $199/mo",
+  };
+
+  const statusIcon = (status: string | null) => {
+    if (status === "completed") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+    if (status === "in_progress") return <Loader2 className="h-4 w-4 text-primary animate-spin" />;
+    return <Clock className="h-4 w-4 text-muted-foreground" />;
+  };
+
+  const statusBadge = (status: string | null) => {
+    if (status === "completed") return <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200">Completed</Badge>;
+    if (status === "in_progress") return <Badge className="bg-primary/10 text-primary border-primary/20">In Progress</Badge>;
+    return <Badge variant="secondary">Pending</Badge>;
+  };
+
+  if (clientLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
 
   if (!client) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center">
           <CardHeader>
-            <CardTitle>Welcome!</CardTitle>
-            <CardDescription>Your client account is being set up. If you just applied, an admin will link your account shortly.</CardDescription>
+            <div className="mx-auto mb-2">
+              <Crown className="h-10 w-10 text-primary" />
+            </div>
+            <CardTitle>Welcome to SiteQueen ♛</CardTitle>
+            <CardDescription>
+              Your client account is being set up. If you just applied, our team will link your account shortly.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" onClick={signOut}>Sign Out</Button>
+            <Button variant="outline" onClick={signOut} className="gap-2">
+              <LogOut className="h-4 w-4" /> Sign Out
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -92,82 +167,160 @@ export default function ClientDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold">{client.business_name}</h1>
-          <Button variant="outline" onClick={signOut}>Sign Out</Button>
+    <div className="min-h-screen bg-secondary/30">
+      {/* Header */}
+      <header className="border-b bg-card sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <Crown className="h-6 w-6 text-primary" />
+            <div>
+              <h1 className="text-lg font-bold leading-tight">{client.business_name}</h1>
+              <p className="text-xs text-muted-foreground">{planLabel[client.plan] || client.plan}</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={signOut} className="gap-2 text-muted-foreground">
+            <LogOut className="h-4 w-4" /> Sign Out
+          </Button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-        {/* Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+        {/* Status row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card>
-            <CardHeader className="pb-2"><CardDescription>Plan</CardDescription></CardHeader>
-            <CardContent><Badge className="text-lg capitalize">{client.plan}</Badge></CardContent>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Globe className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Site Status</p>
+                  <p className="font-semibold capitalize">{client.site_status || "Building"}</p>
+                </div>
+              </div>
+            </CardContent>
           </Card>
+
           <Card>
-            <CardHeader className="pb-2"><CardDescription>Site Status</CardDescription></CardHeader>
-            <CardContent><Badge variant="secondary" className="text-lg capitalize">{client.site_status}</Badge></CardContent>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Wrench className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground">Updates This Month</p>
+                  <p className="font-semibold">{client.updates_used_this_month ?? 0} / {client.updates_limit ?? 0}</p>
+                  <Progress value={updatesPercent} className="h-1.5 mt-1" />
+                </div>
+              </div>
+            </CardContent>
           </Card>
+
           <Card>
-            <CardHeader className="pb-2"><CardDescription>Updates This Month</CardDescription></CardHeader>
-            <CardContent><p className="text-2xl font-bold">{client.updates_used_this_month}/{client.updates_limit}</p></CardContent>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Requests</p>
+                  <p className="font-semibold">{changeRequests.length}</p>
+                </div>
+              </div>
+            </CardContent>
           </Card>
         </div>
 
-        {/* Site Info */}
-        {site && (
+        {/* Website info */}
+        {site && (site.deploy_url || site.staging_url) && (
           <Card>
-            <CardHeader>
-              <CardTitle>Your Website</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Your Website</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {site.deploy_url && <p>Live: <a href={site.deploy_url} className="text-primary underline" target="_blank">{site.deploy_url}</a></p>}
-              {site.staging_url && <p>Staging: <a href={site.staging_url} className="text-primary underline" target="_blank">{site.staging_url}</a></p>}
-              {site.last_updated && <p className="text-sm text-muted-foreground">Last updated: {new Date(site.last_updated).toLocaleDateString()}</p>}
+              {site.deploy_url && (
+                <a
+                  href={site.deploy_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 text-sm text-primary hover:underline"
+                >
+                  <Globe className="h-4 w-4" /> {site.deploy_url} <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {site.staging_url && (
+                <a
+                  href={site.staging_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:underline"
+                >
+                  Staging: {site.staging_url} <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {site.last_updated && (
+                <p className="text-xs text-muted-foreground">
+                  Last updated: {format(new Date(site.last_updated), "MMM d, yyyy")}
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
 
-        {/* Submit Change Request */}
+        {/* Submit change request */}
         <Card>
-          <CardHeader>
-            <CardTitle>Request a Change</CardTitle>
-            <CardDescription>Describe what you'd like changed on your website.</CardDescription>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Request a Change</CardTitle>
+            <CardDescription>Describe what you'd like updated on your website.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             <Textarea
-              placeholder="e.g., Update the phone number to (555) 123-4567..."
+              placeholder="e.g., Update the phone number to (555) 123-4567, change the hero image, add a new testimonial..."
               value={newRequest}
               onChange={(e) => setNewRequest(e.target.value)}
               rows={4}
+              className="resize-none"
             />
-            <Button onClick={() => submitRequest.mutate()} disabled={!newRequest.trim() || submitRequest.isPending}>
-              {submitRequest.isPending ? "Submitting..." : "Submit Request"}
+            <Button
+              onClick={() => submitRequest.mutate()}
+              disabled={!newRequest.trim() || submitRequest.isPending}
+              className="gap-2"
+            >
+              {submitRequest.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</>
+              ) : (
+                <><Send className="h-4 w-4" /> Submit Request</>
+              )}
             </Button>
           </CardContent>
         </Card>
 
-        {/* Request History */}
+        {/* Request history */}
         <Card>
-          <CardHeader>
-            <CardTitle>Request History</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Request History</CardTitle>
           </CardHeader>
           <CardContent>
             {changeRequests.length === 0 ? (
-              <p className="text-muted-foreground">No requests yet.</p>
+              <p className="text-sm text-muted-foreground py-4 text-center">No requests yet. Submit your first change request above!</p>
             ) : (
-              <div className="space-y-4">
-                {changeRequests.map((cr) => (
-                  <div key={cr.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <Badge variant={cr.status === "completed" ? "default" : "secondary"}>{cr.status}</Badge>
-                      <span className="text-sm text-muted-foreground">{new Date(cr.created_at).toLocaleDateString()}</span>
+              <div className="space-y-3">
+                {changeRequests.map((cr, i) => (
+                  <div key={cr.id}>
+                    {i > 0 && <Separator className="mb-3" />}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="mt-0.5">{statusIcon(cr.status)}</div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm">{cr.request_text}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {format(new Date(cr.created_at), "MMM d, yyyy")}
+                            {cr.completed_at && ` · Completed ${format(new Date(cr.completed_at), "MMM d")}`}
+                          </p>
+                        </div>
+                      </div>
+                      {statusBadge(cr.status)}
                     </div>
-                    <p>{cr.request_text}</p>
-                    {cr.completed_at && <p className="text-sm text-muted-foreground mt-2">Completed: {new Date(cr.completed_at).toLocaleDateString()}</p>}
                   </div>
                 ))}
               </div>
