@@ -105,9 +105,16 @@ export default function AdminDashboard() {
         plan: app.plan_interest || "starter",
       });
       if (error) throw error;
-      // Send approval email
+      // Build booking link
+      const bookingUrl = `${window.location.origin}/book-call?name=${encodeURIComponent(app.name)}`;
+      // Send approval email with booking link
       await supabase.functions.invoke("send-email", {
-        body: { to: app.email, template: "application_approved", data: { name: app.name, business_name: app.business_name }, applicationId: app.id },
+        body: {
+          to: app.email,
+          template: "application_approved",
+          data: { name: app.name, business_name: app.business_name, booking_url: bookingUrl },
+          applicationId: app.id,
+        },
       });
     },
     onSuccess: () => {
@@ -233,7 +240,7 @@ export default function AdminDashboard() {
                             <Button size="sm" variant="outline" onClick={() => scoreLeadMutation.mutate(app.id)} disabled={scoreLeadMutation.isPending}>
                               Score
                             </Button>
-                            {app.status === "pending" && (
+                            {(app.status === "pending" || app.status === "needs_review") && (
                               <>
                                 <Button size="sm" onClick={() => approveApp.mutate(app)} disabled={approveApp.isPending}>Approve</Button>
                                 <Button size="sm" variant="destructive" onClick={() => rejectApp.mutate(app)} disabled={rejectApp.isPending}>Reject</Button>
