@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+
+// Anonymous client for public form submissions (avoids auth token interference)
+const anonClient = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+);
 
 export default function Apply() {
   const { toast } = useToast();
@@ -27,7 +34,8 @@ export default function Apply() {
     e.preventDefault();
     setLoading(true);
 
-    const { data, error } = await supabase.from("applications").insert([form]).select().single();
+    // Use anonymous client to avoid auth token issues with public form
+    const { data, error } = await anonClient.from("applications").insert([form]).select().single();
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
