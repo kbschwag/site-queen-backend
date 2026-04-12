@@ -214,6 +214,13 @@ export type Database = {
           business_name: string
           business_type: string
           created_at: string
+          deploy_count: number | null
+          deployment_path_confirmed: boolean | null
+          domain_checklist: Json | null
+          domain_name: string | null
+          domain_status: string | null
+          email_hosting_notes: string | null
+          hostinger_folder_path: string | null
           id: string
           intake_completed: boolean
           join_date: string | null
@@ -234,6 +241,13 @@ export type Database = {
           business_name: string
           business_type: string
           created_at?: string
+          deploy_count?: number | null
+          deployment_path_confirmed?: boolean | null
+          domain_checklist?: Json | null
+          domain_name?: string | null
+          domain_status?: string | null
+          email_hosting_notes?: string | null
+          hostinger_folder_path?: string | null
           id?: string
           intake_completed?: boolean
           join_date?: string | null
@@ -254,6 +268,13 @@ export type Database = {
           business_name?: string
           business_type?: string
           created_at?: string
+          deploy_count?: number | null
+          deployment_path_confirmed?: boolean | null
+          domain_checklist?: Json | null
+          domain_name?: string | null
+          domain_status?: string | null
+          email_hosting_notes?: string | null
+          hostinger_folder_path?: string | null
           id?: string
           intake_completed?: boolean
           join_date?: string | null
@@ -439,12 +460,14 @@ export type Database = {
           business_type: string | null
           client_id: string
           created_at: string
+          deploy_count: number | null
           deploy_url: string | null
           generated_at: string | null
           generation_error: string | null
           generation_status: string | null
           id: string
           intake_data: Json | null
+          last_deployed_at: string | null
           last_updated: string | null
           logo_url: string | null
           primary_color: string | null
@@ -456,12 +479,14 @@ export type Database = {
           business_type?: string | null
           client_id: string
           created_at?: string
+          deploy_count?: number | null
           deploy_url?: string | null
           generated_at?: string | null
           generation_error?: string | null
           generation_status?: string | null
           id?: string
           intake_data?: Json | null
+          last_deployed_at?: string | null
           last_updated?: string | null
           logo_url?: string | null
           primary_color?: string | null
@@ -473,12 +498,14 @@ export type Database = {
           business_type?: string | null
           client_id?: string
           created_at?: string
+          deploy_count?: number | null
           deploy_url?: string | null
           generated_at?: string | null
           generation_error?: string | null
           generation_status?: string | null
           id?: string
           intake_data?: Json | null
+          last_deployed_at?: string | null
           last_updated?: string | null
           logo_url?: string | null
           primary_color?: string | null

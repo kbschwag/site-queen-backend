@@ -11,6 +11,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
 import { WebsiteBuildPanel } from "@/components/operator/WebsiteBuildPanel";
+import { DomainDeployTab } from "@/components/operator/DomainDeployTab";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -182,6 +183,7 @@ export default function OperatorClients() {
               <TabsList className="w-full">
                 <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
                 <TabsTrigger value="build" className="flex-1">Website Build</TabsTrigger>
+                <TabsTrigger value="domain" className="flex-1">Domain & Deploy</TabsTrigger>
                 <TabsTrigger value="brief" className="flex-1">Brief</TabsTrigger>
               </TabsList>
               <TabsContent value="details" className="space-y-4 mt-4">
@@ -259,6 +261,9 @@ export default function OperatorClients() {
               </TabsContent>
               <TabsContent value="build" className="mt-4">
                 <WebsiteBuildPanel clientId={selected.id} businessName={selected.business_name} />
+              </TabsContent>
+              <TabsContent value="domain" className="mt-4">
+                <DomainDeployTab clientId={selected.id} businessName={selected.business_name} />
               </TabsContent>
               <TabsContent value="brief" className="mt-4">
                 <WebsiteBriefPanel clientId={selected.id} businessName={selected.business_name} />

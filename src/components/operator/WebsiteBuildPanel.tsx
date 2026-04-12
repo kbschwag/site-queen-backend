@@ -5,11 +5,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
   Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SitePreviewFrame } from "./SitePreviewFrame";
 
 interface Props {
@@ -22,6 +26,21 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const queryClient = useQueryClient();
   const [sharing, setSharing] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [showGoLiveModal, setShowGoLiveModal] = useState(false);
+  const [goLiveChecked, setGoLiveChecked] = useState(false);
+
+  const { data: clientData } = useQuery({
+    queryKey: ["operator-client-deploy-status", clientId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("domain_name, domain_status, deployment_path_confirmed")
+        .eq("id", clientId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: site, isLoading } = useQuery({
     queryKey: ["operator-site-build", clientId],
@@ -136,18 +155,35 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     toast.success("Marked for manual review");
   };
 
+  const domainReady = (clientData as any)?.domain_status === "ready_to_deploy";
+  const deployConfirmed = !!(clientData as any)?.deployment_path_confirmed;
+  const genComplete = generationStatus === "complete" || generationStatus === "shared";
+  const canGoLive = domainReady && deployConfirmed && genComplete;
+
+  const goLiveTooltip = !genComplete
+    ? "Site has not been generated yet"
+    : !domainReady
+    ? "Set domain status to Ready to deploy first"
+    : !deployConfirmed
+    ? "Confirm deployment path in Domain & Deploy tab first"
+    : "";
+
   const handleApproveGoLive = async () => {
     setApproving(true);
+    setShowGoLiveModal(false);
+    setGoLiveChecked(false);
     try {
-      await supabase
-        .from("sites")
-        .update({ generation_status: "live" } as any)
-        .eq("client_id", clientId);
+      // Call deploy-to-hostinger edge function
+      const { data: deployResult, error: deployError } = await supabase.functions.invoke("deploy-to-hostinger", {
+        body: { client_id: clientId },
+      });
 
-      await supabase
-        .from("clients")
-        .update({ site_status: "live" } as any)
-        .eq("id", clientId);
+      if (deployError) {
+        // Fallback: update statuses manually if deploy function fails
+        console.error("Deploy function error, updating statuses manually:", deployError);
+        await supabase.from("sites").update({ generation_status: "live" } as any).eq("client_id", clientId);
+        await supabase.from("clients").update({ site_status: "live" } as any).eq("id", clientId);
+      }
 
       // Send celebration email
       await supabase.functions.invoke("send-email", {
@@ -247,10 +283,25 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               </div>
             )}
             <div className="flex gap-2">
-              <Button onClick={handleApproveGoLive} disabled={approving} className="gap-2 flex-1 bg-emerald-600 hover:bg-emerald-700">
-                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                Approve & Go Live
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex-1">
+                      <Button
+                        onClick={() => setShowGoLiveModal(true)}
+                        disabled={approving || !canGoLive}
+                        className="gap-2 w-full bg-primary hover:bg-primary/90"
+                      >
+                        {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                        Approve & Go Live
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!canGoLive && (
+                    <TooltipContent><p>{goLiveTooltip}</p></TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
               <Button variant="outline" onClick={handleManualReview} className="gap-2">
                 <Wrench className="h-4 w-4" /> I'll work on it
               </Button>
@@ -301,6 +352,31 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </CardContent>
         </Card>
       )}
+
+      {/* Go Live Confirmation Modal */}
+      <Dialog open={showGoLiveModal} onOpenChange={(open) => { setShowGoLiveModal(open); if (!open) setGoLiveChecked(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Go live confirmation</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will push <strong>{businessName}</strong>'s website live at{" "}
+            <strong>{(clientData as any)?.domain_name || "their domain"}</strong>.
+            This action cannot be undone. Are you sure?
+          </p>
+          <label className="flex items-center gap-2 text-sm cursor-pointer mt-2">
+            <Checkbox checked={goLiveChecked} onCheckedChange={(c) => setGoLiveChecked(!!c)} />
+            I have reviewed the site and it is ready for the client
+          </label>
+          <DialogFooter className="gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShowGoLiveModal(false)}>Cancel</Button>
+            <Button onClick={handleApproveGoLive} disabled={!goLiveChecked || approving} className="gap-2">
+              {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+              Confirm and go live ♛
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

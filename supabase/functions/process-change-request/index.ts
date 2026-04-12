@@ -169,6 +169,40 @@ Return ONLY a valid JSON object with these four fields. No explanation or markdo
         target_role: "client",
       });
 
+      // Auto redeploy to Hostinger if site is live
+      if (clientData?.site_status === "live" && clientData?.deployment_path_confirmed) {
+        try {
+          const deployResponse = await fetch(
+            `${supabaseUrl}/functions/v1/deploy-to-hostinger`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${supabaseKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ client_id: clientId }),
+            }
+          );
+
+          if (!deployResponse.ok) {
+            await supabase.from("notifications").insert({
+              type: "redeployment_failed",
+              client_id: clientId,
+              message: `Change completed but redeployment to Hostinger failed — manual push needed for ${clientData?.business_name}`,
+              target_role: "operator",
+            });
+          }
+        } catch (deployErr) {
+          console.error("Auto-redeploy failed:", deployErr);
+          await supabase.from("notifications").insert({
+            type: "redeployment_failed",
+            client_id: clientId,
+            message: `Change completed but redeployment failed — manual push needed for ${clientData?.business_name}`,
+            target_role: "operator",
+          });
+        }
+      }
+
     } else if (currentHTML) {
       // Needs manual review
       await supabase.from("change_requests").update({
