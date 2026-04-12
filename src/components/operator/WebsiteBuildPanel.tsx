@@ -211,12 +211,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
             <CardTitle className="text-sm">Preview</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="border rounded-lg overflow-hidden bg-white" style={{ height: 400 }}>
-              <iframe src={stagingUrl} className="w-full h-full" title="Staging preview" />
-            </div>
-            <a href={stagingUrl} target="_blank" rel="noreferrer" className="text-sm text-primary flex items-center gap-1 hover:underline">
-              Open in new tab <ExternalLink className="h-3 w-3" />
-            </a>
+            <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={500} />
             <div className="flex gap-2">
               <Button onClick={handleShareWithClient} disabled={sharing} className="gap-2 flex-1">
                 {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -237,9 +232,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
             <CardTitle className="text-sm">Shared with Client</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="border rounded-lg overflow-hidden bg-white" style={{ height: 300 }}>
-              <iframe src={stagingUrl} className="w-full h-full" title="Staging preview" />
-            </div>
+            <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={400} />
             {preLaunchFeedback.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Client Feedback</h4>
@@ -292,11 +285,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               <Wrench className="h-4 w-4" />
               <span>You're handling this build manually.</span>
             </div>
-            {stagingUrl && (
-              <a href={stagingUrl} target="_blank" rel="noreferrer" className="text-sm text-primary flex items-center gap-1 hover:underline mt-2">
-                View staging <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
+             <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={300} />
           </CardContent>
         </Card>
       )}
