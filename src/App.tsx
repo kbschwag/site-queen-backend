@@ -15,6 +15,12 @@ import Apply from "./pages/Apply";
 import BookCall from "./pages/BookCall";
 import AdminDashboard from "./pages/AdminDashboard";
 import ClientDashboard from "./pages/ClientDashboard";
+import ClientOverview from "./pages/client/ClientOverview";
+import ClientWebsite from "./pages/client/ClientWebsite";
+import ClientSupport from "./pages/client/ClientSupport";
+import ClientBilling from "./pages/client/ClientBilling";
+import ClientHelp from "./pages/client/ClientHelp";
+import ClientSettings from "./pages/client/ClientSettings";
 import OperatorLogin from "./pages/operator/OperatorLogin";
 import OperatorDashboard from "./pages/operator/OperatorDashboard";
 import OperatorApplications from "./pages/operator/OperatorApplications";
@@ -44,8 +50,15 @@ const App = () => (
             {/* Legacy admin */}
             <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
 
-            {/* Client dashboard */}
-            <Route path="/dashboard" element={<ProtectedRoute><ClientDashboard /></ProtectedRoute>} />
+            {/* Client dashboard with sidebar layout */}
+            <Route path="/dashboard" element={<ProtectedRoute><ClientDashboard /></ProtectedRoute>}>
+              <Route index element={<ClientOverview />} />
+              <Route path="website" element={<ClientWebsite />} />
+              <Route path="support" element={<ClientSupport />} />
+              <Route path="billing" element={<ClientBilling />} />
+              <Route path="help" element={<ClientHelp />} />
+              <Route path="settings" element={<ClientSettings />} />
+            </Route>
 
             {/* Operator portal */}
             <Route path="/operator/login" element={<OperatorLogin />} />
