@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Crown,
@@ -22,10 +23,16 @@ import {
   BarChart3,
   ArrowRight,
   Sparkles,
+  Coins,
 } from "lucide-react";
 import { format } from "date-fns";
 import { IntakeForm } from "@/components/intake/IntakeForm";
 import type { IntakeData } from "@/components/intake/types";
+import { CreditsWidget } from "@/components/client/CreditsWidget";
+import { CreditCostReference } from "@/components/client/CreditCostReference";
+import { SubmitTicket } from "@/components/client/SubmitTicket";
+import { MyTickets } from "@/components/client/MyTickets";
+import { BuyCreditsModal } from "@/components/client/BuyCreditsModal";
 
 export default function ClientDashboard() {
   const { user, signOut } = useAuth();
