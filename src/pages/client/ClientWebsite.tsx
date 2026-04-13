@@ -147,52 +147,7 @@ export default function ClientWebsite() {
     );
   }
 
-  // Helper: render iframe preview
-  const renderPreview = (url: string) => {
-    const iframeWidth = previewMode === "mobile" ? 390 : "100%";
-    return (
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Button
-            variant={previewMode === "desktop" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setPreviewMode("desktop")}
-            className="gap-1"
-          >
-            <Monitor className="h-4 w-4" /> Desktop
-          </Button>
-          <Button
-            variant={previewMode === "mobile" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setPreviewMode("mobile")}
-            className="gap-1"
-          >
-            <Smartphone className="h-4 w-4" /> Mobile
-          </Button>
-        </div>
-        <div className={`border rounded-lg overflow-hidden bg-background ${previewMode === "mobile" ? "mx-auto border-2 rounded-2xl" : ""}`}
-          style={{ width: iframeWidth, height: previewMode === "mobile" ? 700 : 500 }}
-        >
-          <iframe
-            src={url}
-            className="w-full h-full"
-            title="Website preview"
-            sandbox="allow-scripts allow-same-origin"
-          />
-        </div>
-        <div className="mt-2">
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-          >
-            Open in new tab <ExternalLink className="h-3 w-3" />
-          </a>
-        </div>
-      </div>
-    );
-  };
+
 
   const allChecked = Object.values(checklist).every(Boolean);
 
