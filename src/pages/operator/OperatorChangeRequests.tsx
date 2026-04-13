@@ -13,9 +13,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SoftDeleteModal } from "@/components/operator/SoftDeleteModal";
 import { toast } from "sonner";
-import { Search, MessageSquare, CheckCircle2, Clock, User, Zap, Eye, AlertCircle, Coins, X } from "lucide-react";
-import { format } from "date-fns";
+import { Search, MessageSquare, CheckCircle2, Clock, User, Zap, Eye, AlertCircle, Coins, X, ChevronDown, Trash2 } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 
 interface ChangeRequestWithClient {
   id: string;
@@ -33,6 +35,7 @@ interface ChangeRequestWithClient {
   priority: string | null;
   operator_notes: string | null;
   assessed_by_operator: boolean | null;
+  deleted_at?: string | null;
   clients: { business_name: string; business_type: string; plan: string; credits_balance: number } | null;
 }
 
@@ -45,6 +48,8 @@ export default function OperatorChangeRequests() {
   const [selected, setSelected] = useState<ChangeRequestWithClient | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showDeclineModal, setShowDeclineModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [completionNote, setCompletionNote] = useState("");
   const [declineReason, setDeclineReason] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
@@ -61,6 +66,7 @@ export default function OperatorChangeRequests() {
       const { data, error } = await supabase
         .from("change_requests")
         .select("*, clients(business_name, business_type, plan, credits_balance)")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data || []) as ChangeRequestWithClient[];
@@ -80,30 +86,43 @@ export default function OperatorChangeRequests() {
     enabled: isOwner || isPartner,
   });
 
-  const filtered = requests.filter((r) => {
-    const matchesSearch =
-      r.request_text.toLowerCase().includes(search.toLowerCase()) ||
-      (r.clients?.business_name || "").toLowerCase().includes(search.toLowerCase()) ||
-      (r.change_type || "").toLowerCase().includes(search.toLowerCase());
-    const matchesPriority = filterPriority === "all" || r.priority === filterPriority;
-    const matchesPlan = filterPlan === "all" || r.clients?.plan === filterPlan;
+  const getFiltered = (statusFilter: string[]) => {
+    return requests.filter((r) => {
+      const matchesSearch =
+        r.request_text.toLowerCase().includes(search.toLowerCase()) ||
+        (r.clients?.business_name || "").toLowerCase().includes(search.toLowerCase()) ||
+        (r.change_type || "").toLowerCase().includes(search.toLowerCase());
+      const matchesPriority = filterPriority === "all" || r.priority === filterPriority;
+      const matchesPlan = filterPlan === "all" || r.clients?.plan === filterPlan;
+      const matchesStatus = statusFilter.includes(r.status || "");
+      return matchesSearch && matchesPriority && matchesPlan && matchesStatus;
+    }).sort((a, b) => {
+      // Urgent first in pending tab
+      if (tab === "pending") {
+        if (a.priority === "urgent" && b.priority !== "urgent") return -1;
+        if (b.priority === "urgent" && a.priority !== "urgent") return 1;
+      }
+      if (sortBy === "urgent") {
+        if (a.priority === "urgent" && b.priority !== "urgent") return -1;
+        if (b.priority === "urgent" && a.priority !== "urgent") return 1;
+      }
+      if (sortBy === "credits") return (b.credits_cost || 0) - (a.credits_cost || 0);
+      if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  };
 
-    let matchesTab = true;
-    if (tab === "pending") matchesTab = r.status === "submitted" || r.status === "pending";
-    else if (tab === "in_progress") matchesTab = r.status === "in_review" || r.status === "in_progress";
-    else if (tab === "completed") matchesTab = r.status === "completed";
-    else if (tab === "assessment") matchesTab = r.status === "pending_assessment";
+  const pendingItems = getFiltered(["submitted", "pending"]);
+  const assessmentItems = getFiltered(["pending_assessment"]);
+  const inProgressItems = getFiltered(["in_review", "in_progress"]);
+  const archivedItems = getFiltered(["completed", "declined"]);
 
-    return matchesSearch && matchesPriority && matchesPlan && matchesTab;
-  }).sort((a, b) => {
-    if (sortBy === "urgent") {
-      if (a.priority === "urgent" && b.priority !== "urgent") return -1;
-      if (b.priority === "urgent" && a.priority !== "urgent") return 1;
-    }
-    if (sortBy === "credits") return (b.credits_cost || 0) - (a.credits_cost || 0);
-    if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
+  // Group archived by month
+  const archivedByMonth = archivedItems.reduce((acc: Record<string, ChangeRequestWithClient[]>, r) => {
+    const key = format(new Date(r.completed_at || r.created_at), "MMMM yyyy");
+    (acc[key] = acc[key] || []).push(r);
+    return acc;
+  }, {});
 
   const statusBadge = (status: string | null) => {
     const configs: Record<string, { class: string; label: string; icon: any }> = {
@@ -113,7 +132,7 @@ export default function OperatorChangeRequests() {
       in_review: { class: "bg-blue-500/10 text-blue-700 border-blue-200", label: "In Review", icon: Eye },
       in_progress: { class: "bg-blue-500/10 text-blue-700 border-blue-200", label: "In Progress", icon: Clock },
       completed: { class: "bg-emerald-500/10 text-emerald-700 border-emerald-200", label: "Completed", icon: CheckCircle2 },
-      declined: { class: "bg-destructive/10 text-destructive border-destructive/20", label: "Declined", icon: AlertCircle },
+      declined: { class: "bg-destructive/10 text-destructive border-destructive/20", label: "Declined", icon: X },
     };
     const cfg = configs[status || "pending"] || configs.pending;
     const Icon = cfg.icon;
@@ -134,7 +153,10 @@ export default function OperatorChangeRequests() {
   };
 
   const handleComplete = async () => {
-    if (!selected || !completionNote.trim()) return;
+    if (!selected || completionNote.trim().length < 20) {
+      toast.error("Completion notes must be at least 20 characters");
+      return;
+    }
     setLoading(true);
     await supabase.from("change_requests").update({ status: "completed", completed_at: new Date().toISOString(), admin_notes: completionNote, operator_notes: internalNotes || null } as any).eq("id", selected.id);
     await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Completed change request for ${selected.clients?.business_name}`, target_table: "change_requests", target_id: selected.id });
@@ -147,17 +169,13 @@ export default function OperatorChangeRequests() {
     if (!selected || !declineReason.trim()) return;
     setLoading(true);
     const creditsCost = selected.credits_cost || 0;
-
     await supabase.from("change_requests").update({ status: "declined", admin_notes: declineReason } as any).eq("id", selected.id);
-
-    // Refund credits
     if (creditsCost > 0) {
       const clientBalance = selected.clients?.credits_balance || 0;
       const newBalance = clientBalance + creditsCost;
       await supabase.from("clients").update({ credits_balance: newBalance } as any).eq("id", selected.client_id);
       await supabase.from("credits_transactions").insert({ client_id: selected.client_id, transaction_type: "refund", credits_amount: creditsCost, credits_balance_after: newBalance, description: `Refund for declined request: ${selected.change_type}`, change_request_id: selected.id } as any);
     }
-
     await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Declined change request for ${selected.clients?.business_name}`, target_table: "change_requests", target_id: selected.id });
     queryClient.invalidateQueries({ queryKey: ["operator-change-requests"] });
     toast.success("Request declined. Credits refunded.");
@@ -169,19 +187,12 @@ export default function OperatorChangeRequests() {
     setLoading(true);
     const cost = parseInt(assessCredits);
     const clientBalance = selected.clients?.credits_balance || 0;
-
-    if (clientBalance < cost) {
-      toast.error("Client doesn't have enough credits");
-      setLoading(false);
-      return;
-    }
-
+    if (clientBalance < cost) { toast.error("Client doesn't have enough credits"); setLoading(false); return; }
     const newBalance = clientBalance - cost;
     await supabase.from("clients").update({ credits_balance: newBalance } as any).eq("id", selected.client_id);
     await supabase.from("change_requests").update({ credits_cost: cost, assessed_by_operator: true, status: "in_review", admin_notes: assessNote || null } as any).eq("id", selected.id);
     await supabase.from("credits_transactions").insert({ client_id: selected.client_id, transaction_type: "ticket_spent", credits_amount: -cost, credits_balance_after: newBalance, description: `Assessed: ${selected.change_type || "Custom request"} — ${cost} credits`, change_request_id: selected.id } as any);
     await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Assessed change request at ${cost} credits`, target_table: "change_requests", target_id: selected.id });
-
     queryClient.invalidateQueries({ queryKey: ["operator-change-requests"] });
     toast.success(`Assessed at ${cost} credits. Client charged.`);
     refreshSelected(selected.id);
@@ -194,10 +205,67 @@ export default function OperatorChangeRequests() {
     return profile?.full_name || profile?.email || "Assigned";
   };
 
-  const countByStatus = (s: string | string[]) => {
-    const statuses = Array.isArray(s) ? s : [s];
-    return requests.filter(r => statuses.includes(r.status || "")).length;
+  const timeElapsed = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const hoursAgo = (Date.now() - d.getTime()) / (1000 * 60 * 60);
+    const text = formatDistanceToNow(d, { addSuffix: true });
+    const isOverdue = hoursAgo > 48;
+    return <span className={`text-xs ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>{text}</span>;
   };
+
+  const renderTicketRow = (r: ChangeRequestWithClient, readonly = false) => (
+    <TableRow
+      key={r.id}
+      className={`cursor-pointer hover:bg-primary/5 transition-colors ${r.priority === "urgent" ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}
+      onClick={() => { if (!readonly) { setSelected(r); setInternalNotes(r.operator_notes || ""); } }}
+    >
+      <TableCell>
+        <div className="flex items-center gap-2">
+          {r.priority === "urgent" && <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />}
+          <div>
+            <p className="font-medium text-sm">{r.clients?.business_name || "—"}</p>
+            <p className="text-xs text-muted-foreground">{r.clients?.plan}</p>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <p className="text-sm">{r.change_type || "—"}</p>
+        <p className="text-xs text-muted-foreground truncate max-w-[200px]">{r.request_text.slice(0, 60)}{r.request_text.length > 60 ? "..." : ""}</p>
+      </TableCell>
+      <TableCell>
+        {r.credits_cost != null ? (
+          <span className="text-sm flex items-center gap-1"><Coins className="h-3 w-3" />{r.credits_cost}</span>
+        ) : <span className="text-xs text-muted-foreground">—</span>}
+      </TableCell>
+      <TableCell>{statusBadge(r.status)}</TableCell>
+      <TableCell>{timeElapsed(r.created_at)}</TableCell>
+    </TableRow>
+  );
+
+  const renderTable = (items: ChangeRequestWithClient[], readonly = false) => (
+    items.length === 0 ? (
+      <div className="text-center py-12 text-muted-foreground">
+        <MessageSquare className="h-10 w-10 mx-auto mb-2 opacity-40" />
+        <p className="text-sm">No requests in this view</p>
+        <p className="text-xs mt-1">Requests will appear here as clients submit them</p>
+      </div>
+    ) : (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Client</TableHead>
+            <TableHead>Request</TableHead>
+            <TableHead>Credits</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Submitted</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((r) => renderTicketRow(r, readonly))}
+        </TableBody>
+      </Table>
+    )
+  );
 
   return (
     <div className="space-y-6">
@@ -205,7 +273,7 @@ export default function OperatorChangeRequests() {
         <div>
           <h1 className="text-2xl font-bold">Change Requests</h1>
           <p className="text-muted-foreground text-sm">
-            {countByStatus(["submitted", "pending"])} pending · {countByStatus(["in_review", "in_progress"])} in progress · {countByStatus("pending_assessment")} need assessment
+            {pendingItems.length} pending · {inProgressItems.length} in progress · {assessmentItems.length} need assessment
           </p>
         </div>
       </div>
@@ -245,63 +313,63 @@ export default function OperatorChangeRequests() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="pending">Pending ({countByStatus(["submitted", "pending"])})</TabsTrigger>
-          <TabsTrigger value="assessment">Needs Assessment ({countByStatus("pending_assessment")})</TabsTrigger>
-          <TabsTrigger value="in_progress">In Progress ({countByStatus(["in_review", "in_progress"])})</TabsTrigger>
-          <TabsTrigger value="completed">Completed ({countByStatus("completed")})</TabsTrigger>
-          <TabsTrigger value="all">All ({requests.length})</TabsTrigger>
+          <TabsTrigger value="pending">Pending ({pendingItems.length})</TabsTrigger>
+          <TabsTrigger value="assessment">Needs Assessment ({assessmentItems.length})</TabsTrigger>
+          <TabsTrigger value="in_progress">In Progress ({inProgressItems.length})</TabsTrigger>
+          <TabsTrigger value="archived" className="text-muted-foreground">Archived ({archivedItems.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={tab} className="mt-4">
-          {isLoading ? (
-            <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
-          ) : filtered.length === 0 ? (
+        <TabsContent value="pending" className="mt-4">
+          {isLoading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div> : renderTable(pendingItems)}
+        </TabsContent>
+        <TabsContent value="assessment" className="mt-4">
+          {renderTable(assessmentItems)}
+        </TabsContent>
+        <TabsContent value="in_progress" className="mt-4">
+          {renderTable(inProgressItems)}
+        </TabsContent>
+        <TabsContent value="archived" className="mt-4">
+          {archivedItems.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              <MessageSquare className="h-10 w-10 mx-auto mb-2 opacity-40" />
-              <p>No change requests found</p>
+              <CheckCircle2 className="h-10 w-10 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">No archived requests yet</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Change Type</TableHead>
-                  <TableHead>Credits</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Assigned</TableHead>
-                  <TableHead>Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((r) => (
-                  <TableRow key={r.id} className={`cursor-pointer ${r.priority === "urgent" ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`} onClick={() => { setSelected(r); setInternalNotes(r.operator_notes || ""); }}>
-                    <TableCell>
-                      <p className="font-medium text-sm">{r.clients?.business_name || "—"}</p>
-                      <p className="text-xs text-muted-foreground">{r.clients?.plan}</p>
-                    </TableCell>
-                    <TableCell><p className="text-sm">{r.change_type || "—"}</p></TableCell>
-                    <TableCell>
-                      {r.credits_cost != null ? (
-                        <span className="text-sm flex items-center gap-1"><Coins className="h-3 w-3" />{r.credits_cost}</span>
-                      ) : <span className="text-xs text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      {r.priority === "urgent" ? (
-                        <Badge className="bg-amber-500/10 text-amber-700 border-amber-200"><Zap className="h-3 w-3 mr-0.5" />Urgent</Badge>
-                      ) : <span className="text-xs text-muted-foreground">Normal</span>}
-                    </TableCell>
-                    <TableCell>{statusBadge(r.status)}</TableCell>
-                    <TableCell>
-                      {r.assigned_to ? (
-                        <span className="text-sm flex items-center gap-1"><User className="h-3 w-3" />{assigneeName(r.assigned_to)}</span>
-                      ) : <span className="text-xs text-muted-foreground">Unassigned</span>}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{format(new Date(r.created_at), "MMM d")}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="space-y-2">
+              {Object.entries(archivedByMonth).map(([month, items]) => (
+                <Collapsible key={month}>
+                  <CollapsibleTrigger className="flex items-center gap-2 w-full p-3 rounded-lg hover:bg-muted/50 transition-colors text-left">
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">{month}</span>
+                    <Badge variant="secondary" className="text-xs">{items.length}</Badge>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Client</TableHead>
+                          <TableHead>Request</TableHead>
+                          <TableHead>Credits</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Completed</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((r) => (
+                          <TableRow key={r.id} className="cursor-pointer hover:bg-primary/5" onClick={() => { setSelected(r); setInternalNotes(r.operator_notes || ""); }}>
+                            <TableCell><p className="text-sm font-medium">{r.clients?.business_name || "—"}</p></TableCell>
+                            <TableCell><p className="text-sm truncate max-w-[200px]">{r.change_type || r.request_text.slice(0, 40)}</p></TableCell>
+                            <TableCell>{r.credits_cost != null ? <span className="text-sm">{r.credits_cost}</span> : "—"}</TableCell>
+                            <TableCell>{statusBadge(r.status)}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{r.completed_at ? format(new Date(r.completed_at), "MMM d, yyyy") : "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CollapsibleContent>
+                </Collapsible>
+              ))}
+            </div>
           )}
         </TabsContent>
       </Tabs>
@@ -311,7 +379,17 @@ export default function OperatorChangeRequests() {
         <Sheet open onOpenChange={() => setSelected(null)}>
           <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
             <SheetHeader>
-              <SheetTitle>Change Request</SheetTitle>
+              <div className="flex items-center justify-between">
+                <SheetTitle>Change Request</SheetTitle>
+                {isOwner && (
+                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => {
+                    setDeleteTarget({ id: selected.id, name: `${selected.clients?.business_name} — ${selected.change_type || "request"}` });
+                    setShowDeleteModal(true);
+                  }}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </SheetHeader>
             <div className="mt-4 space-y-4">
               <div className="flex items-center gap-2 flex-wrap">
@@ -349,10 +427,20 @@ export default function OperatorChangeRequests() {
               <Separator />
 
               <div className="text-sm space-y-1">
-                <div className="flex justify-between"><span className="text-muted-foreground">Submitted</span><span>{format(new Date(selected.created_at), "MMM d, yyyy h:mm a")}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Submitted</span>{timeElapsed(selected.created_at)}</div>
                 {selected.completed_at && <div className="flex justify-between"><span className="text-muted-foreground">Completed</span><span>{format(new Date(selected.completed_at), "MMM d, yyyy h:mm a")}</span></div>}
                 <div className="flex justify-between"><span className="text-muted-foreground">Assigned to</span><span>{assigneeName(selected.assigned_to) || "Unassigned"}</span></div>
               </div>
+
+              {selected.admin_notes && (selected.status === "completed" || selected.status === "declined") && (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">{selected.status === "completed" ? "What was done" : "Decline reason"}</p>
+                    <p className="text-sm bg-muted p-3 rounded-lg">{selected.admin_notes}</p>
+                  </div>
+                </>
+              )}
 
               <Separator />
 
@@ -380,9 +468,7 @@ export default function OperatorChangeRequests() {
                     <Button size="sm" onClick={handleAssessCredits} disabled={loading} className="flex-1">
                       {loading ? "Processing..." : `Confirm ${assessCredits} credits`}
                     </Button>
-                    <Button size="sm" variant="destructive" onClick={() => setShowDeclineModal(true)} className="shrink-0">
-                      Decline
-                    </Button>
+                    <Button size="sm" variant="destructive" onClick={() => setShowDeclineModal(true)} className="shrink-0">Decline</Button>
                   </div>
                 </div>
               )}
@@ -393,16 +479,20 @@ export default function OperatorChangeRequests() {
                   {(isOwner || isPartner) && staffProfiles.length > 0 && (
                     <div>
                       <label className="text-xs text-muted-foreground">Assign to</label>
-                      <select className="w-full border rounded-md p-2 text-sm mt-1" value={selected.assigned_to || ""} onChange={(e) => {
-                        supabase.from("change_requests").update({ assigned_to: e.target.value || null, status: "in_review" } as any).eq("id", selected.id).then(() => {
+                      <Select value={selected.assigned_to || "unassigned"} onValueChange={(v) => {
+                        const val = v === "unassigned" ? null : v;
+                        supabase.from("change_requests").update({ assigned_to: val, status: "in_review" } as any).eq("id", selected.id).then(() => {
                           queryClient.invalidateQueries({ queryKey: ["operator-change-requests"] });
                           refreshSelected(selected.id);
                           toast.success("Assigned");
                         });
                       }}>
-                        <option value="">Unassigned</option>
-                        {staffProfiles.map((p: any) => <option key={p.user_id} value={p.user_id}>{p.full_name || p.email} ({p.role})</option>)}
-                      </select>
+                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unassigned">Unassigned</SelectItem>
+                          {staffProfiles.map((p: any) => <SelectItem key={p.user_id} value={p.user_id}>{p.full_name || p.email} ({p.role})</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
 
@@ -439,13 +529,16 @@ export default function OperatorChangeRequests() {
         <DialogContent>
           <DialogHeader><DialogTitle>Complete Change Request</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Completion notes are shown to the client.</p>
+            <p className="text-sm text-muted-foreground">Completion notes are shown to the client. Minimum 20 characters.</p>
             <Textarea placeholder="Explain what was done..." value={completionNote} onChange={(e) => setCompletionNote(e.target.value)} rows={3} />
+            {completionNote.length > 0 && completionNote.length < 20 && (
+              <p className="text-xs text-destructive">{20 - completionNote.length} more characters needed</p>
+            )}
             <Textarea placeholder="Internal notes (optional, not shown to client)..." value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} rows={2} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCompleteModal(false)}>Cancel</Button>
-            <Button onClick={handleComplete} disabled={loading || !completionNote.trim()} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+            <Button onClick={handleComplete} disabled={loading || completionNote.trim().length < 20} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
               {loading ? "Completing..." : <><CheckCircle2 className="h-4 w-4" /> Confirm Complete</>}
             </Button>
           </DialogFooter>
@@ -457,9 +550,7 @@ export default function OperatorChangeRequests() {
         <DialogContent>
           <DialogHeader><DialogTitle>Decline Change Request</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Credits will be fully refunded. Explain why the request is being declined.
-            </p>
+            <p className="text-sm text-muted-foreground">Credits will be fully refunded. Explain why the request is being declined.</p>
             <Textarea placeholder="Reason for declining..." value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} rows={3} />
           </div>
           <DialogFooter>
@@ -470,6 +561,22 @@ export default function OperatorChangeRequests() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Soft delete modal */}
+      {deleteTarget && (
+        <SoftDeleteModal
+          open={showDeleteModal}
+          onOpenChange={setShowDeleteModal}
+          recordName={deleteTarget.name}
+          table="change_requests"
+          recordId={deleteTarget.id}
+          onDeleted={() => {
+            queryClient.invalidateQueries({ queryKey: ["operator-change-requests"] });
+            setSelected(null);
+            setDeleteTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }
