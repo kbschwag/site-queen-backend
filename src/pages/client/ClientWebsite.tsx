@@ -6,22 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-  Crown,
-  ArrowRight,
-  Sparkles,
-  Loader2,
-  CheckCircle2,
-  Send,
-  ExternalLink,
-  Share2,
-  Copy,
+  Crown, ArrowRight, Sparkles, Loader2, CheckCircle2, Send, ExternalLink, Share2, Copy, Eye,
 } from "lucide-react";
 import { IntakeForm } from "@/components/intake/IntakeForm";
 import type { IntakeData } from "@/components/intake/types";
 import { SitePreviewFrame } from "@/components/operator/SitePreviewFrame";
+import { useFileUpload } from "@/hooks/useFileUpload";
 import confetti from "canvas-confetti";
 
 export default function ClientWebsite() {
@@ -38,6 +33,7 @@ export default function ClientWebsite() {
   const [feedbackText, setFeedbackText] = useState("");
   const [showFeedback, setShowFeedback] = useState(false);
   const [hasSeenConfetti, setHasSeenConfetti] = useState(false);
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
 
   const { data: client } = useQuery({
     queryKey: ["my-client"],
@@ -52,6 +48,8 @@ export default function ClientWebsite() {
     },
     enabled: !!user,
   });
+
+  const { uploadFile, uploading } = useFileUpload(client?.id || "");
 
   const { data: site } = useQuery({
     queryKey: ["my-site"],
@@ -82,20 +80,81 @@ export default function ClientWebsite() {
     enabled: !!user,
   });
 
+  // Check for staging ready notification
+  const { data: stagingNotification } = useQuery({
+    queryKey: ["staging-notification", client?.id],
+    queryFn: async () => {
+      if (!client) return null;
+      const { data } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("client_id", client.id)
+        .eq("type", "staging_ready")
+        .eq("read", false)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!client,
+  });
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !client) return;
+    const url = await uploadFile(file, "feedback");
+    if (url) setAttachmentUrl(url);
+  };
+
   const submitFeedback = useMutation({
     mutationFn: async () => {
       if (!client) throw new Error("No client");
+      // Pre-launch feedback: is_pre_launch = true, NO credits deduction
       const { error } = await supabase.from("change_requests").insert({
         client_id: client.id,
         request_text: feedbackText,
-        change_type: "Pre-launch revision",
+        change_type: "Pre-launch feedback",
         status: "submitted",
-      });
+        is_pre_launch: true,
+        credits_cost: 0,
+        attachment_url: attachmentUrl,
+      } as any);
       if (error) throw error;
+
+      // Send confirmation email to client
+      if (profile?.email) {
+        await supabase.functions.invoke("send-email", {
+          body: {
+            to: profile.email,
+            template: "prelaunch_feedback_client",
+            data: {
+              name: profile.full_name,
+              first_name: (profile.full_name || "").split(" ")[0],
+              approved_only: false,
+            },
+            clientId: client.id,
+          },
+        }).catch(console.error);
+      }
+
+      // Notify operator
+      await supabase.functions.invoke("send-email", {
+        body: {
+          to: "hello@sitequeen.ai",
+          template: "prelaunch_feedback_operator",
+          data: {
+            business_name: client.business_name,
+            client_name: profile?.full_name || client.business_name,
+            plan: client.plan,
+            feedback_text: feedbackText,
+            attachment_count: attachmentUrl ? 1 : 0,
+          },
+          clientId: client.id,
+        },
+      }).catch(console.error);
     },
     onSuccess: () => {
       toast.success("Feedback submitted! We'll review it shortly.");
       setFeedbackText("");
+      setAttachmentUrl(null);
       setShowFeedback(false);
       queryClient.invalidateQueries({ queryKey: ["my-change-requests"] });
     },
@@ -105,15 +164,29 @@ export default function ClientWebsite() {
   const approveWebsite = useMutation({
     mutationFn: async () => {
       if (!client || !site) throw new Error("Missing data");
-      // Notify operator
       await supabase.from("notifications").insert({
         type: "client_approved_site",
         client_id: client.id,
         message: `${client.business_name} approved their website for launch ♛`,
         target_role: "operator",
       } as any);
-      // Update site status
       await supabase.from("sites").update({ generation_status: "approved" } as any).eq("id", site.id);
+
+      // Send approval confirmation
+      if (profile?.email) {
+        await supabase.functions.invoke("send-email", {
+          body: {
+            to: profile.email,
+            template: "prelaunch_feedback_client",
+            data: {
+              name: profile.full_name,
+              first_name: (profile.full_name || "").split(" ")[0],
+              approved_only: true,
+            },
+            clientId: client.id,
+          },
+        }).catch(console.error);
+      }
     },
     onSuccess: () => {
       toast.success("Website approved! We'll make it live shortly ♛");
@@ -130,7 +203,6 @@ export default function ClientWebsite() {
   const generationStatus = (site as any)?.generation_status || "pending";
   const siteIsLive = client.site_status === "live";
 
-  // Show intake form full screen
   if (showIntake) {
     return (
       <IntakeForm
@@ -146,8 +218,6 @@ export default function ClientWebsite() {
       />
     );
   }
-
-
 
   const allChecked = Object.values(checklist).every(Boolean);
 
@@ -232,12 +302,30 @@ export default function ClientWebsite() {
   if ((generationStatus === "shared" && site?.staging_url) && !siteIsLive && generationStatus !== "approved") {
     return (
       <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
-        <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-center">
+        {/* Banner notification */}
+        {stagingNotification && (
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Eye className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-medium text-sm">Your website is ready to preview ♛</p>
+                <p className="text-xs text-muted-foreground">Take a look and let us know what you think</p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => {
+              window.open(site.staging_url || "#", "_blank");
+            }} className="gap-1.5">
+              <ExternalLink className="h-3.5 w-3.5" /> View preview
+            </Button>
+          </div>
+        )}
+
+        <div className="text-center">
           <h1 className="text-xl font-bold">Your website is ready to preview ♛</h1>
+          <p className="text-sm text-muted-foreground mt-1">This is pre-launch feedback — no credits will be used</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Preview */}
           <div className="lg:col-span-2">
             <Card>
               <CardContent className="pt-6">
@@ -246,7 +334,6 @@ export default function ClientWebsite() {
             </Card>
           </div>
 
-          {/* Action panel */}
           <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
@@ -277,6 +364,7 @@ export default function ClientWebsite() {
             {showFeedback ? (
               <Card>
                 <CardContent className="pt-5 space-y-3">
+                  <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-xs">Pre-launch feedback — no credits used</Badge>
                   <Textarea
                     placeholder="Describe what needs changing..."
                     value={feedbackText}
@@ -284,6 +372,11 @@ export default function ClientWebsite() {
                     rows={4}
                     className="resize-none"
                   />
+                  <div>
+                    <label className="text-xs text-muted-foreground">Attach a file (optional)</label>
+                    <Input type="file" accept="image/*,.pdf" onChange={handleFileUpload} className="mt-1" />
+                    {attachmentUrl && <p className="text-xs text-emerald-600 mt-1">✓ File attached</p>}
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       onClick={() => submitFeedback.mutate()}
@@ -292,20 +385,14 @@ export default function ClientWebsite() {
                       size="sm"
                     >
                       {submitFeedback.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                      Submit
+                      Submit feedback
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => setShowFeedback(false)}>
-                      Cancel
-                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowFeedback(false)}>Cancel</Button>
                   </div>
                 </CardContent>
               </Card>
             ) : (
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowFeedback(true)}
-              >
+              <Button variant="outline" className="w-full" onClick={() => setShowFeedback(true)}>
                 Request changes before approving
               </Button>
             )}
@@ -350,7 +437,6 @@ export default function ClientWebsite() {
     const siteUrl = site?.deploy_url || site?.staging_url || client.domain_name;
     const domainDisplay = client.domain_name || siteUrl;
 
-    // Fire confetti once
     if (!hasSeenConfetti && siteUrl) {
       setHasSeenConfetti(true);
       setTimeout(() => {
