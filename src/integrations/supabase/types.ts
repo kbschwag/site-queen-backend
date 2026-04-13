@@ -165,36 +165,54 @@ export type Database = {
         Row: {
           admin_notes: string | null
           ai_processed: boolean | null
+          assessed_by_operator: boolean | null
           assigned_to: string | null
           attachment_url: string | null
+          change_type: string | null
           client_id: string
           completed_at: string | null
           created_at: string
+          credit_purchase_id: string | null
+          credits_cost: number | null
           id: string
+          operator_notes: string | null
+          priority: string | null
           request_text: string
           status: string | null
         }
         Insert: {
           admin_notes?: string | null
           ai_processed?: boolean | null
+          assessed_by_operator?: boolean | null
           assigned_to?: string | null
           attachment_url?: string | null
+          change_type?: string | null
           client_id: string
           completed_at?: string | null
           created_at?: string
+          credit_purchase_id?: string | null
+          credits_cost?: number | null
           id?: string
+          operator_notes?: string | null
+          priority?: string | null
           request_text: string
           status?: string | null
         }
         Update: {
           admin_notes?: string | null
           ai_processed?: boolean | null
+          assessed_by_operator?: boolean | null
           assigned_to?: string | null
           attachment_url?: string | null
+          change_type?: string | null
           client_id?: string
           completed_at?: string | null
           created_at?: string
+          credit_purchase_id?: string | null
+          credits_cost?: number | null
           id?: string
+          operator_notes?: string | null
+          priority?: string | null
           request_text?: string
           status?: string | null
         }
@@ -208,12 +226,49 @@ export type Database = {
           },
         ]
       }
+      change_types: {
+        Row: {
+          active: boolean | null
+          category: string
+          credits_cost: number
+          description: string | null
+          examples: string | null
+          id: string
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          active?: boolean | null
+          category: string
+          credits_cost: number
+          description?: string | null
+          examples?: string | null
+          id?: string
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          active?: boolean | null
+          category?: string
+          credits_cost?: number
+          description?: string | null
+          examples?: string | null
+          id?: string
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           application_id: string | null
           business_name: string
           business_type: string
           created_at: string
+          credits_balance: number | null
+          credits_last_reset: string | null
+          credits_monthly_allowance: number | null
+          credits_rollover_cap: number | null
           deploy_count: number | null
           deployment_path_confirmed: boolean | null
           domain_checklist: Json | null
@@ -241,6 +296,10 @@ export type Database = {
           business_name: string
           business_type: string
           created_at?: string
+          credits_balance?: number | null
+          credits_last_reset?: string | null
+          credits_monthly_allowance?: number | null
+          credits_rollover_cap?: number | null
           deploy_count?: number | null
           deployment_path_confirmed?: boolean | null
           domain_checklist?: Json | null
@@ -268,6 +327,10 @@ export type Database = {
           business_name?: string
           business_type?: string
           created_at?: string
+          credits_balance?: number | null
+          credits_last_reset?: string | null
+          credits_monthly_allowance?: number | null
+          credits_rollover_cap?: number | null
           deploy_count?: number | null
           deployment_path_confirmed?: boolean | null
           domain_checklist?: Json | null
@@ -296,6 +359,84 @@ export type Database = {
             columns: ["application_id"]
             isOneToOne: false
             referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_packages: {
+        Row: {
+          active: boolean | null
+          credits: number
+          id: string
+          name: string
+          price_cents: number
+          stripe_price_id: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          credits: number
+          id?: string
+          name: string
+          price_cents: number
+          stripe_price_id?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          credits?: number
+          id?: string
+          name?: string
+          price_cents?: number
+          stripe_price_id?: string | null
+        }
+        Relationships: []
+      }
+      credits_transactions: {
+        Row: {
+          change_request_id: string | null
+          client_id: string | null
+          created_at: string | null
+          credits_amount: number
+          credits_balance_after: number
+          description: string | null
+          id: string
+          stripe_payment_intent_id: string | null
+          transaction_type: string
+        }
+        Insert: {
+          change_request_id?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          credits_amount: number
+          credits_balance_after: number
+          description?: string | null
+          id?: string
+          stripe_payment_intent_id?: string | null
+          transaction_type: string
+        }
+        Update: {
+          change_request_id?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          credits_amount?: number
+          credits_balance_after?: number
+          description?: string | null
+          id?: string
+          stripe_payment_intent_id?: string | null
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credits_transactions_change_request_id_fkey"
+            columns: ["change_request_id"]
+            isOneToOne: false
+            referencedRelation: "change_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credits_transactions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
