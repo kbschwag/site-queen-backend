@@ -12,11 +12,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
 import { WebsiteBuildPanel } from "@/components/operator/WebsiteBuildPanel";
 import { DomainDeployTab } from "@/components/operator/DomainDeployTab";
+import { SoftDeleteModal } from "@/components/operator/SoftDeleteModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Search, Globe, ExternalLink, Users } from "lucide-react";
-import { format } from "date-fns";
+import { Search, Globe, ExternalLink, Users, Trash2 } from "lucide-react";
+import { format, differenceInDays } from "date-fns";
 
 export default function OperatorClients() {
   const { user } = useAuth();
@@ -25,6 +26,8 @@ export default function OperatorClients() {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
   const [selected, setSelected] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["operator-clients"],
@@ -32,27 +35,39 @@ export default function OperatorClients() {
       const { data, error } = await supabase
         .from("clients")
         .select("*")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
   });
 
-  // Fetch sites to check generation_status for notification badges
   const { data: sites = [] } = useQuery({
     queryKey: ["operator-sites-status"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sites")
-        .select("client_id, generation_status");
+      const { data, error } = await supabase.from("sites").select("client_id, generation_status");
       if (error) throw error;
       return data;
     },
   });
 
-  const siteStatusMap = Object.fromEntries(
-    sites.map((s: any) => [s.client_id, s.generation_status])
-  );
+  const { data: lastTickets = [] } = useQuery({
+    queryKey: ["operator-last-tickets"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("change_requests")
+        .select("client_id, created_at")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      // Get latest per client
+      const map: Record<string, string> = {};
+      (data || []).forEach((r: any) => { if (!map[r.client_id]) map[r.client_id] = r.created_at; });
+      return map;
+    },
+  });
+
+  const siteStatusMap = Object.fromEntries(sites.map((s: any) => [s.client_id, s.generation_status]));
 
   const filtered = clients.filter((c: any) => {
     const matchesSearch =
@@ -72,9 +87,19 @@ export default function OperatorClients() {
   };
 
   const siteBadge = (status: string | null) => {
-    if (status === "live") return <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200"><Globe className="h-3 w-3 mr-1" />Live</Badge>;
-    if (status === "building") return <Badge className="bg-amber-500/10 text-amber-700 border-amber-200">Building</Badge>;
+    if (status === "live") return <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200">Live</Badge>;
+    if (status === "building") return <Badge className="bg-blue-500/10 text-blue-700 border-blue-200">Building</Badge>;
+    if (status === "paused") return <Badge className="bg-amber-500/10 text-amber-700 border-amber-200">Paused</Badge>;
     return <Badge variant="outline">{status || "—"}</Badge>;
+  };
+
+  const healthDot = (c: any) => {
+    const isLive = c.site_status === "live";
+    const isActive = c.subscription_status === "active";
+    const lowCredits = (c.credits_balance ?? 0) <= 2;
+    if (!isActive) return <span className="h-2.5 w-2.5 rounded-full bg-destructive inline-block" title="Payment issue" />;
+    if (!isLive || lowCredits) return <span className="h-2.5 w-2.5 rounded-full bg-amber-500 inline-block" title="Needs attention" />;
+    return <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" title="All good" />;
   };
 
   const planLabel = (plan: string) => {
@@ -83,18 +108,10 @@ export default function OperatorClients() {
   };
 
   const handleUpdateField = async (clientId: string, field: string, value: any) => {
-    const updateData: Record<string, any> = { [field]: value };
-    await supabase.from("clients").update(updateData as any).eq("id", clientId);
-    await supabase.from("audit_log").insert({
-      user_id: user!.id,
-      user_email: user!.email,
-      action: `Updated client ${field} to ${value}`,
-      target_table: "clients",
-      target_id: clientId,
-    });
+    await supabase.from("clients").update({ [field]: value } as any).eq("id", clientId);
+    await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Updated client ${field} to ${value}`, target_table: "clients", target_id: clientId });
     queryClient.invalidateQueries({ queryKey: ["operator-clients"] });
     toast.success("Client updated");
-    // Refresh selected
     const { data } = await supabase.from("clients").select("*").eq("id", clientId).single();
     if (data) setSelected(data);
   };
@@ -129,23 +146,27 @@ export default function OperatorClients() {
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Users className="h-10 w-10 mx-auto mb-2 opacity-40" />
-              <p>No clients found</p>
+              <p className="text-sm">No clients found</p>
+              <p className="text-xs mt-1">Approved applications will appear here as clients</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead>Business</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Subscription</TableHead>
                   <TableHead>Site</TableHead>
                   <TableHead>Credits</TableHead>
+                  <TableHead>Last Ticket</TableHead>
                   <TableHead>Joined</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((c: any) => (
-                  <TableRow key={c.id} className="cursor-pointer" onClick={() => setSelected(c)}>
+                  <TableRow key={c.id} className="cursor-pointer hover:bg-primary/5 transition-colors" onClick={() => setSelected(c)}>
+                    <TableCell>{healthDot(c)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <div>
@@ -153,9 +174,7 @@ export default function OperatorClients() {
                           <p className="text-xs text-muted-foreground">{c.business_type}</p>
                         </div>
                         {siteStatusMap[c.id] === "complete" && (
-                          <Badge className="bg-blue-500/10 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">
-                            Review
-                          </Badge>
+                          <Badge className="bg-blue-500/10 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Review</Badge>
                         )}
                       </div>
                     </TableCell>
@@ -163,6 +182,9 @@ export default function OperatorClients() {
                     <TableCell>{statusBadge(c.subscription_status)}</TableCell>
                     <TableCell>{siteBadge(c.site_status)}</TableCell>
                     <TableCell className="text-sm">{c.credits_balance ?? 0} cr</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {(lastTickets as any)[c.id] ? format(new Date((lastTickets as any)[c.id]), "MMM d") : "—"}
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{c.join_date ? format(new Date(c.join_date), "MMM d, yyyy") : "—"}</TableCell>
                   </TableRow>
                 ))}
@@ -177,8 +199,31 @@ export default function OperatorClients() {
         <Sheet open onOpenChange={() => setSelected(null)}>
           <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
             <SheetHeader>
-              <SheetTitle>{selected.business_name}</SheetTitle>
+              <div className="flex items-center justify-between">
+                <SheetTitle>{selected.business_name}</SheetTitle>
+                {isOwner && (
+                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => {
+                    setDeleteTarget({ id: selected.id, name: selected.business_name });
+                    setShowDeleteModal(true);
+                  }}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </SheetHeader>
+
+            {/* Quick stats bar */}
+            <div className="grid grid-cols-2 gap-2 mt-4">
+              <div className="bg-muted/50 rounded-lg p-2 text-center">
+                <p className="text-lg font-bold">{selected.join_date ? differenceInDays(new Date(), new Date(selected.join_date)) : 0}</p>
+                <p className="text-[10px] text-muted-foreground">Days as client</p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-2 text-center">
+                <p className="text-lg font-bold">{selected.credits_balance ?? 0}</p>
+                <p className="text-[10px] text-muted-foreground">Credits balance</p>
+              </div>
+            </div>
+
             <Tabs defaultValue="details" className="mt-4">
               <TabsList className="w-full">
                 <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
@@ -187,7 +232,8 @@ export default function OperatorClients() {
                 <TabsTrigger value="brief" className="flex-1">Brief</TabsTrigger>
               </TabsList>
               <TabsContent value="details" className="space-y-4 mt-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {healthDot(selected)}
                   {statusBadge(selected.subscription_status)}
                   {siteBadge(selected.site_status)}
                   <Badge variant="outline">{planLabel(selected.plan)}</Badge>
@@ -211,7 +257,7 @@ export default function OperatorClients() {
                   )}
                 </div>
                 <Separator />
-                {(isOwner) && (
+                {isOwner && (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-sm">Manage</h3>
                     <div>
@@ -249,15 +295,9 @@ export default function OperatorClients() {
                     </div>
                     <div>
                       <label className="text-xs text-muted-foreground">Site URL</label>
-                      <Input
-                        defaultValue={selected.site_url || ""}
-                        placeholder="https://..."
-                        onBlur={(e) => {
-                          if (e.target.value !== (selected.site_url || "")) {
-                            handleUpdateField(selected.id, "site_url", e.target.value);
-                          }
-                        }}
-                      />
+                      <Input defaultValue={selected.site_url || ""} placeholder="https://..." onBlur={(e) => {
+                        if (e.target.value !== (selected.site_url || "")) handleUpdateField(selected.id, "site_url", e.target.value);
+                      }} />
                     </div>
                   </div>
                 )}
@@ -274,6 +314,21 @@ export default function OperatorClients() {
             </Tabs>
           </SheetContent>
         </Sheet>
+      )}
+
+      {deleteTarget && (
+        <SoftDeleteModal
+          open={showDeleteModal}
+          onOpenChange={setShowDeleteModal}
+          recordName={deleteTarget.name}
+          table="clients"
+          recordId={deleteTarget.id}
+          onDeleted={() => {
+            queryClient.invalidateQueries({ queryKey: ["operator-clients"] });
+            setSelected(null);
+            setDeleteTarget(null);
+          }}
+        />
       )}
     </div>
   );

@@ -28,6 +28,8 @@ export type Database = {
           created_at: string
           decision_maker_status: string | null
           decline_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           email: string
           has_logo: string | null
           has_website: string
@@ -64,6 +66,8 @@ export type Database = {
           created_at?: string
           decision_maker_status?: string | null
           decline_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           email: string
           has_logo?: string | null
           has_website: string
@@ -100,6 +104,8 @@ export type Database = {
           created_at?: string
           decision_maker_status?: string | null
           decline_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string
           has_logo?: string | null
           has_website?: string
@@ -174,6 +180,8 @@ export type Database = {
           created_at: string
           credit_purchase_id: string | null
           credits_cost: number | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           operator_notes: string | null
           priority: string | null
@@ -192,6 +200,8 @@ export type Database = {
           created_at?: string
           credit_purchase_id?: string | null
           credits_cost?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           operator_notes?: string | null
           priority?: string | null
@@ -210,6 +220,8 @@ export type Database = {
           created_at?: string
           credit_purchase_id?: string | null
           credits_cost?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           operator_notes?: string | null
           priority?: string | null
@@ -269,6 +281,8 @@ export type Database = {
           credits_last_reset: string | null
           credits_monthly_allowance: number | null
           credits_rollover_cap: number | null
+          deleted_at: string | null
+          deleted_by: string | null
           deploy_count: number | null
           deployment_path_confirmed: boolean | null
           domain_checklist: Json | null
@@ -300,6 +314,8 @@ export type Database = {
           credits_last_reset?: string | null
           credits_monthly_allowance?: number | null
           credits_rollover_cap?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           deploy_count?: number | null
           deployment_path_confirmed?: boolean | null
           domain_checklist?: Json | null
@@ -331,6 +347,8 @@ export type Database = {
           credits_last_reset?: string | null
           credits_monthly_allowance?: number | null
           credits_rollover_cap?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           deploy_count?: number | null
           deployment_path_confirmed?: boolean | null
           domain_checklist?: Json | null
@@ -528,6 +546,7 @@ export type Database = {
         Row: {
           client_id: string | null
           created_at: string
+          deleted_at: string | null
           id: string
           message: string
           read: boolean
@@ -538,6 +557,7 @@ export type Database = {
         Insert: {
           client_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           message: string
           read?: boolean
@@ -548,6 +568,7 @@ export type Database = {
         Update: {
           client_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           message?: string
           read?: boolean
