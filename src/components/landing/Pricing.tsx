@@ -11,10 +11,11 @@ const plans = [
     description: "Get online with a professional website — free to build",
     features: [
       "Free professional website build (valued at $3,000+)",
-      "Custom domain included",
-      "Hosting and SSL security",
+      "Custom domain and hosting",
       "1 monthly backup",
-      "Self-serve content editor",
+      "10 support credits per month",
+      "Credits roll over up to 20",
+      "Buy extra credits anytime",
       "Standard email support",
       "12-month commitment required",
       "After 12 months: month-to-month flexibility",
@@ -29,8 +30,9 @@ const plans = [
       "Everything in Starter plus:",
       "Advanced security monitoring",
       "Weekly backups",
-      "1 content update per month included (we make the change for you)",
-      "Priority email support",
+      "30 support credits per month",
+      "Credits roll over up to 60",
+      "Priority support",
       "12-month commitment required",
       "After 12 months: month-to-month flexibility",
     ],
@@ -42,8 +44,9 @@ const plans = [
     description: "Full-service management with dedicated support",
     features: [
       "Everything in Growth plus:",
-      "3 content updates per month included",
       "Daily backups",
+      "100 support credits per month",
+      "Credits roll over up to 200",
       "Dedicated account management",
       "Professional branding and logo design included",
       "Fastest priority support",
@@ -69,6 +72,11 @@ const faqs = [
     question: "Can I upgrade my plan?",
     answer:
       "Absolutely. Upgrade anytime and the new features kick in immediately. Downgrading takes effect at your next billing cycle.",
+  },
+  {
+    question: "What are support credits?",
+    answer:
+      "Credits are how you request changes to your website. Small changes like updating a phone number cost 5 credits. Larger changes like adding a new page section cost 60 credits. You can buy extra credits anytime if you run out.",
   },
 ];
 
