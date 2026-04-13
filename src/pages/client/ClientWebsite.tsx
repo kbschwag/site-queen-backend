@@ -1,30 +1,27 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   Crown,
-  Globe,
-  ExternalLink,
   ArrowRight,
   Sparkles,
-  Monitor,
-  Smartphone,
   Loader2,
   CheckCircle2,
   Send,
+  ExternalLink,
   Share2,
   Copy,
 } from "lucide-react";
 import { IntakeForm } from "@/components/intake/IntakeForm";
 import type { IntakeData } from "@/components/intake/types";
+import { SitePreviewFrame } from "@/components/operator/SitePreviewFrame";
 import confetti from "canvas-confetti";
 
 export default function ClientWebsite() {
