@@ -39,6 +39,8 @@ export default function ClientDashboard() {
   const queryClient = useQueryClient();
   const [newRequest, setNewRequest] = useState("");
   const [showIntake, setShowIntake] = useState(false);
+  const [showBuyCredits, setShowBuyCredits] = useState(false);
+  const [supportTab, setSupportTab] = useState("submit");
 
   const { data: client, isLoading: clientLoading } = useQuery({
     queryKey: ["my-client"],
