@@ -69,6 +69,9 @@ export default function OperatorSettings() {
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-bold">Settings</h1>
 
+      {/* Password */}
+      <PasswordSection />
+
       {/* Business Information */}
       <Card>
         <CardHeader className="pb-3">
