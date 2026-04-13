@@ -1,37 +1,33 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   Crown,
-  Globe,
-  ExternalLink,
   ArrowRight,
   Sparkles,
-  Monitor,
-  Smartphone,
   Loader2,
   CheckCircle2,
   Send,
+  ExternalLink,
   Share2,
   Copy,
 } from "lucide-react";
 import { IntakeForm } from "@/components/intake/IntakeForm";
 import type { IntakeData } from "@/components/intake/types";
+import { SitePreviewFrame } from "@/components/operator/SitePreviewFrame";
 import confetti from "canvas-confetti";
 
 export default function ClientWebsite() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showIntake, setShowIntake] = useState(false);
-  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [checklist, setChecklist] = useState({
     business_info: false,
     contact_info: false,
@@ -151,52 +147,7 @@ export default function ClientWebsite() {
     );
   }
 
-  // Helper: render iframe preview
-  const renderPreview = (url: string) => {
-    const iframeWidth = previewMode === "mobile" ? 390 : "100%";
-    return (
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Button
-            variant={previewMode === "desktop" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setPreviewMode("desktop")}
-            className="gap-1"
-          >
-            <Monitor className="h-4 w-4" /> Desktop
-          </Button>
-          <Button
-            variant={previewMode === "mobile" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setPreviewMode("mobile")}
-            className="gap-1"
-          >
-            <Smartphone className="h-4 w-4" /> Mobile
-          </Button>
-        </div>
-        <div className={`border rounded-lg overflow-hidden bg-background ${previewMode === "mobile" ? "mx-auto border-2 rounded-2xl" : ""}`}
-          style={{ width: iframeWidth, height: previewMode === "mobile" ? 700 : 500 }}
-        >
-          <iframe
-            src={url}
-            className="w-full h-full"
-            title="Website preview"
-            sandbox="allow-scripts allow-same-origin"
-          />
-        </div>
-        <div className="mt-2">
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-          >
-            Open in new tab <ExternalLink className="h-3 w-3" />
-          </a>
-        </div>
-      </div>
-    );
-  };
+
 
   const allChecked = Object.values(checklist).every(Boolean);
 
@@ -290,7 +241,7 @@ export default function ClientWebsite() {
           <div className="lg:col-span-2">
             <Card>
               <CardContent className="pt-6">
-                {renderPreview(site.staging_url)}
+                <SitePreviewFrame clientId={client.id} stagingUrl={site.staging_url} height={500} />
               </CardContent>
             </Card>
           </div>
@@ -428,7 +379,7 @@ export default function ClientWebsite() {
         {siteUrl && (
           <Card>
             <CardContent className="pt-6">
-              {renderPreview(siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`)}
+              <SitePreviewFrame clientId={client.id} stagingUrl={siteUrl} height={500} />
             </CardContent>
           </Card>
         )}
