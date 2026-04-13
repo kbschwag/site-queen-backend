@@ -62,7 +62,7 @@ export function SubmitTicket({ clientId, userId, creditsBalance, onBuyCredits, o
   const [isUrgent, setIsUrgent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ticketRef, setTicketRef] = useState("");
-  const { uploadFile, uploading } = useFileUpload();
+  const { uploadFile, uploading } = useFileUpload(clientId);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
 
   const { data: changeTypes = [] } = useQuery({
@@ -108,7 +108,7 @@ export function SubmitTicket({ clientId, userId, creditsBalance, onBuyCredits, o
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = await uploadFile(file, "client-uploads", `${clientId}/tickets`);
+    const url = await uploadFile(file, "tickets");
     if (url) setAttachmentUrl(url);
   };
 
@@ -202,7 +202,7 @@ export function SubmitTicket({ clientId, userId, creditsBalance, onBuyCredits, o
         <div>
           <label className="text-sm font-medium">Attach photos, logos, or reference files</label>
           <div className="mt-1.5">
-            <Input type="file" accept="image/*,.pdf" onChange={handleFileUpload} disabled={uploading} />
+            <Input type="file" accept="image/*,.pdf" onChange={handleFileUpload} disabled={Object.values(uploading).some(Boolean)} />
             {uploading && <p className="text-xs text-muted-foreground mt-1">Uploading...</p>}
             {attachmentUrl && <p className="text-xs text-emerald-600 mt-1">✓ File attached</p>}
           </div>
