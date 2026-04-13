@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Settings, Mail, Link2, Shield, AlertTriangle, CheckCircle2, XCircle, RotateCcw, Loader2 } from "lucide-react";
+import { PasswordSection } from "@/components/PasswordSection";
 import { format } from "date-fns";
 
 export default function OperatorSettings() {
@@ -67,6 +68,9 @@ export default function OperatorSettings() {
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-bold">Settings</h1>
+
+      {/* Password */}
+      <PasswordSection />
 
       {/* Business Information */}
       <Card>

@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Loader2, AlertTriangle } from "lucide-react";
+import { PasswordSection } from "@/components/PasswordSection";
 
 export default function ClientSettings() {
   const { user } = useAuth();
@@ -126,22 +127,7 @@ export default function ClientSettings() {
       )}
 
       {/* Password */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Password</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <Label>New Password</Label>
-            <Input type="password" placeholder="Enter new password" className="mt-1" />
-          </div>
-          <div>
-            <Label>Confirm New Password</Label>
-            <Input type="password" placeholder="Confirm new password" className="mt-1" />
-          </div>
-          <Button variant="outline">Change password</Button>
-        </CardContent>
-      </Card>
+      <PasswordSection />
 
       {/* Notification preferences */}
       <Card>
