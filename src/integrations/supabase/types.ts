@@ -19,6 +19,8 @@ export type Database = {
           accepts_commitment: string | null
           additional_notes: string | null
           ai_score: number | null
+          approval_note: string | null
+          approved_by: string | null
           brand_vibe: string | null
           business_name: string
           business_type: string
@@ -27,7 +29,9 @@ export type Database = {
           country: string | null
           created_at: string
           decision_maker_status: string | null
+          decline_note: string | null
           decline_reason: string | null
+          declined_by: string | null
           deleted_at: string | null
           deleted_by: string | null
           email: string
@@ -57,6 +61,8 @@ export type Database = {
           accepts_commitment?: string | null
           additional_notes?: string | null
           ai_score?: number | null
+          approval_note?: string | null
+          approved_by?: string | null
           brand_vibe?: string | null
           business_name: string
           business_type: string
@@ -65,7 +71,9 @@ export type Database = {
           country?: string | null
           created_at?: string
           decision_maker_status?: string | null
+          decline_note?: string | null
           decline_reason?: string | null
+          declined_by?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           email: string
@@ -95,6 +103,8 @@ export type Database = {
           accepts_commitment?: string | null
           additional_notes?: string | null
           ai_score?: number | null
+          approval_note?: string | null
+          approved_by?: string | null
           brand_vibe?: string | null
           business_name?: string
           business_type?: string
@@ -103,7 +113,9 @@ export type Database = {
           country?: string | null
           created_at?: string
           decision_maker_status?: string | null
+          decline_note?: string | null
           decline_reason?: string | null
+          declined_by?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           email?: string
@@ -176,6 +188,8 @@ export type Database = {
           attachment_url: string | null
           change_type: string | null
           client_id: string
+          client_info_attachments: string[] | null
+          client_info_response: string | null
           completed_at: string | null
           created_at: string
           credit_purchase_id: string | null
@@ -183,6 +197,8 @@ export type Database = {
           deleted_at: string | null
           deleted_by: string | null
           id: string
+          is_pre_launch: boolean | null
+          needs_info_note: string | null
           operator_notes: string | null
           priority: string | null
           request_text: string
@@ -196,6 +212,8 @@ export type Database = {
           attachment_url?: string | null
           change_type?: string | null
           client_id: string
+          client_info_attachments?: string[] | null
+          client_info_response?: string | null
           completed_at?: string | null
           created_at?: string
           credit_purchase_id?: string | null
@@ -203,6 +221,8 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           id?: string
+          is_pre_launch?: boolean | null
+          needs_info_note?: string | null
           operator_notes?: string | null
           priority?: string | null
           request_text: string
@@ -216,6 +236,8 @@ export type Database = {
           attachment_url?: string | null
           change_type?: string | null
           client_id?: string
+          client_info_attachments?: string[] | null
+          client_info_response?: string | null
           completed_at?: string | null
           created_at?: string
           credit_purchase_id?: string | null
@@ -223,6 +245,8 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           id?: string
+          is_pre_launch?: boolean | null
+          needs_info_note?: string | null
           operator_notes?: string | null
           priority?: string | null
           request_text?: string
@@ -295,12 +319,17 @@ export type Database = {
           join_date: string | null
           last_active: string | null
           next_billing_date: string | null
+          payment_failed_at: string | null
+          payment_failed_count: number | null
+          payment_status: string | null
+          phone_number: string | null
           plan: string
           site_status: string | null
           site_url: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_status: string | null
+          suspension_date: string | null
           updates_limit: number | null
           updates_used_this_month: number | null
           user_id: string | null
@@ -328,12 +357,17 @@ export type Database = {
           join_date?: string | null
           last_active?: string | null
           next_billing_date?: string | null
+          payment_failed_at?: string | null
+          payment_failed_count?: number | null
+          payment_status?: string | null
+          phone_number?: string | null
           plan?: string
           site_status?: string | null
           site_url?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string | null
+          suspension_date?: string | null
           updates_limit?: number | null
           updates_used_this_month?: number | null
           user_id?: string | null
@@ -361,12 +395,17 @@ export type Database = {
           join_date?: string | null
           last_active?: string | null
           next_billing_date?: string | null
+          payment_failed_at?: string | null
+          payment_failed_count?: number | null
+          payment_status?: string | null
+          phone_number?: string | null
           plan?: string
           site_status?: string | null
           site_url?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string | null
+          suspension_date?: string | null
           updates_limit?: number | null
           updates_used_this_month?: number | null
           user_id?: string | null
@@ -586,6 +625,65 @@ export type Database = {
           },
         ]
       }
+      payment_events: {
+        Row: {
+          amount_cents: number | null
+          client_id: string | null
+          created_at: string | null
+          currency: string | null
+          event_type: string
+          failure_reason: string | null
+          id: string
+          resolved: boolean | null
+          resolved_at: string | null
+          stripe_invoice_id: string | null
+          stripe_payment_intent_id: string | null
+          warning_1_sent_at: string | null
+          warning_2_sent_at: string | null
+          warning_3_sent_at: string | null
+        }
+        Insert: {
+          amount_cents?: number | null
+          client_id?: string | null
+          created_at?: string | null
+          currency?: string | null
+          event_type: string
+          failure_reason?: string | null
+          id?: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          warning_1_sent_at?: string | null
+          warning_2_sent_at?: string | null
+          warning_3_sent_at?: string | null
+        }
+        Update: {
+          amount_cents?: number | null
+          client_id?: string | null
+          created_at?: string | null
+          currency?: string | null
+          event_type?: string
+          failure_reason?: string | null
+          id?: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          warning_1_sent_at?: string | null
+          warning_2_sent_at?: string | null
+          warning_3_sent_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -615,6 +713,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      scheduled_emails: {
+        Row: {
+          cancelled: boolean | null
+          client_id: string | null
+          created_at: string | null
+          email_type: string
+          id: string
+          payload: Json | null
+          recipient_email: string
+          send_at: string
+          sent: boolean | null
+          sent_at: string | null
+        }
+        Insert: {
+          cancelled?: boolean | null
+          client_id?: string | null
+          created_at?: string | null
+          email_type: string
+          id?: string
+          payload?: Json | null
+          recipient_email: string
+          send_at: string
+          sent?: boolean | null
+          sent_at?: string | null
+        }
+        Update: {
+          cancelled?: boolean | null
+          client_id?: string | null
+          created_at?: string | null
+          email_type?: string
+          id?: string
+          payload?: Json | null
+          recipient_email?: string
+          send_at?: string
+          sent?: boolean | null
+          sent_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_emails_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sites: {
         Row: {
