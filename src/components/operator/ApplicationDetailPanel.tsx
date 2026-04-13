@@ -356,7 +356,7 @@ This can change — you're welcome to reapply in 3 months.
             <div>
               <label className="text-sm font-medium">Add a personal message (optional)</label>
               <Textarea
-                placeholder='e.g. We loved your application and can't wait to build something amazing for your business'
+                placeholder={"e.g. We loved your application and can\u2019t wait to build something amazing for your business"}
                 value={approvalNote}
                 onChange={(e) => setApprovalNote(e.target.value)}
                 rows={3}
