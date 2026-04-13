@@ -107,8 +107,13 @@ serve(async (req) => {
       });
     }
 
-    // 3. Create client record
-    const limitsMap: Record<string, number> = { starter: 0, growth: 1, pro: 3 };
+    // 3. Create client record with correct credit initialization per plan
+    const creditConfig: Record<string, { balance: number; monthly: number; rollover: number }> = {
+      starter: { balance: 10, monthly: 10, rollover: 20 },
+      growth: { balance: 30, monthly: 30, rollover: 60 },
+      pro: { balance: 100, monthly: 100, rollover: 200 },
+    };
+    const credits = creditConfig[plan] || creditConfig.starter;
     const clientId = crypto.randomUUID();
 
     const { error: clientError } = await supabase.from("clients").insert({
@@ -119,8 +124,11 @@ serve(async (req) => {
       business_type: app.business_type,
       plan,
       site_status: "building",
-      updates_limit: limitsMap[plan] || 0,
       subscription_status: "active",
+      credits_balance: credits.balance,
+      credits_monthly_allowance: credits.monthly,
+      credits_rollover_cap: credits.rollover,
+      credits_last_reset: new Date().toISOString(),
     });
 
     if (clientError) {

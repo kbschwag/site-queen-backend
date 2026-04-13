@@ -108,7 +108,19 @@ export default function OperatorClients() {
   };
 
   const handleUpdateField = async (clientId: string, field: string, value: any) => {
-    await supabase.from("clients").update({ [field]: value } as any).eq("id", clientId);
+    const updateData: Record<string, any> = { [field]: value };
+    // When plan changes, also update credit allowance and rollover cap
+    if (field === "plan") {
+      const creditConfig: Record<string, { monthly: number; rollover: number }> = {
+        starter: { monthly: 10, rollover: 20 },
+        growth: { monthly: 30, rollover: 60 },
+        pro: { monthly: 100, rollover: 200 },
+      };
+      const cfg = creditConfig[value] || creditConfig.starter;
+      updateData.credits_monthly_allowance = cfg.monthly;
+      updateData.credits_rollover_cap = cfg.rollover;
+    }
+    await supabase.from("clients").update(updateData as any).eq("id", clientId);
     await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Updated client ${field} to ${value}`, target_table: "clients", target_id: clientId });
     queryClient.invalidateQueries({ queryKey: ["operator-clients"] });
     toast.success("Client updated");
