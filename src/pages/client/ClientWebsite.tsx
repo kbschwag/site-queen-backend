@@ -28,7 +28,6 @@ export default function ClientWebsite() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showIntake, setShowIntake] = useState(false);
-  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [checklist, setChecklist] = useState({
     business_info: false,
     contact_info: false,
