@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SoftDeleteModal } from "@/components/operator/SoftDeleteModal";
 import { toast } from "sonner";
-import { Search, MessageSquare, CheckCircle2, Clock, User, Zap, Eye, AlertCircle, Coins, X, ChevronDown, Trash2 } from "lucide-react";
+import { Search, MessageSquare, CheckCircle2, Clock, User, Zap, Eye, AlertCircle, Coins, X, ChevronDown, Trash2, HelpCircle, Send } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
 interface ChangeRequestWithClient {
@@ -35,8 +35,12 @@ interface ChangeRequestWithClient {
   priority: string | null;
   operator_notes: string | null;
   assessed_by_operator: boolean | null;
+  is_pre_launch?: boolean | null;
+  needs_info_note?: string | null;
+  client_info_response?: string | null;
+  client_info_attachments?: string[] | null;
   deleted_at?: string | null;
-  clients: { business_name: string; business_type: string; plan: string; credits_balance: number } | null;
+  clients: { business_name: string; business_type: string; plan: string; credits_balance: number; user_id?: string } | null;
 }
 
 export default function OperatorChangeRequests() {
@@ -48,10 +52,12 @@ export default function OperatorChangeRequests() {
   const [selected, setSelected] = useState<ChangeRequestWithClient | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showDeclineModal, setShowDeclineModal] = useState(false);
+  const [showNeedsInfoModal, setShowNeedsInfoModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [completionNote, setCompletionNote] = useState("");
   const [declineReason, setDeclineReason] = useState("");
+  const [needsInfoNote, setNeedsInfoNote] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [assessCredits, setAssessCredits] = useState("5");
   const [assessNote, setAssessNote] = useState("");
@@ -65,7 +71,7 @@ export default function OperatorChangeRequests() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("change_requests")
-        .select("*, clients(business_name, business_type, plan, credits_balance)")
+        .select("*, clients(business_name, business_type, plan, credits_balance, user_id)")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -97,7 +103,6 @@ export default function OperatorChangeRequests() {
       const matchesStatus = statusFilter.includes(r.status || "");
       return matchesSearch && matchesPriority && matchesPlan && matchesStatus;
     }).sort((a, b) => {
-      // Urgent first in pending tab
       if (tab === "pending") {
         if (a.priority === "urgent" && b.priority !== "urgent") return -1;
         if (b.priority === "urgent" && a.priority !== "urgent") return 1;
@@ -115,32 +120,38 @@ export default function OperatorChangeRequests() {
   const pendingItems = getFiltered(["submitted", "pending"]);
   const assessmentItems = getFiltered(["pending_assessment"]);
   const inProgressItems = getFiltered(["in_review", "in_progress"]);
+  const awaitingInfoItems = getFiltered(["awaiting_info"]);
   const archivedItems = getFiltered(["completed", "declined"]);
 
-  // Group archived by month
   const archivedByMonth = archivedItems.reduce((acc: Record<string, ChangeRequestWithClient[]>, r) => {
     const key = format(new Date(r.completed_at || r.created_at), "MMMM yyyy");
     (acc[key] = acc[key] || []).push(r);
     return acc;
   }, {});
 
-  const statusBadge = (status: string | null) => {
+  const statusBadge = (status: string | null, isPreLaunch?: boolean | null) => {
     const configs: Record<string, { class: string; label: string; icon: any }> = {
       submitted: { class: "bg-amber-500/10 text-amber-700 border-amber-200", label: "Submitted", icon: Clock },
       pending: { class: "bg-amber-500/10 text-amber-700 border-amber-200", label: "Submitted", icon: Clock },
       pending_assessment: { class: "bg-purple-500/10 text-purple-700 border-purple-200", label: "Needs Assessment", icon: Eye },
       in_review: { class: "bg-blue-500/10 text-blue-700 border-blue-200", label: "In Review", icon: Eye },
       in_progress: { class: "bg-blue-500/10 text-blue-700 border-blue-200", label: "In Progress", icon: Clock },
+      awaiting_info: { class: "bg-amber-500/10 text-amber-700 border-amber-200", label: "Awaiting Info", icon: HelpCircle },
       completed: { class: "bg-emerald-500/10 text-emerald-700 border-emerald-200", label: "Completed", icon: CheckCircle2 },
       declined: { class: "bg-destructive/10 text-destructive border-destructive/20", label: "Declined", icon: X },
     };
     const cfg = configs[status || "pending"] || configs.pending;
     const Icon = cfg.icon;
-    return <Badge className={cfg.class}><Icon className="h-3 w-3 mr-1" />{cfg.label}</Badge>;
+    return (
+      <div className="flex items-center gap-1.5">
+        <Badge className={cfg.class}><Icon className="h-3 w-3 mr-1" />{cfg.label}</Badge>
+        {isPreLaunch && <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">Pre-launch</Badge>}
+      </div>
+    );
   };
 
   const refreshSelected = async (id: string) => {
-    const { data } = await supabase.from("change_requests").select("*, clients(business_name, business_type, plan, credits_balance)").eq("id", id).single();
+    const { data } = await supabase.from("change_requests").select("*, clients(business_name, business_type, plan, credits_balance, user_id)").eq("id", id).single();
     if (data) setSelected(data as ChangeRequestWithClient);
   };
 
@@ -159,6 +170,32 @@ export default function OperatorChangeRequests() {
     }
     setLoading(true);
     await supabase.from("change_requests").update({ status: "completed", completed_at: new Date().toISOString(), admin_notes: completionNote, operator_notes: internalNotes || null } as any).eq("id", selected.id);
+
+    // Send completion email to client
+    if (selected.clients) {
+      // Look up client email
+      const { data: profile } = await supabase.from("profiles").select("email, full_name").eq("user_id", (selected.clients as any).user_id).maybeSingle();
+      if (profile?.email) {
+        const { data: clientData } = await supabase.from("clients").select("credits_balance, site_url").eq("id", selected.client_id).single();
+        await supabase.functions.invoke("send-email", {
+          body: {
+            to: profile.email,
+            template: selected.is_pre_launch ? "prelaunch_feedback_client" : "ticket_completed",
+            data: {
+              name: profile.full_name,
+              first_name: (profile.full_name || "").split(" ")[0],
+              request_text: selected.request_text.slice(0, 100),
+              completion_notes: completionNote,
+              credits_cost: selected.is_pre_launch ? 0 : (selected.credits_cost || 0),
+              current_balance: clientData?.credits_balance || 0,
+              site_url: clientData?.site_url,
+            },
+            clientId: selected.client_id,
+          },
+        }).catch(console.error);
+      }
+    }
+
     await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Completed change request for ${selected.clients?.business_name}`, target_table: "change_requests", target_id: selected.id });
     queryClient.invalidateQueries({ queryKey: ["operator-change-requests"] });
     toast.success("Request completed! Client notified.");
@@ -168,7 +205,7 @@ export default function OperatorChangeRequests() {
   const handleDecline = async () => {
     if (!selected || !declineReason.trim()) return;
     setLoading(true);
-    const creditsCost = selected.credits_cost || 0;
+    const creditsCost = selected.is_pre_launch ? 0 : (selected.credits_cost || 0);
     await supabase.from("change_requests").update({ status: "declined", admin_notes: declineReason } as any).eq("id", selected.id);
     if (creditsCost > 0) {
       const clientBalance = selected.clients?.credits_balance || 0;
@@ -176,10 +213,69 @@ export default function OperatorChangeRequests() {
       await supabase.from("clients").update({ credits_balance: newBalance } as any).eq("id", selected.client_id);
       await supabase.from("credits_transactions").insert({ client_id: selected.client_id, transaction_type: "refund", credits_amount: creditsCost, credits_balance_after: newBalance, description: `Refund for declined request: ${selected.change_type}`, change_request_id: selected.id } as any);
     }
+
+    // Send decline email
+    if (selected.clients) {
+      const { data: profile } = await supabase.from("profiles").select("email, full_name").eq("user_id", (selected.clients as any).user_id).maybeSingle();
+      if (profile?.email && !selected.is_pre_launch) {
+        const { data: clientData } = await supabase.from("clients").select("credits_balance").eq("id", selected.client_id).single();
+        await supabase.functions.invoke("send-email", {
+          body: {
+            to: profile.email,
+            template: "ticket_declined",
+            data: {
+              name: profile.full_name,
+              first_name: (profile.full_name || "").split(" ")[0],
+              request_text: selected.request_text.slice(0, 100),
+              decline_reason: declineReason,
+              credits_cost: creditsCost,
+              current_balance: clientData?.credits_balance || 0,
+            },
+            clientId: selected.client_id,
+          },
+        }).catch(console.error);
+      }
+    }
+
     await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Declined change request for ${selected.clients?.business_name}`, target_table: "change_requests", target_id: selected.id });
     queryClient.invalidateQueries({ queryKey: ["operator-change-requests"] });
-    toast.success("Request declined. Credits refunded.");
+    toast.success(creditsCost > 0 ? "Request declined. Credits refunded." : "Request declined.");
     setShowDeclineModal(false); setDeclineReason(""); setSelected(null); setLoading(false);
+  };
+
+  const handleNeedsInfo = async () => {
+    if (!selected || !needsInfoNote.trim()) return;
+    setLoading(true);
+
+    await supabase.from("change_requests").update({
+      status: "awaiting_info",
+      needs_info_note: needsInfoNote,
+    } as any).eq("id", selected.id);
+
+    // Send needs more info email
+    if (selected.clients) {
+      const { data: profile } = await supabase.from("profiles").select("email, full_name").eq("user_id", (selected.clients as any).user_id).maybeSingle();
+      if (profile?.email) {
+        await supabase.functions.invoke("send-email", {
+          body: {
+            to: profile.email,
+            template: "needs_more_info",
+            data: {
+              name: profile.full_name,
+              first_name: (profile.full_name || "").split(" ")[0],
+              request_text: selected.request_text.slice(0, 100),
+              operator_note: needsInfoNote,
+            },
+            clientId: selected.client_id,
+          },
+        }).catch(console.error);
+      }
+    }
+
+    await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Requested more info for change request`, target_table: "change_requests", target_id: selected.id });
+    queryClient.invalidateQueries({ queryKey: ["operator-change-requests"] });
+    toast.success("Info request sent to client");
+    setShowNeedsInfoModal(false); setNeedsInfoNote(""); refreshSelected(selected.id); setLoading(false);
   };
 
   const handleAssessCredits = async () => {
@@ -229,15 +325,20 @@ export default function OperatorChangeRequests() {
         </div>
       </TableCell>
       <TableCell>
-        <p className="text-sm">{r.change_type || "—"}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm">{r.change_type || "—"}</p>
+          {r.is_pre_launch && <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] px-1">Pre-launch</Badge>}
+        </div>
         <p className="text-xs text-muted-foreground truncate max-w-[200px]">{r.request_text.slice(0, 60)}{r.request_text.length > 60 ? "..." : ""}</p>
       </TableCell>
       <TableCell>
-        {r.credits_cost != null ? (
+        {r.is_pre_launch ? (
+          <span className="text-xs text-muted-foreground">—</span>
+        ) : r.credits_cost != null ? (
           <span className="text-sm flex items-center gap-1"><Coins className="h-3 w-3" />{r.credits_cost}</span>
         ) : <span className="text-xs text-muted-foreground">—</span>}
       </TableCell>
-      <TableCell>{statusBadge(r.status)}</TableCell>
+      <TableCell>{statusBadge(r.status, r.is_pre_launch)}</TableCell>
       <TableCell>{timeElapsed(r.created_at)}</TableCell>
     </TableRow>
   );
@@ -273,7 +374,7 @@ export default function OperatorChangeRequests() {
         <div>
           <h1 className="text-2xl font-bold">Change Requests</h1>
           <p className="text-muted-foreground text-sm">
-            {pendingItems.length} pending · {inProgressItems.length} in progress · {assessmentItems.length} need assessment
+            {pendingItems.length} pending · {inProgressItems.length} in progress · {awaitingInfoItems.length} awaiting info · {assessmentItems.length} need assessment
           </p>
         </div>
       </div>
@@ -316,18 +417,16 @@ export default function OperatorChangeRequests() {
           <TabsTrigger value="pending">Pending ({pendingItems.length})</TabsTrigger>
           <TabsTrigger value="assessment">Needs Assessment ({assessmentItems.length})</TabsTrigger>
           <TabsTrigger value="in_progress">In Progress ({inProgressItems.length})</TabsTrigger>
+          <TabsTrigger value="awaiting_info" className="text-amber-700">Awaiting Info ({awaitingInfoItems.length})</TabsTrigger>
           <TabsTrigger value="archived" className="text-muted-foreground">Archived ({archivedItems.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending" className="mt-4">
           {isLoading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div> : renderTable(pendingItems)}
         </TabsContent>
-        <TabsContent value="assessment" className="mt-4">
-          {renderTable(assessmentItems)}
-        </TabsContent>
-        <TabsContent value="in_progress" className="mt-4">
-          {renderTable(inProgressItems)}
-        </TabsContent>
+        <TabsContent value="assessment" className="mt-4">{renderTable(assessmentItems)}</TabsContent>
+        <TabsContent value="in_progress" className="mt-4">{renderTable(inProgressItems)}</TabsContent>
+        <TabsContent value="awaiting_info" className="mt-4">{renderTable(awaitingInfoItems)}</TabsContent>
         <TabsContent value="archived" className="mt-4">
           {archivedItems.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -359,8 +458,8 @@ export default function OperatorChangeRequests() {
                           <TableRow key={r.id} className="cursor-pointer hover:bg-primary/5" onClick={() => { setSelected(r); setInternalNotes(r.operator_notes || ""); }}>
                             <TableCell><p className="text-sm font-medium">{r.clients?.business_name || "—"}</p></TableCell>
                             <TableCell><p className="text-sm truncate max-w-[200px]">{r.change_type || r.request_text.slice(0, 40)}</p></TableCell>
-                            <TableCell>{r.credits_cost != null ? <span className="text-sm">{r.credits_cost}</span> : "—"}</TableCell>
-                            <TableCell>{statusBadge(r.status)}</TableCell>
+                            <TableCell>{r.is_pre_launch ? "—" : r.credits_cost != null ? <span className="text-sm">{r.credits_cost}</span> : "—"}</TableCell>
+                            <TableCell>{statusBadge(r.status, r.is_pre_launch)}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{r.completed_at ? format(new Date(r.completed_at), "MMM d, yyyy") : "—"}</TableCell>
                           </TableRow>
                         ))}
@@ -393,13 +492,15 @@ export default function OperatorChangeRequests() {
             </SheetHeader>
             <div className="mt-4 space-y-4">
               <div className="flex items-center gap-2 flex-wrap">
-                {statusBadge(selected.status)}
+                {statusBadge(selected.status, selected.is_pre_launch)}
                 {selected.priority === "urgent" && <Badge className="bg-amber-500/10 text-amber-700 border-amber-200"><Zap className="h-3 w-3 mr-0.5" />Urgent</Badge>}
               </div>
 
               <div className="bg-muted/50 rounded-lg p-3 space-y-1">
                 <p className="font-medium">{selected.clients?.business_name || "—"}</p>
-                <p className="text-xs text-muted-foreground">{selected.clients?.plan} plan · {selected.clients?.credits_balance ?? 0} credits remaining</p>
+                <p className="text-xs text-muted-foreground">
+                  {selected.clients?.plan} plan · {selected.is_pre_launch ? "Pre-launch (no credits)" : `${selected.clients?.credits_balance ?? 0} credits remaining`}
+                </p>
               </div>
 
               <Separator />
@@ -407,7 +508,7 @@ export default function OperatorChangeRequests() {
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Change Type</p>
                 <p className="text-sm font-medium">{selected.change_type || "—"}</p>
-                {selected.credits_cost != null && (
+                {!selected.is_pre_launch && selected.credits_cost != null && (
                   <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><Coins className="h-3 w-3" />{selected.credits_cost} credits</p>
                 )}
               </div>
@@ -422,6 +523,31 @@ export default function OperatorChangeRequests() {
                   <p className="text-sm text-muted-foreground mb-1">Attachment</p>
                   <a href={selected.attachment_url} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline">View attachment →</a>
                 </div>
+              )}
+
+              {/* Client response to needs info */}
+              {selected.needs_info_note && (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Question sent to client</p>
+                    <p className="text-sm bg-amber-50 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200">{selected.needs_info_note}</p>
+                  </div>
+                  {selected.client_info_response && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Client response</p>
+                      <p className="text-sm bg-emerald-50 dark:bg-emerald-950/20 p-3 rounded-lg border border-emerald-200">{selected.client_info_response}</p>
+                    </div>
+                  )}
+                  {selected.client_info_attachments && selected.client_info_attachments.length > 0 && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Client attachments</p>
+                      {selected.client_info_attachments.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline block">Attachment {i + 1} →</a>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
 
               <Separator />
@@ -510,8 +636,17 @@ export default function OperatorChangeRequests() {
                     {selected.status === "in_review" && (
                       <Button className="flex-1" onClick={() => handleStatusChange(selected.id, "in_progress")}>Mark In Progress</Button>
                     )}
+                    {selected.status === "awaiting_info" && selected.client_info_response && (
+                      <Button className="flex-1" onClick={() => handleStatusChange(selected.id, "in_progress")}>Resume (Info Received)</Button>
+                    )}
                     <Button className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowCompleteModal(true)}>
                       <CheckCircle2 className="h-4 w-4" /> Complete
+                    </Button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1 gap-2" onClick={() => setShowNeedsInfoModal(true)}>
+                      <HelpCircle className="h-4 w-4" /> Request more information
                     </Button>
                     <Button variant="destructive" size="icon" onClick={() => setShowDeclineModal(true)}>
                       <X className="h-4 w-4" />
@@ -550,13 +685,44 @@ export default function OperatorChangeRequests() {
         <DialogContent>
           <DialogHeader><DialogTitle>Decline Change Request</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Credits will be fully refunded. Explain why the request is being declined.</p>
+            <p className="text-sm text-muted-foreground">
+              {selected?.is_pre_launch ? "Pre-launch feedback will be declined." : "Credits will be fully refunded."} Explain why the request is being declined.
+            </p>
             <Textarea placeholder="Reason for declining..." value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} rows={3} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeclineModal(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDecline} disabled={loading || !declineReason.trim()}>
-              {loading ? "Processing..." : "Decline & Refund Credits"}
+              {loading ? "Processing..." : selected?.is_pre_launch ? "Decline Feedback" : "Decline & Refund Credits"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Needs More Info modal */}
+      <Dialog open={showNeedsInfoModal} onOpenChange={setShowNeedsInfoModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HelpCircle className="h-4 w-4" /> Ask {selected?.clients?.business_name} for more information
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">What do you need from them?</label>
+              <Textarea
+                placeholder="e.g. Could you send us the new photo you'd like to use? Please upload it as a JPG or PNG at least 1000px wide"
+                value={needsInfoNote}
+                onChange={(e) => setNeedsInfoNote(e.target.value)}
+                rows={4}
+                className="mt-1.5"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNeedsInfoModal(false)}>Cancel</Button>
+            <Button onClick={handleNeedsInfo} disabled={loading || !needsInfoNote.trim()} className="gap-2">
+              {loading ? "Sending..." : <><Send className="h-4 w-4" /> Send request</>}
             </Button>
           </DialogFooter>
         </DialogContent>

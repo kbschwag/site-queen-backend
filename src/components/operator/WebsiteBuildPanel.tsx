@@ -6,15 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { toast } from "sonner";
-import {
-  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket
-} from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SitePreviewFrame } from "./SitePreviewFrame";
+import { toast } from "sonner";
+import {
+  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket
+} from "lucide-react";
+import { useFileUpload } from "@/hooks/useFileUpload";
 
 interface Props {
   clientId: string;
@@ -27,6 +30,8 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const [sharing, setSharing] = useState(false);
   const [approving, setApproving] = useState(false);
   const [showGoLiveModal, setShowGoLiveModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareNote, setShareNote] = useState("");
   const [goLiveChecked, setGoLiveChecked] = useState(false);
 
   const { data: clientData } = useQuery({
@@ -34,7 +39,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("domain_name, domain_status, deployment_path_confirmed")
+        .select("domain_name, domain_status, deployment_path_confirmed, user_id")
         .eq("id", clientId)
         .single();
       if (error) throw error;
@@ -55,6 +60,22 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     },
   });
 
+  // Look up client email for sending emails
+  const { data: clientProfile } = useQuery({
+    queryKey: ["operator-client-profile", clientId],
+    queryFn: async () => {
+      if (!(clientData as any)?.user_id) return null;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("email, full_name")
+        .eq("user_id", (clientData as any).user_id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!(clientData as any)?.user_id,
+  });
+
   const { data: preLaunchFeedback = [] } = useQuery({
     queryKey: ["pre-launch-feedback", clientId],
     queryFn: async () => {
@@ -64,9 +85,8 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
         .eq("client_id", clientId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      // Filter for pre-launch tagged ones
       return (data || []).filter((cr: any) =>
-        cr.admin_notes?.includes("[PRE-LAUNCH]") || cr.status === "pre_launch"
+        cr.is_pre_launch === true || cr.admin_notes?.includes("[PRE-LAUNCH]") || cr.status === "pre_launch"
       );
     },
   });
@@ -91,40 +111,45 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const handleShareWithClient = async () => {
     setSharing(true);
     try {
-      await supabase
-        .from("sites")
-        .update({ generation_status: "shared" } as any)
-        .eq("client_id", clientId);
+      await supabase.from("sites").update({ generation_status: "shared" } as any).eq("client_id", clientId);
 
-      // Send email notification to client
-      await supabase.functions.invoke("send-email", {
-        body: {
-          to: null, // Edge function will look up client email
-          template: "staging_ready",
-          data: { business_name: businessName, staging_url: stagingUrl },
-          clientId,
-        },
-      });
+      // Send website ready for review email
+      if (clientProfile?.email) {
+        await supabase.functions.invoke("send-email", {
+          body: {
+            to: clientProfile.email,
+            template: "website_ready_for_review",
+            data: {
+              name: clientProfile.full_name || businessName,
+              first_name: (clientProfile.full_name || "").split(" ")[0] || businessName,
+              business_name: businessName,
+              staging_url: stagingUrl,
+              operator_note: shareNote || null,
+            },
+            clientId,
+          },
+        });
+      }
 
       // Create client notification
       await supabase.from("notifications").insert({
         type: "staging_ready",
         client_id: clientId,
-        message: `Your website is ready to preview! ♛`,
+        message: `Your website is ready to preview ♛ — take a look and let us know what you think`,
         staging_url: stagingUrl,
         target_role: "client",
       } as any);
 
       await supabase.from("audit_log").insert({
-        user_id: user!.id,
-        user_email: user!.email,
+        user_id: user!.id, user_email: user!.email,
         action: `Shared staging URL with client: ${businessName}`,
-        target_table: "sites",
-        target_id: clientId,
+        target_table: "sites", target_id: clientId,
       });
 
       queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
-      toast.success("Staging URL shared with client!");
+      toast.success("Staging URL shared with client & email sent!");
+      setShowShareModal(false);
+      setShareNote("");
     } catch (e) {
       toast.error("Failed to share with client");
     } finally {
@@ -133,17 +158,9 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   };
 
   const handleManualReview = async () => {
-    await supabase
-      .from("sites")
-      .update({ generation_status: "manual_review" } as any)
-      .eq("client_id", clientId);
+    await supabase.from("sites").update({ generation_status: "manual_review" } as any).eq("client_id", clientId);
 
-    // Mark related notifications as read
-    const { data: notifs } = await supabase
-      .from("notifications")
-      .select("id")
-      .eq("client_id", clientId)
-      .eq("read", false);
+    const { data: notifs } = await supabase.from("notifications").select("id").eq("client_id", clientId).eq("read", false);
     if (notifs) {
       for (const n of notifs) {
         await supabase.from("notifications").update({ read: true } as any).eq("id", n.id);
@@ -173,29 +190,34 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     setShowGoLiveModal(false);
     setGoLiveChecked(false);
     try {
-      // Call deploy-to-hostinger edge function
       const { data: deployResult, error: deployError } = await supabase.functions.invoke("deploy-to-hostinger", {
         body: { client_id: clientId },
       });
 
       if (deployError) {
-        // Fallback: update statuses manually if deploy function fails
         console.error("Deploy function error, updating statuses manually:", deployError);
         await supabase.from("sites").update({ generation_status: "live" } as any).eq("client_id", clientId);
         await supabase.from("clients").update({ site_status: "live" } as any).eq("id", clientId);
       }
 
-      // Send celebration email
-      await supabase.functions.invoke("send-email", {
-        body: {
-          to: null,
-          template: "site_live",
-          data: { business_name: businessName, site_url: stagingUrl },
-          clientId,
-        },
-      });
+      // Send site live email
+      if (clientProfile?.email) {
+        await supabase.functions.invoke("send-email", {
+          body: {
+            to: clientProfile.email,
+            template: "site_live",
+            data: {
+              name: clientProfile.full_name || businessName,
+              first_name: (clientProfile.full_name || "").split(" ")[0] || businessName,
+              business_name: businessName,
+              site_url: stagingUrl,
+              domain: (clientData as any)?.domain_name || stagingUrl,
+            },
+            clientId,
+          },
+        });
+      }
 
-      // Client notification
       await supabase.from("notifications").insert({
         type: "site_live",
         client_id: clientId,
@@ -204,11 +226,9 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
       } as any);
 
       await supabase.from("audit_log").insert({
-        user_id: user!.id,
-        user_email: user!.email,
+        user_id: user!.id, user_email: user!.email,
         action: `Approved and set ${businessName} site to live`,
-        target_table: "sites",
-        target_id: clientId,
+        target_table: "sites", target_id: clientId,
       });
 
       queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
@@ -240,7 +260,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
         )}
       </div>
 
-      {/* Ready for review */}
+      {/* Ready for review — show Share modal trigger */}
       {generationStatus === "complete" && stagingUrl && (
         <Card>
           <CardHeader className="pb-2">
@@ -249,9 +269,8 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           <CardContent className="space-y-3">
             <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={500} />
             <div className="flex gap-2">
-              <Button onClick={handleShareWithClient} disabled={sharing} className="gap-2 flex-1">
-                {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Share with client for review
+              <Button onClick={() => setShowShareModal(true)} disabled={sharing} className="gap-2 flex-1">
+                <Send className="h-4 w-4" /> Share with client for review
               </Button>
               <Button variant="outline" onClick={handleManualReview} className="gap-2">
                 <Wrench className="h-4 w-4" /> I'll work on it
@@ -271,7 +290,10 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
             <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={400} />
             {preLaunchFeedback.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium">Client Feedback</h4>
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  Client Feedback
+                  <Badge className="bg-amber-500/10 text-amber-700 border-amber-200 text-[10px]">Pre-launch</Badge>
+                </h4>
                 {preLaunchFeedback.map((fb: any) => (
                   <div key={fb.id} className="bg-muted/50 rounded-lg p-3 text-sm">
                     <p>{fb.request_text}</p>
@@ -297,9 +319,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  {!canGoLive && (
-                    <TooltipContent><p>{goLiveTooltip}</p></TooltipContent>
-                  )}
+                  {!canGoLive && <TooltipContent><p>{goLiveTooltip}</p></TooltipContent>}
                 </Tooltip>
               </TooltipProvider>
               <Button variant="outline" onClick={handleManualReview} className="gap-2">
@@ -336,7 +356,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               <Wrench className="h-4 w-4" />
               <span>You're handling this build manually.</span>
             </div>
-             <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={300} />
+            <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={300} />
           </CardContent>
         </Card>
       )}
@@ -353,6 +373,40 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
         </Card>
       )}
 
+      {/* Share with client modal */}
+      <Dialog open={showShareModal} onOpenChange={setShowShareModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Share {businessName}'s website for review</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-muted/50 rounded-lg p-3 text-sm">
+              <p className="text-muted-foreground text-xs mb-1">Staging URL</p>
+              <a href={stagingUrl || "#"} target="_blank" rel="noreferrer" className="text-primary hover:underline break-all">
+                {stagingUrl}
+              </a>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Add a personal message (optional)</label>
+              <Textarea
+                placeholder="e.g. We're really proud of how this turned out — we think you're going to love it"
+                value={shareNote}
+                onChange={(e) => setShareNote(e.target.value)}
+                rows={3}
+                className="mt-1.5"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowShareModal(false)}>Cancel</Button>
+            <Button onClick={handleShareWithClient} disabled={sharing} className="gap-2">
+              {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Send for review
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Go Live Confirmation Modal */}
       <Dialog open={showGoLiveModal} onOpenChange={(open) => { setShowGoLiveModal(open); if (!open) setGoLiveChecked(false); }}>
         <DialogContent>
@@ -362,7 +416,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           <p className="text-sm text-muted-foreground">
             This will push <strong>{businessName}</strong>'s website live at{" "}
             <strong>{(clientData as any)?.domain_name || "their domain"}</strong>.
-            This action cannot be undone. Are you sure?
+            This action cannot be undone.
           </p>
           <label className="flex items-center gap-2 text-sm cursor-pointer mt-2">
             <Checkbox checked={goLiveChecked} onCheckedChange={(c) => setGoLiveChecked(!!c)} />
