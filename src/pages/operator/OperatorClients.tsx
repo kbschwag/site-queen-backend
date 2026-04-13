@@ -139,7 +139,7 @@ export default function OperatorClients() {
                   <TableHead>Plan</TableHead>
                   <TableHead>Subscription</TableHead>
                   <TableHead>Site</TableHead>
-                  <TableHead>Updates</TableHead>
+                  <TableHead>Credits</TableHead>
                   <TableHead>Joined</TableHead>
                 </TableRow>
               </TableHeader>
@@ -162,7 +162,7 @@ export default function OperatorClients() {
                     <TableCell className="text-sm">{planLabel(c.plan)}</TableCell>
                     <TableCell>{statusBadge(c.subscription_status)}</TableCell>
                     <TableCell>{siteBadge(c.site_status)}</TableCell>
-                    <TableCell className="text-sm">{c.updates_used_this_month ?? 0}/{c.updates_limit ?? 0}</TableCell>
+                    <TableCell className="text-sm">{c.credits_balance ?? 0} cr</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{c.join_date ? format(new Date(c.join_date), "MMM d, yyyy") : "—"}</TableCell>
                   </TableRow>
                 ))}
@@ -197,7 +197,10 @@ export default function OperatorClients() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Business Type</span><span>{selected.business_type}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Joined</span><span>{selected.join_date ? format(new Date(selected.join_date), "MMM d, yyyy") : "—"}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Last Active</span><span>{selected.last_active ? format(new Date(selected.last_active), "MMM d, yyyy") : "—"}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Updates This Month</span><span>{selected.updates_used_this_month ?? 0} / {selected.updates_limit ?? 0}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Credits Balance</span><span className="font-semibold">{selected.credits_balance ?? 0}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Monthly Allowance</span><span>{selected.credits_monthly_allowance ?? 10}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Rollover Cap</span><span>{selected.credits_rollover_cap ?? 20}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Last Credits Reset</span><span>{selected.credits_last_reset ? format(new Date(selected.credits_last_reset), "MMM d, yyyy") : "—"}</span></div>
                   {selected.site_url && (
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Site URL</span>
