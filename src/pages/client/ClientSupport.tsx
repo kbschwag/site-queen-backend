@@ -78,7 +78,7 @@ export default function ClientSupport() {
           />
         </TabsContent>
         <TabsContent value="history" className="mt-4">
-          <MyTickets changeRequests={changeRequests} />
+          <MyTickets changeRequests={changeRequests} clientId={client?.id} />
         </TabsContent>
       </Tabs>
 
