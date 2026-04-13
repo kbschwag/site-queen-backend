@@ -241,7 +241,7 @@ export default function ClientWebsite() {
           <div className="lg:col-span-2">
             <Card>
               <CardContent className="pt-6">
-                {renderPreview(site.staging_url)}
+                <SitePreviewFrame clientId={client.id} stagingUrl={site.staging_url} height={500} />
               </CardContent>
             </Card>
           </div>
@@ -379,7 +379,7 @@ export default function ClientWebsite() {
         {siteUrl && (
           <Card>
             <CardContent className="pt-6">
-              {renderPreview(siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`)}
+              <SitePreviewFrame clientId={client.id} stagingUrl={siteUrl} height={500} />
             </CardContent>
           </Card>
         )}
