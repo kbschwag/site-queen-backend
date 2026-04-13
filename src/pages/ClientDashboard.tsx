@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Crown,
@@ -22,16 +23,24 @@ import {
   BarChart3,
   ArrowRight,
   Sparkles,
+  Coins,
 } from "lucide-react";
 import { format } from "date-fns";
 import { IntakeForm } from "@/components/intake/IntakeForm";
 import type { IntakeData } from "@/components/intake/types";
+import { CreditsWidget } from "@/components/client/CreditsWidget";
+import { CreditCostReference } from "@/components/client/CreditCostReference";
+import { SubmitTicket } from "@/components/client/SubmitTicket";
+import { MyTickets } from "@/components/client/MyTickets";
+import { BuyCreditsModal } from "@/components/client/BuyCreditsModal";
 
 export default function ClientDashboard() {
   const { user, signOut } = useAuth();
   const queryClient = useQueryClient();
   const [newRequest, setNewRequest] = useState("");
   const [showIntake, setShowIntake] = useState(false);
+  const [showBuyCredits, setShowBuyCredits] = useState(false);
+  const [supportTab, setSupportTab] = useState("submit");
 
   const { data: client, isLoading: clientLoading } = useQuery({
     queryKey: ["my-client"],
@@ -437,12 +446,11 @@ export default function ClientDashboard() {
             <CardContent className="pt-5 pb-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Wrench className="h-5 w-5 text-primary" />
+                  <Coins className="h-5 w-5 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs text-muted-foreground">Updates This Month</p>
-                  <p className="font-semibold">{client.updates_used_this_month ?? 0} / {client.updates_limit ?? 0}</p>
-                  <Progress value={updatesPercent} className="h-1.5 mt-1" />
+                  <p className="text-xs text-muted-foreground">Credits Balance</p>
+                  <p className="font-semibold">{(client as any).credits_balance ?? 0}</p>
                 </div>
               </div>
             </CardContent>
@@ -483,54 +491,54 @@ export default function ClientDashboard() {
           </Card>
         )}
 
+        {/* Support Tickets Section */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Request a Change</CardTitle>
-            <CardDescription>Describe what you'd like updated on your website.</CardDescription>
+            <CardTitle className="text-base">Support Tickets</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Textarea
-              placeholder="e.g., Update the phone number to (555) 123-4567, change the hero image, add a new testimonial..."
-              value={newRequest}
-              onChange={(e) => setNewRequest(e.target.value)}
-              rows={4}
-              className="resize-none"
+          <CardContent className="space-y-4">
+            <CreditsWidget
+              balance={(client as any).credits_balance ?? 0}
+              monthlyAllowance={(client as any).credits_monthly_allowance ?? 10}
+              rolloverCap={(client as any).credits_rollover_cap ?? 20}
+              lastReset={(client as any).credits_last_reset}
+              onBuyCredits={() => setShowBuyCredits(true)}
             />
-            <Button onClick={() => submitRequest.mutate()} disabled={!newRequest.trim() || submitRequest.isPending} className="gap-2">
-              {submitRequest.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</> : <><Send className="h-4 w-4" /> Submit Request</>}
-            </Button>
+
+            <CreditCostReference />
+
+            <Tabs value={supportTab} onValueChange={setSupportTab}>
+              <TabsList className="w-full">
+                <TabsTrigger value="submit" className="flex-1">Submit a Request</TabsTrigger>
+                <TabsTrigger value="history" className="flex-1">My Requests ({changeRequests.length})</TabsTrigger>
+              </TabsList>
+              <TabsContent value="submit" className="mt-4">
+                <SubmitTicket
+                  clientId={client.id}
+                  userId={user!.id}
+                  creditsBalance={(client as any).credits_balance ?? 0}
+                  onBuyCredits={() => setShowBuyCredits(true)}
+                  onSubmitted={() => {
+                    queryClient.invalidateQueries({ queryKey: ["my-client"] });
+                    queryClient.invalidateQueries({ queryKey: ["my-change-requests"] });
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="history" className="mt-4">
+                <MyTickets changeRequests={changeRequests} />
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Request History</CardTitle></CardHeader>
-          <CardContent>
-            {changeRequests.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No requests yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {changeRequests.map((cr, i) => (
-                  <div key={cr.id}>
-                    {i > 0 && <Separator className="mb-3" />}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="mt-0.5">{statusIcon(cr.status)}</div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm">{cr.request_text}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {format(new Date(cr.created_at), "MMM d, yyyy")}
-                            {cr.completed_at && ` · Completed ${format(new Date(cr.completed_at), "MMM d")}`}
-                          </p>
-                        </div>
-                      </div>
-                      {statusBadge(cr.status)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <BuyCreditsModal
+          open={showBuyCredits}
+          onOpenChange={setShowBuyCredits}
+          clientId={client.id}
+          currentBalance={(client as any).credits_balance ?? 0}
+          currentPlan={client.plan}
+          onPurchased={() => queryClient.invalidateQueries({ queryKey: ["my-client"] })}
+        />
       </main>
     </div>
   );
