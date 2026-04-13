@@ -48,11 +48,5 @@ export default function ClientDashboard() {
     );
   }
 
-  return (
-    <ClientLayout
-      businessName={client.business_name}
-      plan={client.plan}
-      creditsBalance={client.credits_balance ?? 0}
-    />
-  );
+  return <ClientLayout />;
 }
