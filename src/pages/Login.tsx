@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Crown, Loader2, Eye, EyeOff } from "lucide-react";
+import { Crown, Loader2, Eye, EyeOff, Mail } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -16,16 +15,26 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showMagicLink, setShowMagicLink] = useState(false);
+  const [magicEmail, setMagicEmail] = useState("");
+  const [magicSent, setMagicSent] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
+  const [noPasswordHint, setNoPasswordHint] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setNoPasswordHint(false);
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
+      // Detect "no password set" scenario
+      if (error.message.toLowerCase().includes("invalid login credentials")) {
+        setNoPasswordHint(true);
+      }
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
       setLoading(false);
       return;
@@ -51,6 +60,26 @@ export default function Login() {
     }
     if (result.redirected) return;
     navigate("/dashboard");
+  };
+
+  const handleSendMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!magicEmail) return;
+    setMagicLoading(true);
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: magicEmail,
+      options: {
+        emailRedirectTo: `${window.location.origin}/set-password`,
+      },
+    });
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setMagicSent(true);
+    }
+    setMagicLoading(false);
   };
 
   return (
@@ -133,15 +162,64 @@ export default function Login() {
             </Button>
           </form>
 
+          {/* No password hint */}
+          {noPasswordHint && (
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm space-y-2">
+              <p className="font-medium">It looks like you haven't set your password yet</p>
+              <p className="text-muted-foreground text-xs">Check your email for your account setup link, or click below to get a new one</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-2"
+                onClick={() => {
+                  setShowMagicLink(true);
+                  setMagicEmail(email);
+                  setNoPasswordHint(false);
+                }}
+              >
+                <Mail className="h-4 w-4" /> Send me a login link
+              </Button>
+            </div>
+          )}
+
           <div className="text-center">
             <Link to="/forgot-password" className="text-sm text-muted-foreground hover:text-primary">
               Forgot your password?
             </Link>
           </div>
 
-          <p className="text-center text-xs text-muted-foreground">
-            New client? Check your email for your login link from hello@sitequeen.ai
-          </p>
+          {/* Magic link section */}
+          <div className="border-t pt-4">
+            {!showMagicLink ? (
+              <button
+                type="button"
+                onClick={() => setShowMagicLink(true)}
+                className="text-sm text-muted-foreground hover:text-primary w-full text-center"
+              >
+                New client? Never set a password?
+              </button>
+            ) : magicSent ? (
+              <div className="text-center space-y-1">
+                <p className="text-sm font-medium text-primary">Check your inbox ♛</p>
+                <p className="text-xs text-muted-foreground">We sent you a login link to {magicEmail}</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSendMagicLink} className="space-y-3">
+                <p className="text-xs text-muted-foreground text-center">Enter your email and we'll send you a login link</p>
+                <Input
+                  type="email"
+                  value={magicEmail}
+                  onChange={(e) => setMagicEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                />
+                <Button type="submit" variant="outline" className="w-full gap-2" disabled={magicLoading}>
+                  {magicLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                  Send Access Link
+                </Button>
+              </form>
+            )}
+          </div>
 
           <p className="text-center text-sm text-muted-foreground">
             Don't have an account? <Link to="/signup" className="text-primary underline">Sign up</Link>

@@ -149,27 +149,33 @@ serve(async (req) => {
     // 5. Update application status
     await supabase.from("applications").update({ status: "converted" }).eq("id", app.id);
 
-    // 6. Generate magic link
+    // 6. Generate magic link with redirect to set-password page
+    const siteUrl = "https://site-queen-backend.lovable.app";
     const { data: magicLinkData, error: magicError } = await supabase.auth.admin.generateLink({
       type: "magiclink",
       email: app.email,
+      options: {
+        redirectTo: `${siteUrl}/set-password`,
+      },
     });
+
+    if (magicError) {
+      console.error("Magic link error:", magicError);
+    }
 
     const magicLink = magicLinkData?.properties?.action_link || null;
 
-    // 7. Send welcome email
-    const bookingUrl = `https://calendly.com/sitequeenai/30min`;
+    // 7. Send welcome email with account setup link
     await supabase.functions.invoke("send-email", {
       body: {
         to: app.email,
-        template: "application_approved",
+        template: "welcome_set_password",
         data: {
           name: app.name,
+          first_name: firstName,
           business_name: app.business_name,
-          booking_url: bookingUrl,
           magic_link: magicLink,
         },
-        applicationId: app.id,
         clientId,
       },
     });

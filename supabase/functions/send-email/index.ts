@@ -56,7 +56,22 @@ type TemplateConfig = {
 };
 
 const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
-  // EMAIL 1 — Application Approved
+  // EMAIL 0 — Welcome: Set Your Password (sent on convert)
+  welcome_set_password: {
+    subject: "You're in — set up your SiteQueen account ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <p>Amazing news — your SiteQueen application has been approved and your account is ready. ♛</p>
+      <p>Click below to access your account and set your password:</p>
+      ${d.magic_link ? purpleButton("Access My Account →", d.magic_link) : purpleButton("Log In to Dashboard →", DASHBOARD_URL)}
+      <p style="font-size:13px;color:#666;">This link expires in 24 hours. If it expires just reply to this email and we'll send a new one.</p>
+      <p>Once you're in you'll find your website brief waiting for you. Fill it out and we'll have your site live within 24 hours.</p>
+      <p>Can't wait to build something amazing for <strong>${d.business_name || "your business"}</strong>.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // EMAIL 1 — Application Approved (approval notification before conversion)
   application_approved: {
     subject: "You're approved — let's build your website ♛",
     html: (d) => emailWrapper(`
