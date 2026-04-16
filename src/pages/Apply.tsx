@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { sanitizeInput } from "@/lib/sanitize";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { ApplicationFormData, initialFormData, calculateScore, checkInstantDecline, checkFlags } from "@/components/apply/types";
 import StepAboutBusiness from "@/components/apply/StepAboutBusiness";
 import StepBusinessHealth from "@/components/apply/StepBusinessHealth";
@@ -137,6 +139,14 @@ export default function Apply() {
 
     setLoading(true);
 
+    // Rate limit check
+    const rl = checkRateLimit("apply_form", 3, 60 * 60 * 1000);
+    if (!rl.allowed) {
+      toast({ title: "Too many applications", description: "Please try again later.", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
     try {
       // Upload files
       let logoUrl: string | null = null;
@@ -160,13 +170,13 @@ export default function Apply() {
 
       const { error: insertError } = await anonClient.from("applications").insert([{
         id: applicationId,
-        business_type: form.business_type,
-        business_name: form.business_name,
-        industry: form.industry,
-        city: form.city,
-        state_province: form.state_province,
-        country: form.country,
-        city_state: [form.city, form.state_province].filter(Boolean).join(", "),
+        business_type: sanitizeInput(form.business_type),
+        business_name: sanitizeInput(form.business_name),
+        industry: sanitizeInput(form.industry),
+        city: sanitizeInput(form.city),
+        state_province: sanitizeInput(form.state_province),
+        country: sanitizeInput(form.country),
+        city_state: [form.city, form.state_province].filter(Boolean).map(sanitizeInput).join(", "),
         has_website: form.has_website,
         years_in_business: form.years_in_business,
         monthly_clients: form.monthly_clients,
@@ -182,10 +192,10 @@ export default function Apply() {
         inspiration_urls: inspirationUrls.join(", "),
         plan_interest: form.plan_interest,
         accepts_commitment: form.accepts_commitment,
-        name: form.name,
-        email: form.email,
-        phone: form.phone,
-        additional_notes: form.additional_notes,
+        name: sanitizeInput(form.name),
+        email: sanitizeInput(form.email),
+        phone: sanitizeInput(form.phone),
+        additional_notes: sanitizeInput(form.additional_notes),
         ai_score: score,
         lead_temperature: temperature,
         status,
