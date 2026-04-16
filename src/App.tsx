@@ -24,6 +24,7 @@ import ClientSupport from "./pages/client/ClientSupport";
 import ClientBilling from "./pages/client/ClientBilling";
 import ClientHelp from "./pages/client/ClientHelp";
 import ClientSettings from "./pages/client/ClientSettings";
+import ClientAnalytics from "./pages/client/ClientAnalytics";
 import OperatorLogin from "./pages/operator/OperatorLogin";
 import OperatorDashboard from "./pages/operator/OperatorDashboard";
 import OperatorApplications from "./pages/operator/OperatorApplications";
@@ -62,6 +63,7 @@ const App = () => (
               <Route index element={<ClientOverview />} />
               <Route path="website" element={<ClientWebsite />} />
               <Route path="support" element={<ClientSupport />} />
+              <Route path="analytics" element={<ClientAnalytics />} />
               <Route path="billing" element={<ClientBilling />} />
               <Route path="help" element={<ClientHelp />} />
               <Route path="settings" element={<ClientSettings />} />
