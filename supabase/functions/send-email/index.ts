@@ -9,7 +9,6 @@ const corsHeaders = {
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
 const FROM_ADDRESS = "SiteQueen <hello@sitequeen.ai>";
 
-// Shared email styles
 const BRAND_PURPLE = "#534AB7";
 const DARK_TEXT = "#1a1a2e";
 const LIGHT_BG = "#f8f5ff";
@@ -22,17 +21,15 @@ const emailWrapper = (content: string) => `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f7;">
 <tr><td align="center" style="padding:30px 10px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
-<!-- Header -->
 <tr><td style="background-color:${BRAND_PURPLE};padding:24px 30px;text-align:center;">
-  <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:bold;">SiteQueen ♛</h1>
+  <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:bold;">♛ SiteQueen</h1>
 </td></tr>
-<!-- Body -->
 <tr><td style="padding:30px 30px 20px;color:${DARK_TEXT};font-size:15px;line-height:1.6;">
 ${content}
 </td></tr>
-<!-- Footer -->
 <tr><td style="padding:20px 30px 30px;text-align:center;border-top:1px solid #eee;">
-  <p style="margin:0;font-size:12px;color:#999;">SiteQueen.ai — Built different. ♛</p>
+  <p style="margin:0 0 4px;font-size:12px;color:#999;">SiteQueen.ai — Built different. ♛</p>
+  <p style="margin:0;font-size:12px;color:#999;">Questions? Reply to this email or contact hello@sitequeen.ai</p>
 </td></tr>
 </table>
 </td></tr>
@@ -42,40 +39,72 @@ ${content}
 `;
 
 const purpleButton = (text: string, url: string) =>
-  `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto;"><tr><td style="border-radius:8px;background-color:${BRAND_PURPLE};"><a href="${url}" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;border-radius:8px;">${text}</a></td></tr></table>`;
+  `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto;"><tr><td style="border-radius:8px;background-color:${BRAND_PURPLE};"><a href="${url}" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;border-radius:8px;">${text}</a></td></tr></table>`;
 
 const darkButton = (text: string, url: string) =>
   `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px auto;"><tr><td style="border-radius:8px;background-color:${DARK_TEXT};"><a href="${url}" style="display:inline-block;padding:12px 28px;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;border-radius:8px;">${text}</a></td></tr></table>`;
 
+const divider = `<div style="border-top:1px solid #eeeeee;margin:24px 0;"></div>`;
+
 const DASHBOARD_URL = "https://site-queen-backend.lovable.app/login";
+const OPERATOR_URL = "https://site-queen-backend.lovable.app/operator";
 const CAL_URL = "https://calendly.com/sitequeenai/30min";
 
+const fn = (d: any) => d.first_name || (d.name || "").split(" ")[0] || "there";
+
 type TemplateConfig = {
-  subject: string;
+  subject: string | ((d: any) => string);
   html: (d: Record<string, any>) => string;
 };
 
 const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
-  // EMAIL 0 — Welcome: Set Your Password (sent on convert)
-  welcome_set_password: {
-    subject: "You're in — set up your SiteQueen account ♛",
+  // ═══════════════════════════════════════════
+  // APPLICATION EMAILS (1-5)
+  // ═══════════════════════════════════════════
+
+  // #1 — Application received
+  application_received: {
+    subject: "We received your application ♛",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
-      <p>Amazing news — your SiteQueen application has been approved and your account is ready. ♛</p>
-      <p>Click below to access your account and set your password:</p>
-      ${d.magic_link ? purpleButton("Access My Account →", d.magic_link) : purpleButton("Log In to Dashboard →", DASHBOARD_URL)}
-      <p style="font-size:13px;color:#666;">This link expires in 24 hours. If it expires just reply to this email and we'll send a new one.</p>
-      <p>Once you're in you'll find your website brief waiting for you. Fill it out and we'll have your site live within 24 hours.</p>
-      <p>Can't wait to build something amazing for <strong>${d.business_name || "your business"}</strong>.</p>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Thanks for applying, ${fn(d)}!</h2>
+      <p>We've received your application for <strong>${d.business_name || "your business"}</strong> and our team is reviewing it now.</p>
+      <p>We review every application personally and you'll hear from us within 24 hours. Keep an eye on your inbox.</p>
+      <p>In the meantime, follow us on Instagram <a href="https://instagram.com/SiteQueen" style="color:${BRAND_PURPLE};font-weight:bold;">@SiteQueen</a> for behind-the-scenes and client reveals.</p>
       <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
 
-  // EMAIL 1 — Application Approved (approval notification before conversion)
+  // #2 — HOT lead auto-approval
+  hot_auto_approved: {
+    subject: "You're approved — let's build your website ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Amazing news, ${fn(d)}!</h2>
+      <p>Your SiteQueen application has been approved. ♛</p>
+      <p>We reviewed your application and we love what you're building with <strong>${d.business_name || "your business"}</strong>. We're excited to work with you.</p>
+      <p>Your next step is to book your free discovery call so we can learn more about your business and get started:</p>
+      ${purpleButton("Book Your Discovery Call →", d.booking_url || CAL_URL)}
+      <p>We can't wait to meet you.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #3 — WARM lead acknowledgment
+  warm_acknowledgment: {
+    subject: "We're reviewing your application ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Thanks for applying to SiteQueen! We've received your application for <strong>${d.business_name || "your business"}</strong>.</p>
+      <p>Our team is personally reviewing it right now and you'll hear back from us within <strong>2 hours</strong> during business hours.</p>
+      <p>We review every single application to make sure we're the right fit for each other.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #4 — Application approved (manual)
   application_approved: {
     subject: "You're approved — let's build your website ♛",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>Great news — your SiteQueen application has been approved. ♛</p>
       <p>We reviewed your application and we love what you're building. We're excited to work with you.</p>
       ${d.operator_note ? `
@@ -83,7 +112,7 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
         <p style="margin:0 0 4px;font-weight:bold;font-size:13px;color:#666;">A personal note from our team:</p>
         <p style="margin:0;font-style:italic;">"${d.operator_note}"</p>
       </div>` : ""}
-      <p>Your next step is to book your free 15-minute discovery call so we can learn more about your business and get started:</p>
+      <p>Your next step is to book your free discovery call:</p>
       ${purpleButton("Book Your Discovery Call →", d.booking_url || CAL_URL)}
       ${d.magic_link ? `
       <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:20px 0;text-align:center;">
@@ -95,11 +124,11 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     `),
   },
 
-  // EMAIL 2 — Application Declined
+  // #5 — Application declined (manual)
   application_declined: {
     subject: "About your SiteQueen application",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>Thank you so much for applying to SiteQueen and for your interest in working with us.</p>
       <p>After reviewing your application we don't think we're the right fit at this time.</p>
       ${d.operator_note ? `
@@ -112,11 +141,134 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     `),
   },
 
-  // EMAIL 3 — Website Ready for Feedback
+  // ═══════════════════════════════════════════
+  // ONBOARDING EMAILS (6-10)
+  // ═══════════════════════════════════════════
+
+  // #6 — Welcome & account setup
+  welcome_set_password: {
+    subject: "You're in — set up your SiteQueen account ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Amazing news — your SiteQueen application has been approved and your account is ready. ♛</p>
+      <p>Click below to access your account and set your password:</p>
+      ${d.magic_link ? purpleButton("Access My Account →", d.magic_link) : purpleButton("Log In to Dashboard →", DASHBOARD_URL)}
+      <p style="font-size:13px;color:#666;">This link expires in 24 hours. If it expires just reply to this email and we'll send a new one.</p>
+      <p>Once you're in you'll find your website brief waiting for you. Fill it out and we'll have your site live within 24 hours.</p>
+      <p>Can't wait to build something amazing for <strong>${d.business_name || "your business"}</strong>.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #7 — Onboarding Day 1 (2 hours after welcome)
+  onboarding_day1: {
+    subject: "What happens next ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Welcome to SiteQueen! Here's exactly what happens next:</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;">
+        <p style="margin:0 0 12px;"><strong>Step 1:</strong> Log in and complete your website brief — this tells us everything about your business.</p>
+        <p style="margin:0 0 12px;"><strong>Step 2:</strong> Our AI builds your custom website using your answers.</p>
+        <p style="margin:0 0 12px;"><strong>Step 3:</strong> You review your site and tell us what you think.</p>
+        <p style="margin:0;"><strong>Step 4:</strong> We push it live and you start getting clients. ♛</p>
+      </div>
+      <p>The most important thing right now is to complete your website brief:</p>
+      ${purpleButton("Complete My Brief →", DASHBOARD_URL)}
+      <p>It takes about 10 minutes and the more detail you give us the better your site will be.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #8 — Onboarding Day 2 (48 hours)
+  onboarding_day2: {
+    subject: "Tips for getting the best website ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Quick tips from our team to help you get the absolute best website possible:</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;">
+        <p style="margin:0 0 12px;">📸 <strong>Upload real photos</strong> — professional photos of you and your work make a huge difference.</p>
+        <p style="margin:0 0 12px;">✍️ <strong>Be specific about services</strong> — the more detail you share the better we can showcase what you do.</p>
+        <p style="margin:0 0 12px;">💬 <strong>Include testimonials</strong> — social proof is the #1 thing that converts website visitors into clients.</p>
+        <p style="margin:0;">🎨 <strong>Share your brand vibe</strong> — colors, fonts, examples of sites you love.</p>
+      </div>
+      ${d.intake_completed ? `<p>We can see you've already completed your brief — amazing! We're on it.</p>` : `
+      <p>Haven't started your brief yet? No worries — jump in now:</p>
+      ${purpleButton("Complete My Brief →", DASHBOARD_URL)}
+      `}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #9 — Onboarding Day 3 (72 hours)
+  onboarding_day3: {
+    subject: "How your credits work ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Quick explainer on how your SiteQueen credits work — it's super simple.</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;">
+        <p style="margin:0 0 12px;">💎 <strong>Your ${d.plan || "Starter"} plan</strong> comes with <strong>${d.monthly_credits || 10} credits per month</strong>.</p>
+        <p style="margin:0 0 12px;">🔄 <strong>Credits refresh</strong> on the 1st of every month.</p>
+        <p style="margin:0 0 12px;">📦 <strong>Unused credits roll over</strong> up to ${d.rollover_cap || 20} credits max.</p>
+        <p style="margin:0;">🛒 <strong>Need more?</strong> You can buy extra credit packs anytime from your dashboard.</p>
+      </div>
+      <p>Here's what credits cover:</p>
+      <ul style="line-height:2;padding-left:20px;">
+        <li>Phone/email updates — 5 credits</li>
+        <li>Photo swaps — 10 credits</li>
+        <li>Content rewrites — 15 credits</li>
+        <li>New sections — 25+ credits</li>
+      </ul>
+      ${purpleButton("View My Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #10 — Onboarding Day 5 (120 hours)
+  onboarding_day5: {
+    subject: "What makes a great small business website ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>We've built hundreds of websites for small businesses. Here's what the best ones have in common:</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;">
+        <p style="margin:0 0 12px;">📱 <strong>Mobile-first design</strong> — 70% of your visitors are on their phones.</p>
+        <p style="margin:0 0 12px;">📞 <strong>Click-to-call</strong> — one tap should connect them to you.</p>
+        <p style="margin:0 0 12px;">⭐ <strong>Social proof above the fold</strong> — testimonials build instant trust.</p>
+        <p style="margin:0 0 12px;">🎯 <strong>Clear call to action</strong> — every page tells visitors what to do next.</p>
+        <p style="margin:0;">⚡ <strong>Fast load times</strong> — we optimize every site for speed.</p>
+      </div>
+      <p>Your SiteQueen website is built with all of this in mind. We've got you covered. ♛</p>
+      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // ═══════════════════════════════════════════
+  // WEBSITE BUILD EMAILS (11-15)
+  // ═══════════════════════════════════════════
+
+  // #11 — Intake form submitted
+  intake_completed: {
+    subject: "We have everything we need — building your site now ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>We've received your website brief for <strong>${d.business_name || "your business"}</strong> — thank you! ♛</p>
+      <p>Our AI is already building your custom website. Here's what happens next:</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;">
+        <p style="margin:0 0 8px;">🏗️ Your site is being generated right now</p>
+        <p style="margin:0 0 8px;">👀 You'll receive an email when it's ready to preview</p>
+        <p style="margin:0;">🚀 After your review we push it live</p>
+      </div>
+      <p>This usually takes less than 24 hours. We'll email you the moment it's ready.</p>
+      ${purpleButton("View Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #12 — Website ready for staging review
   website_ready_for_review: {
     subject: "Your website is ready to preview ♛",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>Your SiteQueen website is ready for your review. ♛</p>
       <p>We've built something we're really proud of and we can't wait to hear what you think.</p>
       ${d.operator_note ? `
@@ -141,31 +293,11 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     `),
   },
 
-  // EMAIL 4a — Pre-launch feedback received (to operator)
-  prelaunch_feedback_operator: {
-    subject: (d: any) => `Pre-launch feedback received — ${d.business_name}`,
-    html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Pre-launch Feedback</h2>
-      <p><strong>${d.business_name}</strong> has reviewed their staging site and left feedback.</p>
-      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-        <tr><td style="padding:6px 0;color:#666;width:100px;">Client:</td><td style="padding:6px 0;font-weight:bold;">${d.client_name}</td></tr>
-        <tr><td style="padding:6px 0;color:#666;">Business:</td><td style="padding:6px 0;">${d.business_name}</td></tr>
-        <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;">${d.plan}</td></tr>
-      </table>
-      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
-        <p style="margin:0 0 4px;font-weight:bold;font-size:13px;color:#666;">Their feedback:</p>
-        <p style="margin:0;">"${d.feedback_text}"</p>
-      </div>
-      ${d.attachment_count ? `<p>They attached ${d.attachment_count} file(s) — view them in the operator portal.</p>` : ""}
-      ${purpleButton("View in Portal →", "https://site-queen-backend.lovable.app/operator/change-requests")}
-    `),
-  },
-
-  // EMAIL 4b — Pre-launch feedback confirmation (to client)
+  // #13 — Pre-launch feedback received (to client)
   prelaunch_feedback_client: {
     subject: "We received your feedback ♛",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       ${d.approved_only ? `
         <p>Your website has been approved and is queued to go live. We'll notify you the moment it's live. ♛</p>
       ` : `
@@ -176,38 +308,87 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     `),
   },
 
-  // EMAIL 5 — Website Is Live
+  // #14 — Feedback needs more information
+  prelaunch_needs_info: {
+    subject: "Quick question about your feedback ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Thanks for reviewing your website! We have a quick question before we can make the changes you requested.</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;border-left:4px solid ${BRAND_PURPLE};">
+        <p style="margin:0 0 8px;font-weight:bold;font-size:13px;color:#666;">From your designer:</p>
+        <p style="margin:0;">"${d.operator_note || ""}"</p>
+      </div>
+      <p>Please log into your dashboard to respond:</p>
+      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #15 — Website is live
   site_live: {
     subject: "Your website is live ♛",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>Your website is officially live. ♛</p>
       <p>Visit it here:</p>
       ${purpleButton(d.domain || "Visit Your Website →", d.site_url || "#")}
       <p><strong>Share it everywhere — you've earned it.</strong></p>
-      <p>Here are some quick ways to spread the word:</p>
       <ul style="line-height:2;">
         <li>📱 Instagram/TikTok: "My new website is live! Check it out at ${d.domain || d.site_url}"</li>
-        <li>📘 Facebook: "Excited to announce my new website is live at ${d.domain || d.site_url} — built by the amazing team at SiteQueen!"</li>
-        <li>📧 Email your existing clients and let them know</li>
+        <li>📘 Facebook: "Excited to announce my new website — built by @SiteQueen!"</li>
+        <li>📧 Email your existing clients</li>
       </ul>
-      <p>Your dashboard is now fully active. Log in anytime to:</p>
-      <ul style="line-height:2;">
-        <li>Request website changes using your monthly credits</li>
-        <li>View your billing and plan details</li>
-        <li>Get support from our team</li>
-      </ul>
+      <p>Your dashboard is now fully active. Log in anytime to request changes, view analytics, and manage your account.</p>
       ${darkButton("Go to Dashboard →", DASHBOARD_URL)}
       <p>Welcome to SiteQueen. We're so glad you're here. ♛</p>
       <p style="margin-top:24px;">— The SiteQueen Team</p>
     `),
   },
 
-  // EMAIL 6 — Support Ticket Completed
+  // ═══════════════════════════════════════════
+  // SUPPORT TICKET EMAILS (16-21)
+  // ═══════════════════════════════════════════
+
+  // #16 — Ticket submitted confirmation
+  ticket_submitted: {
+    subject: "We received your request ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>We've received your support request and our team is on it. ♛</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
+        <p style="margin:0 0 8px;font-weight:bold;font-size:13px;color:#666;">Your request:</p>
+        <p style="margin:0;">"${(d.request_text || "").slice(0, 200)}"</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Type:</td><td style="padding:6px 0;font-weight:bold;">${d.change_type || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Credits:</td><td style="padding:6px 0;font-weight:bold;">${d.credits_cost || "Pending assessment"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Priority:</td><td style="padding:6px 0;font-weight:bold;">${d.priority === "urgent" ? "⚡ Urgent (4hr)" : "Normal (24-48hr)"}</td></tr>
+      </table>
+      <p>We'll get to work ${d.priority === "urgent" ? "within 4 hours" : "within 24-48 hours"}. You'll receive an email when it's done.</p>
+      ${purpleButton("View My Requests →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #17 — Ticket in progress
+  ticket_in_progress: {
+    subject: "We're working on your request ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Just a quick update — we've started working on your request. ♛</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
+        <p style="margin:0;">"${(d.request_text || "").slice(0, 200)}"</p>
+      </div>
+      <p>We'll notify you as soon as it's completed.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #18 — Ticket completed
   ticket_completed: {
     subject: "Your request has been completed ♛",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>Good news — your recent request has been completed. ♛</p>
       <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
         <p style="margin:0 0 8px;font-weight:bold;font-size:13px;color:#666;">What you asked for:</p>
@@ -228,11 +409,11 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     `),
   },
 
-  // EMAIL 7 — Support Ticket Declined
+  // #19 — Ticket declined
   ticket_declined: {
     subject: "About your recent request",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>We reviewed your recent request and unfortunately we're not able to complete it as submitted.</p>
       <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
         <p style="margin:0 0 8px;font-weight:bold;font-size:13px;color:#666;">What you asked for:</p>
@@ -244,17 +425,16 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
       </div>
       <p>Your <strong>${d.credits_cost || 0}</strong> credits have been fully refunded to your account.</p>
       <p>Your new balance: <strong>${d.current_balance || 0} credits</strong></p>
-      <p>If you'd like to submit a revised request or have questions, log into your dashboard.</p>
       ${darkButton("Go to Dashboard →", DASHBOARD_URL)}
       <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
 
-  // EMAIL 8 — Needs More Information
+  // #20 — Needs more information
   needs_more_info: {
     subject: "We need a little more information ♛",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>We're working on your recent request and just need a little more information before we can complete it.</p>
       <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
         <p style="margin:0 0 8px;font-weight:bold;font-size:13px;color:#666;">Your request:</p>
@@ -264,79 +444,185 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
         <p style="margin:0 0 8px;font-weight:bold;font-size:13px;color:#666;">What we need from you:</p>
         <p style="margin:0;">"${d.operator_note}"</p>
       </div>
-      <p>Please log into your dashboard to provide the additional details:</p>
-      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      ${purpleButton("Respond in Dashboard →", DASHBOARD_URL)}
       <p>No credits have been deducted while we wait for your response.</p>
       <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
 
-  // EMAIL 9a — Payment Failed (Immediate)
-  payment_failed_immediate: {
-    subject: "Payment issue with your SiteQueen subscription",
+  // #21 — Client responded to information request (operator notification)
+  client_responded_info: {
+    subject: (d: any) => `Client responded — ${d.business_name}`,
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
-      <p>We weren't able to process your payment for your SiteQueen subscription. ♛</p>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Client Response Received</h2>
+      <p><strong>${d.business_name}</strong> has responded to your information request.</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
+        <p style="margin:0 0 8px;font-weight:bold;font-size:13px;color:#666;">Their response:</p>
+        <p style="margin:0;">"${(d.response_text || "").slice(0, 300)}"</p>
+      </div>
+      ${d.has_attachments ? `<p>They also attached files — view them in the portal.</p>` : ""}
+      ${purpleButton("View in Portal →", `${OPERATOR_URL}/change-requests`)}
+    `),
+  },
+
+  // ═══════════════════════════════════════════
+  // CREDIT EMAILS (22-25)
+  // ═══════════════════════════════════════════
+
+  // #22 — Credits refreshed monthly
+  credits_refreshed: {
+    subject: "Your credits have been refreshed ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>It's a new month and your SiteQueen credits have been refreshed. ♛</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;text-align:center;">
+        <p style="margin:0 0 4px;font-size:13px;color:#666;">Your new balance</p>
+        <p style="margin:0;font-size:32px;font-weight:bold;color:${BRAND_PURPLE};">${d.new_balance || 0} credits</p>
+        <p style="margin:8px 0 0;font-size:13px;color:#666;">${d.monthly_allowance || 0} added this month</p>
+      </div>
+      <p>Use your credits to request website updates, content changes, photo swaps, and more.</p>
+      ${purpleButton("Submit a Request →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #23 — Low credits warning
+  low_credits_warning: {
+    subject: "You're running low on credits ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Just a heads up — you have <strong>${d.credits_balance || 0} credits</strong> remaining this month.</p>
+      <p>Need more? You've got two options:</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;">
+        <p style="margin:0 0 12px;">🛒 <strong>Buy a credit pack</strong> — instant credits added to your account.</p>
+        <p style="margin:0;">⬆️ <strong>Upgrade your plan</strong> — get more credits every month.</p>
+      </div>
+      ${purpleButton("Buy Credits →", DASHBOARD_URL)}
+      <p>Your credits refresh on the 1st of next month.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #24 — Credit purchase confirmation
+  credit_purchase_confirmation: {
+    subject: "Credits added to your account ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Your credit purchase is confirmed! ♛</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;text-align:center;">
+        <p style="margin:0 0 4px;font-size:13px;color:#666;">Credits added</p>
+        <p style="margin:0;font-size:28px;font-weight:bold;color:${BRAND_PURPLE};">+${d.credits_purchased || 0}</p>
+        ${divider}
+        <p style="margin:0 0 4px;font-size:13px;color:#666;">New balance</p>
+        <p style="margin:0;font-size:28px;font-weight:bold;color:${BRAND_PURPLE};">${d.new_balance || 0} credits</p>
+      </div>
+      <p>Ready to use them?</p>
+      ${purpleButton("Submit a Request →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #25 — Credit assessment confirmed
+  credit_assessment_confirmed: {
+    subject: "Your request has been assessed ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>We've assessed your recent support request and confirmed the credit cost. ♛</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
+        <p style="margin:0 0 8px;font-weight:bold;font-size:13px;color:#666;">Your request:</p>
+        <p style="margin:0;">"${(d.request_text || "").slice(0, 200)}"</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Credits assessed:</td><td style="padding:6px 0;font-weight:bold;">${d.credits_cost || 0}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Credits remaining:</td><td style="padding:6px 0;font-weight:bold;">${d.current_balance || 0}</td></tr>
+      </table>
+      <p>We've started working on it now and you'll be notified when it's done.</p>
+      ${purpleButton("View My Requests →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // ═══════════════════════════════════════════
+  // PAYMENT EMAILS (26-33)
+  // ═══════════════════════════════════════════
+
+  // #26 — Payment successful
+  payment_successful: {
+    subject: "Payment confirmed ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Your subscription payment has been processed successfully. ♛</p>
       <table style="width:100%;border-collapse:collapse;margin:16px 0;">
         <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;font-weight:bold;">${d.plan_name || "SiteQueen"}</td></tr>
         <tr><td style="padding:6px 0;color:#666;">Amount:</td><td style="padding:6px 0;font-weight:bold;">$${d.amount || "—"}</td></tr>
-        ${d.last4 ? `<tr><td style="padding:6px 0;color:#666;">Card on file:</td><td style="padding:6px 0;">ending in ${d.last4}</td></tr>` : ""}
+        <tr><td style="padding:6px 0;color:#666;">Next billing date:</td><td style="padding:6px 0;">${d.next_billing_date || "—"}</td></tr>
       </table>
-      <p>This happens sometimes — it could be an expired card, insufficient funds, or a temporary issue with your bank.</p>
+      <p>Your website is live and your credits are active. Thank you for being a SiteQueen client. ♛</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #27 — Payment failed immediate
+  payment_failed_immediate: {
+    subject: "Payment issue with your SiteQueen subscription",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>We weren't able to process your payment for your SiteQueen subscription.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;font-weight:bold;">${d.plan_name || "SiteQueen"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Amount:</td><td style="padding:6px 0;font-weight:bold;">$${d.amount || "—"}</td></tr>
+        ${d.last4 ? `<tr><td style="padding:6px 0;color:#666;">Card:</td><td style="padding:6px 0;">ending in ${d.last4}</td></tr>` : ""}
+      </table>
       <p>Please update your payment method within 7 days to keep your website live:</p>
       ${purpleButton("Update Payment Method →", d.payment_url || DASHBOARD_URL)}
       <p>Your website will remain live for the next 7 days while you sort this out.</p>
-      <p>If you have any questions reply to this email and we'll help you out.</p>
       <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
 
-  // EMAIL 9b — Payment Failed (Day 3)
+  // #28 — Payment failed Day 3
   payment_failed_day3: {
     subject: "Reminder — payment needed to keep your website live",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>Just a friendly reminder that we weren't able to process your payment 3 days ago.</p>
       <p><strong>Your website will go offline in 4 days if payment is not received.</strong></p>
-      <p>Update your payment method now:</p>
       ${purpleButton("Update Payment Method →", d.payment_url || DASHBOARD_URL)}
-      <p>Need help? Reply to this email — we're happy to assist.</p>
+      <p>Need help? Reply to this email.</p>
       <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
 
-  // EMAIL 9c — Payment Failed (Day 6)
+  // #29 — Payment failed Day 6
   payment_failed_day6: {
     subject: "Final notice — your website goes offline tomorrow",
     html: (d) => emailWrapper(`
-      <h2 style="color:#dc2626;margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:#dc2626;margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p><strong>This is a final notice that your SiteQueen website will go offline tomorrow if payment is not received.</strong></p>
-      <p>Update your payment method now to avoid any interruption:</p>
       ${purpleButton("Update Payment Method Now →", d.payment_url || DASHBOARD_URL)}
-      <p>If you're experiencing financial difficulty please reply to this email — we may be able to work something out.</p>
+      <p>If you're experiencing difficulty please reply to this email — we may be able to work something out.</p>
       <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
 
-  // EMAIL 9d — Account Suspended
+  // #30 — Site suspended
   account_suspended: {
     subject: "Your SiteQueen website has been suspended",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>Your SiteQueen website has been suspended due to non-payment.</p>
       <p>Your website and all your data are safely stored and can be restored immediately when payment is received.</p>
-      <p>Restore your website now:</p>
       ${purpleButton("Update Payment Method →", d.payment_url || DASHBOARD_URL)}
       <p>Questions? Reply to this email.</p>
       <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
 
-  // EMAIL 9e — Payment Restored
+  // #31 — Payment received after failure
   payment_restored: {
     subject: "Your website is back live ♛",
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${d.first_name || d.name || "there"},</h2>
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
       <p>Your payment has been received and your website is back live. ♛</p>
       <p>Thank you for sorting that out — we're glad to have you back.</p>
       ${purpleButton("Visit Your Website →", d.site_url || "#")}
@@ -344,32 +630,437 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     `),
   },
 
-  // Operator notification — Payment Failed Day 6
+  // #32 — Plan upgrade confirmation
+  plan_upgrade: {
+    subject: "Welcome to your new plan ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>You've been upgraded to the <strong>${d.new_plan || "Growth"}</strong> plan! ♛</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;text-align:center;">
+        <p style="margin:0 0 4px;font-size:13px;color:#666;">Your new monthly credits</p>
+        <p style="margin:0;font-size:32px;font-weight:bold;color:${BRAND_PURPLE};">${d.new_monthly_credits || 30}</p>
+        <p style="margin:8px 0 0;font-size:13px;color:#666;">Rollover cap: ${d.new_rollover_cap || 60}</p>
+      </div>
+      <p>Your new credit allowance starts on the 1st of next month. Enjoy the extra power. ♛</p>
+      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #33 — Plan downgrade confirmation
+  plan_downgrade: {
+    subject: "Plan change confirmed",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Your plan change has been confirmed. You'll be switching to the <strong>${d.new_plan || "Starter"}</strong> plan at the end of your current billing cycle.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Current plan:</td><td style="padding:6px 0;font-weight:bold;">${d.current_plan || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">New plan:</td><td style="padding:6px 0;font-weight:bold;">${d.new_plan || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Effective date:</td><td style="padding:6px 0;">${d.effective_date || "Next billing cycle"}</td></tr>
+      </table>
+      <p>Your current plan benefits remain active until the switch date.</p>
+      <p>Changed your mind? You can cancel the downgrade anytime from your dashboard.</p>
+      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // ═══════════════════════════════════════════
+  // CANCELLATION & RETENTION (34-37)
+  // ═══════════════════════════════════════════
+
+  // #34 — Pause confirmation
+  pause_confirmation: {
+    subject: "Your account has been paused ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Your SiteQueen account has been paused. ♛</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;">
+        <p style="margin:0 0 8px;">✅ Your website stays live during the pause</p>
+        <p style="margin:0 0 8px;">⏸️ No charges during the pause period</p>
+        <p style="margin:0 0 8px;">📅 Pause ends: <strong>${d.pause_ends_at || "—"}</strong></p>
+        <p style="margin:0;">🔄 Your subscription resumes automatically</p>
+      </div>
+      <p>Want to unpause early? Log in anytime.</p>
+      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p>See you when you're back. ♛</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #35 — Pause ending reminder
+  pause_ending_reminder: {
+    subject: "Your pause ends soon ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Just a heads up — your SiteQueen pause ends on <strong>${d.pause_ends_at || "—"}</strong>.</p>
+      <p>When your pause ends:</p>
+      <ul style="line-height:2;">
+        <li>Your subscription will resume automatically</li>
+        <li>Your credits will refresh</li>
+        <li>You'll be able to submit change requests again</li>
+      </ul>
+      <p>We're excited to have you back. ♛</p>
+      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #36 — Cancellation confirmation
+  cancellation_confirmation: {
+    subject: "Cancellation confirmed — we're sad to see you go",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Your SiteQueen cancellation has been confirmed.</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;">
+        <p style="margin:0 0 8px;">📅 Your site stays live until <strong>${d.end_date || "end of billing period"}</strong></p>
+        <p style="margin:0 0 8px;">💾 Your data and website files are kept for 30 days</p>
+        <p style="margin:0;">🔄 You can reactivate anytime within 30 days</p>
+      </div>
+      <p>We'd love to know what we could have done better. Reply to this email with any feedback — it means the world to us.</p>
+      <p>The door is always open if you want to come back. ♛</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #37 — Win-back email (30 days after cancellation)
+  win_back: {
+    subject: "We miss you ♛ — come back to SiteQueen",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>It's been a month since you left SiteQueen and we miss working with you.</p>
+      <p>A lot has improved since you left and we'd love to welcome you back with a special offer:</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;text-align:center;">
+        <p style="margin:0 0 4px;font-size:18px;font-weight:bold;color:${BRAND_PURPLE};">🎁 20 bonus credits</p>
+        <p style="margin:0;font-size:13px;color:#666;">when you reactivate your account this week</p>
+      </div>
+      <p>Your website files are still saved and can be restored instantly.</p>
+      ${purpleButton("Reactivate My Account →", DASHBOARD_URL)}
+      <p style="font-size:13px;color:#666;">This offer expires in 7 days.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // ═══════════════════════════════════════════
+  // REFERRAL (38)
+  // ═══════════════════════════════════════════
+
+  // #38 — Referral reward earned
+  referral_reward: {
+    subject: "You earned 20 credits ♛ — your referral went live!",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Amazing news — your friend <strong>${d.referred_business || "a business you referred"}</strong> just went live with SiteQueen! ♛</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;text-align:center;">
+        <p style="margin:0 0 4px;font-size:13px;color:#666;">Credits earned</p>
+        <p style="margin:0;font-size:32px;font-weight:bold;color:${BRAND_PURPLE};">+20</p>
+        <p style="margin:8px 0 0;font-size:13px;color:#666;">New balance: ${d.new_balance || 0} credits</p>
+      </div>
+      <p>Keep referring — every friend that goes live earns you 20 more credits. ♛</p>
+      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // ═══════════════════════════════════════════
+  // MILESTONE EMAILS (39-42)
+  // ═══════════════════════════════════════════
+
+  // #39 — Anniversary email (12 months)
+  anniversary: {
+    subject: "Happy anniversary ♛ — you've earned 20 bonus credits!",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Can you believe it's been a year since you joined SiteQueen? ♛</p>
+      <p>Thank you for being an incredible client. Working with <strong>${d.business_name || "your business"}</strong> has been a genuine pleasure.</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;text-align:center;">
+        <p style="margin:0 0 4px;font-size:18px;font-weight:bold;color:${BRAND_PURPLE};">🎉 20 bonus credits</p>
+        <p style="margin:0;font-size:13px;color:#666;">added to your account — on us!</p>
+      </div>
+      <p>Here's to another amazing year together. ♛</p>
+      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #40 — NPS survey (30 days after live)
+  nps_survey: {
+    subject: "Quick question — how are we doing? ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Your website has been live for 30 days! How's everything going?</p>
+      <p>We'd love your honest feedback. On a scale of 0 to 10:</p>
+      <p style="text-align:center;font-size:18px;font-weight:bold;color:${BRAND_PURPLE};">How likely are you to recommend SiteQueen to a friend?</p>
+      <div style="text-align:center;margin:20px 0;">
+        ${[0,1,2,3,4,5,6,7,8,9,10].map(n => `<a href="${DASHBOARD_URL}?nps=${n}" style="display:inline-block;width:32px;height:32px;line-height:32px;text-align:center;margin:2px;border-radius:6px;background:${n <= 6 ? '#fecaca' : n <= 8 ? '#fef3c7' : '#bbf7d0'};color:#333;text-decoration:none;font-weight:bold;font-size:13px;">${n}</a>`).join("")}
+      </div>
+      <p style="text-align:center;font-size:12px;color:#666;">0 = Not at all &nbsp;&nbsp;|&nbsp;&nbsp; 10 = Absolutely!</p>
+      <p>Your feedback helps us improve for everyone. Thank you! ♛</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #41 — Testimonial request (33 days after live)
+  testimonial_request: {
+    subject: "Would you share your SiteQueen experience? ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Your website has been live for over a month and we hope you're loving it! ♛</p>
+      <p>Would you mind sharing a quick testimonial about your experience? It helps other small business owners find us.</p>
+      <p>Just reply to this email with:</p>
+      <ul style="line-height:2;">
+        <li>A few sentences about your SiteQueen experience</li>
+        <li>A star rating (1-5)</li>
+        <li>Whether we can use your business name</li>
+      </ul>
+      <p>We'd be so grateful. ♛</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #42 — Monthly maintenance complete
+  monthly_maintenance: {
+    subject: "Monthly site check complete ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Your monthly website maintenance check is complete. ♛</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:20px;margin:16px 0;">
+        <p style="margin:0 0 8px;">✅ Site is running perfectly</p>
+        <p style="margin:0 0 8px;">✅ All pages loading correctly</p>
+        <p style="margin:0 0 8px;">✅ Contact forms working</p>
+        <p style="margin:0;">✅ Mobile responsive and fast</p>
+      </div>
+      <p>Your website for <strong>${d.business_name || "your business"}</strong> is in great shape. No action needed from you.</p>
+      <p>Need any updates? Submit a request from your dashboard anytime.</p>
+      ${purpleButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // ═══════════════════════════════════════════
+  // INTAKE REMINDERS (43-45)
+  // ═══════════════════════════════════════════
+
+  // #43 — Intake reminder 24 hours
+  intake_reminder_24h: {
+    subject: "Don't forget your website brief ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Just a friendly nudge — your website brief is waiting for you! ♛</p>
+      <p>The sooner you complete it the sooner we can start building your site. It only takes about 10 minutes.</p>
+      ${purpleButton("Complete My Brief →", DASHBOARD_URL)}
+      <p>Need help? Reply to this email and we'll walk you through it.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #44 — Intake reminder 3 days
+  intake_reminder_3d: {
+    subject: "Your website is waiting ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>We noticed you haven't completed your website brief yet for <strong>${d.business_name || "your business"}</strong>.</p>
+      <p>We're ready to start building as soon as you give us the details. Most clients finish it in under 10 minutes.</p>
+      <p>Here's a quick tip: you don't need to have everything perfect — fill in what you can and we'll work with you on the rest.</p>
+      ${purpleButton("Complete My Brief →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // #45 — Intake reminder 7 days
+  intake_reminder_7d: {
+    subject: "We're still here for you ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>It's been a week since you set up your SiteQueen account and your website brief is still waiting.</p>
+      <p>We don't want you to miss out on your new website. Is there anything holding you back? Common concerns:</p>
+      <ul style="line-height:2;">
+        <li>💬 <strong>"I don't know what to write"</strong> — just give us the basics, we'll handle the rest</li>
+        <li>📸 <strong>"I don't have photos"</strong> — we can use professional stock photos</li>
+        <li>🎨 <strong>"I'm not sure about my brand"</strong> — we'll guide you through it</li>
+      </ul>
+      ${purpleButton("Complete My Brief →", DASHBOARD_URL)}
+      <p>Or simply reply to this email and we'll help you get started. ♛</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
+
+  // ═══════════════════════════════════════════
+  // OPERATOR NOTIFICATIONS (46-55)
+  // ═══════════════════════════════════════════
+
+  // #46 — New application submitted (to operator)
+  operator_new_application: {
+    subject: (d: any) => `New application — ${d.business_name} (${d.temperature})`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">New Application Received</h2>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Business:</td><td style="padding:6px 0;font-weight:bold;">${d.business_name}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Type:</td><td style="padding:6px 0;">${d.business_type}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Score:</td><td style="padding:6px 0;font-weight:bold;">${d.score}/24</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Temperature:</td><td style="padding:6px 0;font-weight:bold;color:${d.temperature === "HOT" ? "#dc2626" : d.temperature === "WARM" ? "#ea580c" : "#666"};">${d.temperature}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Plan interest:</td><td style="padding:6px 0;">${d.plan_interest || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Name:</td><td style="padding:6px 0;">${d.applicant_name}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Email:</td><td style="padding:6px 0;">${d.applicant_email}</td></tr>
+      </table>
+      ${purpleButton("Review Application →", `${OPERATOR_URL}/applications`)}
+    `),
+  },
+
+  // #47 — New HOT lead alert (to operator)
+  operator_hot_lead: {
+    subject: (d: any) => `🔥 HOT LEAD — ${d.business_name} — Review Now!`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:#dc2626;margin:0 0 16px;">🔥 HOT Lead Alert</h2>
+      <p>A high-scoring application just came in. Review it immediately.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Business:</td><td style="padding:6px 0;font-weight:bold;">${d.business_name}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Score:</td><td style="padding:6px 0;font-weight:bold;color:#dc2626;">${d.score}/24</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;">${d.plan_interest || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Contact:</td><td style="padding:6px 0;">${d.applicant_name} — ${d.applicant_email}</td></tr>
+        ${d.phone ? `<tr><td style="padding:6px 0;color:#666;">Phone:</td><td style="padding:6px 0;font-weight:bold;">${d.phone}</td></tr>` : ""}
+      </table>
+      ${purpleButton("Review Now →", `${OPERATOR_URL}/applications`)}
+    `),
+  },
+
+  // #48 — Pre-launch feedback received (to operator)
+  prelaunch_feedback_operator: {
+    subject: (d: any) => `Pre-launch feedback received — ${d.business_name}`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Pre-launch Feedback</h2>
+      <p><strong>${d.business_name}</strong> has reviewed their staging site and left feedback.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Client:</td><td style="padding:6px 0;font-weight:bold;">${d.client_name}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;">${d.plan}</td></tr>
+      </table>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
+        <p style="margin:0 0 4px;font-weight:bold;font-size:13px;color:#666;">Their feedback:</p>
+        <p style="margin:0;">"${d.feedback_text}"</p>
+      </div>
+      ${d.attachment_count ? `<p>They attached ${d.attachment_count} file(s).</p>` : ""}
+      ${purpleButton("View in Portal →", `${OPERATOR_URL}/change-requests`)}
+    `),
+  },
+
+  // #49 — Payment failed operator alert
+  operator_payment_failed: {
+    subject: (d: any) => `Payment failed — ${d.business_name}`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Payment Failed</h2>
+      <p>A client's payment has failed.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Client:</td><td style="padding:6px 0;font-weight:bold;">${d.business_name}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;">${d.plan || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Amount:</td><td style="padding:6px 0;">$${d.amount || "—"}</td></tr>
+        ${d.phone_number ? `<tr><td style="padding:6px 0;color:#666;">Phone:</td><td style="padding:6px 0;font-weight:bold;">${d.phone_number}</td></tr>` : ""}
+      </table>
+      <p>Grace period started. Client has 7 days to update payment.</p>
+      ${purpleButton("View Client →", `${OPERATOR_URL}/clients`)}
+    `),
+  },
+
+  // #50 — Day 6 payment urgent alert (to operator)
   payment_failed_operator_urgent: {
     subject: (d: any) => `URGENT — ${d.business_name} website suspending tomorrow`,
     html: (d) => emailWrapper(`
       <h2 style="color:#dc2626;margin:0 0 16px;">⚠️ Urgent: Website Suspension Tomorrow</h2>
       <p><strong>${d.business_name}</strong>'s website will be suspended tomorrow due to non-payment.</p>
       <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-        <tr><td style="padding:6px 0;color:#666;">Client since:</td><td style="padding:6px 0;">${d.join_date || "—"}</td></tr>
         <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;">${d.plan || "—"}</td></tr>
         ${d.phone_number ? `<tr><td style="padding:6px 0;color:#666;">Phone:</td><td style="padding:6px 0;font-weight:bold;">${d.phone_number}</td></tr>` : ""}
       </table>
       <p>Consider calling them to resolve this.</p>
+      ${purpleButton("View Client →", `${OPERATOR_URL}/clients`)}
     `),
   },
 
-  // Legacy templates (keep backward compat)
-  application_received: {
-    subject: "We received your application! — SiteQueen",
+  // #51 — Site suspended operator alert
+  operator_site_suspended: {
+    subject: (d: any) => `Site suspended — ${d.business_name}`,
     html: (d) => emailWrapper(`
-      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Thanks for applying, ${d.name || "there"}!</h2>
-      <p>We've received your application for <strong>${d.business_name}</strong> and our team is reviewing it.</p>
-      <p>We'll be in touch within 24-48 hours with next steps.</p>
-      <p style="margin-top:24px;">— The SiteQueen Team</p>
+      <h2 style="color:#dc2626;margin:0 0 16px;">Site Suspended</h2>
+      <p><strong>${d.business_name}</strong>'s website has been suspended due to non-payment.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;">${d.plan || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Days overdue:</td><td style="padding:6px 0;font-weight:bold;">${d.days_overdue || "7+"}</td></tr>
+        ${d.phone_number ? `<tr><td style="padding:6px 0;color:#666;">Phone:</td><td style="padding:6px 0;font-weight:bold;">${d.phone_number}</td></tr>` : ""}
+      </table>
+      ${purpleButton("View Client →", `${OPERATOR_URL}/clients`)}
     `),
   },
 
+  // #52 — NPS detractor alert (to operator)
+  operator_nps_detractor: {
+    subject: (d: any) => `⚠️ NPS Detractor — ${d.business_name} scored ${d.nps_score}`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:#dc2626;margin:0 0 16px;">⚠️ NPS Detractor Alert</h2>
+      <p>A client scored your service poorly. Immediate attention needed.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Client:</td><td style="padding:6px 0;font-weight:bold;">${d.business_name}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">NPS Score:</td><td style="padding:6px 0;font-weight:bold;color:#dc2626;">${d.nps_score}/10</td></tr>
+        ${d.phone_number ? `<tr><td style="padding:6px 0;color:#666;">Phone:</td><td style="padding:6px 0;font-weight:bold;">${d.phone_number}</td></tr>` : ""}
+      </table>
+      ${d.feedback ? `
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
+        <p style="margin:0 0 4px;font-weight:bold;font-size:13px;color:#666;">Their feedback:</p>
+        <p style="margin:0;">"${d.feedback}"</p>
+      </div>` : ""}
+      <p><strong>Consider calling them immediately.</strong></p>
+      ${purpleButton("View Client →", `${OPERATOR_URL}/clients`)}
+    `),
+  },
+
+  // #53 — New testimonial submitted (to operator)
+  operator_new_testimonial: {
+    subject: (d: any) => `New testimonial — ${d.business_name} (${d.star_rating}★)`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">New Testimonial Received</h2>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Client:</td><td style="padding:6px 0;font-weight:bold;">${d.business_name}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Rating:</td><td style="padding:6px 0;font-weight:bold;">${"⭐".repeat(d.star_rating || 5)}</td></tr>
+      </table>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:16px 0;">
+        <p style="margin:0;font-style:italic;">"${d.testimonial_text || ""}"</p>
+      </div>
+      ${purpleButton("Review in Portal →", `${OPERATOR_URL}/clients`)}
+    `),
+  },
+
+  // #54 — Cancellation operator alert
+  operator_cancellation: {
+    subject: (d: any) => `Client cancelling — ${d.business_name}`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:#dc2626;margin:0 0 16px;">Client Cancellation</h2>
+      <p><strong>${d.business_name}</strong> is cancelling their subscription.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;">${d.plan || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Reason:</td><td style="padding:6px 0;font-weight:bold;">${d.cancel_reason || "Not provided"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Total revenue:</td><td style="padding:6px 0;">$${d.total_revenue || "—"}</td></tr>
+        ${d.phone_number ? `<tr><td style="padding:6px 0;color:#666;">Phone:</td><td style="padding:6px 0;font-weight:bold;">${d.phone_number}</td></tr>` : ""}
+      </table>
+      ${purpleButton("View Client →", `${OPERATOR_URL}/clients`)}
+    `),
+  },
+
+  // #55 — Incomplete intake 14 days (to operator)
+  operator_incomplete_intake: {
+    subject: (d: any) => `Incomplete intake — ${d.business_name} (14 days)`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Incomplete Intake Alert</h2>
+      <p><strong>${d.business_name}</strong> has not completed their website brief in 14 days. Consider personal outreach.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:6px 0;color:#666;">Client since:</td><td style="padding:6px 0;">${d.join_date || "—"}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Plan:</td><td style="padding:6px 0;">${d.plan || "—"}</td></tr>
+        ${d.phone_number ? `<tr><td style="padding:6px 0;color:#666;">Phone:</td><td style="padding:6px 0;font-weight:bold;">${d.phone_number}</td></tr>` : ""}
+      </table>
+      ${purpleButton("View Client →", `${OPERATOR_URL}/clients`)}
+    `),
+  },
+
+  // ═══════════════════════════════════════════
+  // LEGACY (backward compat)
+  // ═══════════════════════════════════════════
   application_rejected: {
     subject: "Update on your application — SiteQueen",
     html: (d) => emailWrapper(`
@@ -385,7 +1076,7 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     html: (d) => emailWrapper(`
       <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Got it!</h2>
       <p>We've received your change request for <strong>${d.business_name}</strong>.</p>
-      <p>Our team will process it shortly. Simple changes are usually done within 24 hours.</p>
+      <p>Our team will process it shortly.</p>
       <p style="margin-top:24px;">— The SiteQueen Team</p>
     `),
   },
@@ -395,7 +1086,7 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     html: (d) => emailWrapper(`
       <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">All done!</h2>
       <p>The changes you requested for <strong>${d.business_name}</strong> are now live.</p>
-      ${d.site_url ? `<p><a href="${d.site_url}" style="color:${BRAND_PURPLE};">View your site</a></p>` : "<p>Check your site to see the updates.</p>"}
+      ${d.site_url ? `<p><a href="${d.site_url}" style="color:${BRAND_PURPLE};">View your site</a></p>` : ""}
       <p style="margin-top:24px;">— The SiteQueen Team</p>
     `),
   },
@@ -499,9 +1190,16 @@ serve(async (req) => {
 
     if (!response.ok) {
       console.error("Resend error:", result);
+      // Create operator notification for failed email
+      await supabase.from("notifications").insert({
+        type: "email_failed",
+        message: `Email "${template}" failed to send to ${to}: ${result?.message || "Unknown error"}`,
+        target_role: "operator",
+      });
+
       if (result?.statusCode === 403 && result?.message?.includes("testing emails")) {
         console.warn("Resend sandbox mode: email not delivered to", to);
-        return new Response(JSON.stringify({ success: true, sandbox: true, warning: "Resend sandbox mode - email logged but not delivered. Verify a domain at resend.com/domains to send to all recipients." }), {
+        return new Response(JSON.stringify({ success: true, sandbox: true, warning: "Resend sandbox mode" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
