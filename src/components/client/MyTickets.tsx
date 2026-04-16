@@ -58,13 +58,28 @@ export function MyTickets({ changeRequests, clientId }: MyTicketsProps) {
         status: "in_progress",
       } as any).eq("id", crId);
 
-      // Notify operator
+      // Notify operator via notification + email
       await supabase.from("notifications").insert({
         type: "client_responded_info",
         client_id: clientId,
         message: `Client responded to info request`,
         target_role: "operator",
       } as any);
+
+      // Send operator email
+      const { data: clientRec } = await supabase.from("clients").select("business_name").eq("id", clientId).single();
+      supabase.functions.invoke("send-email", {
+        body: {
+          to: "hello@sitequeen.ai",
+          template: "client_responded_info",
+          data: {
+            business_name: clientRec?.business_name || "Unknown",
+            response_text: replyText,
+            has_attachments: !!replyAttachmentUrl,
+          },
+          clientId,
+        },
+      }).catch(console.error);
 
       toast.success("Response sent! Our team will continue working on your request.");
       setReplyText("");

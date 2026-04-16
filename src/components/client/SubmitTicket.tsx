@@ -142,20 +142,32 @@ export function SubmitTicket({ clientId, userId, creditsBalance, onBuyCredits, o
         } as any);
       }
 
-      // Send ticket submitted confirmation email
-      supabase.functions.invoke("send-email", {
-        body: {
-          to: "", // will be resolved by the edge function via client lookup
-          template: "ticket_submitted",
-          data: {
-            request_text: description,
-            change_type: selectedType.name,
-            credits_cost: isCustom ? null : costToDeduct,
-            priority: isUrgent ? "urgent" : "normal",
-          },
-          clientId,
-        },
-      }).catch(console.error);
+      // Send ticket submitted confirmation email — look up client email first
+      (async () => {
+        try {
+          const { data: clientRec } = await supabase.from("clients").select("user_id").eq("id", clientId).single();
+          if (clientRec?.user_id) {
+            const { data: profile } = await supabase.from("profiles").select("email, full_name").eq("user_id", clientRec.user_id).maybeSingle();
+            if (profile?.email) {
+              await supabase.functions.invoke("send-email", {
+                body: {
+                  to: profile.email,
+                  template: "ticket_submitted",
+                  data: {
+                    name: profile.full_name,
+                    first_name: (profile.full_name || "").split(" ")[0],
+                    request_text: description,
+                    change_type: selectedType.name,
+                    credits_cost: isCustom ? null : costToDeduct,
+                    priority: isUrgent ? "urgent" : "normal",
+                  },
+                  clientId,
+                },
+              });
+            }
+          }
+        } catch (e) { console.error("ticket email error:", e); }
+      })();
 
       setTicketRef(ref);
       setStep(3);

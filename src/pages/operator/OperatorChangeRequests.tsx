@@ -158,6 +158,25 @@ export default function OperatorChangeRequests() {
   const handleStatusChange = async (crId: string, newStatus: string) => {
     await supabase.from("change_requests").update({ status: newStatus, ...(newStatus === "in_progress" || newStatus === "in_review" ? { assigned_to: user!.id } : {}) } as any).eq("id", crId);
     await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Changed request status to ${newStatus}`, target_table: "change_requests", target_id: crId });
+
+    // Send ticket_in_progress email when moving to in_progress
+    if (newStatus === "in_progress" || newStatus === "in_review") {
+      const cr = requests.find(r => r.id === crId);
+      if (cr?.clients?.user_id) {
+        const { data: profile } = await supabase.from("profiles").select("email, full_name").eq("user_id", (cr.clients as any).user_id).maybeSingle();
+        if (profile?.email) {
+          supabase.functions.invoke("send-email", {
+            body: {
+              to: profile.email,
+              template: "ticket_in_progress",
+              data: { name: profile.full_name, first_name: (profile.full_name || "").split(" ")[0], request_text: cr.request_text.slice(0, 200) },
+              clientId: cr.client_id,
+            },
+          }).catch(console.error);
+        }
+      }
+    }
+
     queryClient.invalidateQueries({ queryKey: ["operator-change-requests"] });
     toast.success(`Status updated to ${newStatus.replace("_", " ")}`);
     refreshSelected(crId);
@@ -289,6 +308,22 @@ export default function OperatorChangeRequests() {
     await supabase.from("change_requests").update({ credits_cost: cost, assessed_by_operator: true, status: "in_review", admin_notes: assessNote || null } as any).eq("id", selected.id);
     await supabase.from("credits_transactions").insert({ client_id: selected.client_id, transaction_type: "ticket_spent", credits_amount: -cost, credits_balance_after: newBalance, description: `Assessed: ${selected.change_type || "Custom request"} — ${cost} credits`, change_request_id: selected.id } as any);
     await supabase.from("audit_log").insert({ user_id: user!.id, user_email: user!.email, action: `Assessed change request at ${cost} credits`, target_table: "change_requests", target_id: selected.id });
+
+    // Send credit_assessment_confirmed email
+    if (selected.clients) {
+      const { data: profile } = await supabase.from("profiles").select("email, full_name").eq("user_id", (selected.clients as any).user_id).maybeSingle();
+      if (profile?.email) {
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: profile.email,
+            template: "credit_assessment_confirmed",
+            data: { name: profile.full_name, first_name: (profile.full_name || "").split(" ")[0], request_text: selected.request_text.slice(0, 200), credits_cost: cost, current_balance: newBalance },
+            clientId: selected.client_id,
+          },
+        }).catch(console.error);
+      }
+    }
+
     queryClient.invalidateQueries({ queryKey: ["operator-change-requests"] });
     toast.success(`Assessed at ${cost} credits. Client charged.`);
     refreshSelected(selected.id);
