@@ -113,10 +113,13 @@ export type Database = {
           accepts_commitment: string | null
           additional_notes: string | null
           ai_score: number | null
+          anything_else: string | null
           approval_note: string | null
           approved_by: string | null
           bot_risk: boolean | null
           brand_vibe: string | null
+          business_facebook: string | null
+          business_instagram: string | null
           business_name: string
           business_type: string
           call_notes_completed: boolean | null
@@ -132,37 +135,46 @@ export type Database = {
           deleted_at: string | null
           deleted_by: string | null
           email: string
+          google_search_terms: string | null
           has_logo: string | null
-          has_website: string
+          has_website: string | null
           id: string
+          ideal_customer: string | null
           industry: string | null
           inspiration_urls: string | null
           is_decision_maker: boolean
           lead_temperature: string | null
+          logo_addon_requested: boolean | null
           logo_file_url: string | null
           logo_url: string | null
-          monthly_clients: string
+          monthly_clients: string | null
           monthly_revenue: string | null
           name: string
           notes: string | null
           phone: string | null
           plan_interest: string | null
+          readiness: string | null
           recaptcha_score: number | null
+          referral_source: string | null
           restricted_niches: string | null
           state_province: string | null
           status: string | null
+          support_level: string | null
           update_frequency: string | null
           website_goal: string | null
-          years_in_business: string
+          years_in_business: string | null
         }
         Insert: {
           accepts_commitment?: string | null
           additional_notes?: string | null
           ai_score?: number | null
+          anything_else?: string | null
           approval_note?: string | null
           approved_by?: string | null
           bot_risk?: boolean | null
           brand_vibe?: string | null
+          business_facebook?: string | null
+          business_instagram?: string | null
           business_name: string
           business_type: string
           call_notes_completed?: boolean | null
@@ -178,37 +190,46 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           email: string
+          google_search_terms?: string | null
           has_logo?: string | null
-          has_website: string
+          has_website?: string | null
           id?: string
+          ideal_customer?: string | null
           industry?: string | null
           inspiration_urls?: string | null
           is_decision_maker?: boolean
           lead_temperature?: string | null
+          logo_addon_requested?: boolean | null
           logo_file_url?: string | null
           logo_url?: string | null
-          monthly_clients: string
+          monthly_clients?: string | null
           monthly_revenue?: string | null
           name: string
           notes?: string | null
           phone?: string | null
           plan_interest?: string | null
+          readiness?: string | null
           recaptcha_score?: number | null
+          referral_source?: string | null
           restricted_niches?: string | null
           state_province?: string | null
           status?: string | null
+          support_level?: string | null
           update_frequency?: string | null
           website_goal?: string | null
-          years_in_business: string
+          years_in_business?: string | null
         }
         Update: {
           accepts_commitment?: string | null
           additional_notes?: string | null
           ai_score?: number | null
+          anything_else?: string | null
           approval_note?: string | null
           approved_by?: string | null
           bot_risk?: boolean | null
           brand_vibe?: string | null
+          business_facebook?: string | null
+          business_instagram?: string | null
           business_name?: string
           business_type?: string
           call_notes_completed?: boolean | null
@@ -224,28 +245,34 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           email?: string
+          google_search_terms?: string | null
           has_logo?: string | null
-          has_website?: string
+          has_website?: string | null
           id?: string
+          ideal_customer?: string | null
           industry?: string | null
           inspiration_urls?: string | null
           is_decision_maker?: boolean
           lead_temperature?: string | null
+          logo_addon_requested?: boolean | null
           logo_file_url?: string | null
           logo_url?: string | null
-          monthly_clients?: string
+          monthly_clients?: string | null
           monthly_revenue?: string | null
           name?: string
           notes?: string | null
           phone?: string | null
           plan_interest?: string | null
+          readiness?: string | null
           recaptcha_score?: number | null
+          referral_source?: string | null
           restricted_niches?: string | null
           state_province?: string | null
           status?: string | null
+          support_level?: string | null
           update_frequency?: string | null
           website_goal?: string | null
-          years_in_business?: string
+          years_in_business?: string | null
         }
         Relationships: []
       }
