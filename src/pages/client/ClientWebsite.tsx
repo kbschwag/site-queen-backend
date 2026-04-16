@@ -11,8 +11,9 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-  Crown, ArrowRight, Sparkles, Loader2, CheckCircle2, Send, ExternalLink, Share2, Copy, Eye,
+  Crown, ArrowRight, Sparkles, Loader2, CheckCircle2, Send, ExternalLink, Share2, Copy, Eye, ImageIcon,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { IntakeForm } from "@/components/intake/IntakeForm";
 import type { IntakeData } from "@/components/intake/types";
 import { SitePreviewFrame } from "@/components/operator/SitePreviewFrame";

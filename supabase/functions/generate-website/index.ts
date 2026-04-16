@@ -231,6 +231,7 @@ You have two sources of information:
 SOURCE 1 — CLIENT INTAKE FORM (what the client told us directly):
 ${JSON.stringify(intakeData, null, 2)}
 ${callNotesSection}
+${photoSection}
 
 Here is the HTML template with placeholders in double curly braces:
 ${templateHTML}
@@ -263,6 +264,7 @@ ${JSON.stringify(intakeData, null, 2)}
 Business name: ${clientData?.business_name || "Business"}
 Business type: ${clientData?.business_type || "Service Business"}
 ${callNotesSection}
+${photoSection}
 
 Your instructions:
 1. Create a complete, production-ready single-page website with HTML and CSS
