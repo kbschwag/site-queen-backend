@@ -14,9 +14,10 @@ import { useIntakeForm } from "@/hooks/useIntakeForm";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Crown, Loader2, Send } from "lucide-react";
+import { ArrowLeft, ArrowRight, Crown, Loader2 } from "lucide-react";
 import { TOTAL_STEPS } from "./types";
 import type { IntakeData } from "./types";
+import { countIntakePhotos } from "@/lib/photo-utils";
 
 interface Props {
   clientId: string;
@@ -27,9 +28,10 @@ interface Props {
 }
 
 export function IntakeForm({ clientId, userId, plan, businessName, onComplete }: Props) {
-  const { intakeData, currentStep, setStep, debouncedSave, saving, lastSaved, immediateSave } = useIntakeFormHook(clientId);
+  const { intakeData, currentStep, setStep, debouncedSave, saving, lastSaved } = useIntakeFormHook(clientId);
   const { uploadFile, uploadMultiple, uploading } = useFileUpload(userId);
   const [submitting, setSubmitting] = useState(false);
+  const [rightsError, setRightsError] = useState(false);
 
   const handleChange = useCallback(
     (updates: Partial<IntakeData>) => {
@@ -54,6 +56,23 @@ export function IntakeForm({ clientId, userId, plan, businessName, onComplete }:
   };
 
   const goNext = () => {
+    // Step 5 → 6: enforce photo-rights checkbox if photos were uploaded
+    if (currentStep === 5) {
+      const photoCount = countIntakePhotos(intakeData);
+      if (photoCount > 0 && !intakeData.photo_rights_confirmed) {
+        setRightsError(true);
+        // scroll to the rights box for visibility
+        setTimeout(() => {
+          document.getElementById("photo-rights-confirm")?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }, 50);
+        return;
+      }
+    }
+    setRightsError(false);
+
     if (currentStep < TOTAL_STEPS) {
       const completed = markStepComplete(currentStep);
       debouncedSave({ ...intakeData, current_step: currentStep + 1, completed_steps: completed });
@@ -63,22 +82,44 @@ export function IntakeForm({ clientId, userId, plan, businessName, onComplete }:
   };
 
   const goPrev = () => {
+    setRightsError(false);
     if (currentStep > 1) {
       setStep(currentStep - 1);
       scrollToTop();
     }
   };
 
+  const jumpToPhotos = () => {
+    setStep(5);
+    scrollToTop();
+  };
+
+  const acceptStockPhotos = () => {
+    handleChange({ use_stock_photos: true });
+    toast.message("Got it — we'll use professional stock photos for your build.");
+  };
+
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
       const completed = markStepComplete(currentStep);
+      const photoCount = countIntakePhotos(intakeData);
+      const photosProvided = photoCount > 0;
+      const usingStock = !photosProvided || !!intakeData.use_stock_photos;
+
       const finalData = { ...intakeData, completed_steps: completed, current_step: TOTAL_STEPS };
 
-      // Save final data
+      // Save final data + photo flags
       await supabase
         .from("sites")
-        .update({ intake_data: finalData as any, last_updated: new Date().toISOString() })
+        .update({
+          intake_data: finalData as any,
+          last_updated: new Date().toISOString(),
+          photos_provided: photosProvided,
+          photo_count: photoCount,
+          using_stock_photos: usingStock,
+          photo_rights_confirmed: !!intakeData.photo_rights_confirmed,
+        } as any)
         .eq("client_id", clientId);
 
       // Mark client as intake completed
@@ -125,11 +166,26 @@ export function IntakeForm({ clientId, userId, plan, businessName, onComplete }:
         {currentStep === 2 && <StepBrand data={intakeData} onChange={handleChange} onUpload={(f, c) => uploadFile(f, c)} uploading={uploading} plan={plan} />}
         {currentStep === 3 && <StepStory data={intakeData} onChange={handleChange} onUpload={(f, c) => uploadFile(f, c)} />}
         {currentStep === 4 && <StepServices data={intakeData} onChange={handleChange} onUpload={(f, c) => uploadFile(f, c)} />}
-        {currentStep === 5 && <StepPhotos data={intakeData} onChange={handleChange} onUpload={(f, c) => uploadFile(f, c)} onUploadMultiple={(f, c) => uploadMultiple(f, c)} />}
+        {currentStep === 5 && (
+          <StepPhotos
+            data={intakeData}
+            onChange={handleChange}
+            onUpload={(f, c) => uploadFile(f, c)}
+            onUploadMultiple={(f, c) => uploadMultiple(f, c)}
+            rightsError={rightsError}
+          />
+        )}
         {currentStep === 6 && <StepSocialProof data={intakeData} onChange={handleChange} onUpload={(f, c) => uploadFile(f, c)} onUploadMultiple={(f, c) => uploadMultiple(f, c)} />}
         {currentStep === 7 && <StepPages data={intakeData} onChange={handleChange} />}
         {currentStep === 8 && <StepStyle data={intakeData} onChange={handleChange} />}
-        {currentStep === 9 && <StepFinalDetails data={intakeData} onChange={handleChange} />}
+        {currentStep === 9 && (
+          <StepFinalDetails
+            data={intakeData}
+            onChange={handleChange}
+            onJumpToPhotos={jumpToPhotos}
+            onAcceptStock={acceptStockPhotos}
+          />
+        )}
 
         {/* Navigation */}
         <div className="flex justify-between items-center mt-10 pt-6 border-t">

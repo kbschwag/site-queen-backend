@@ -1045,9 +1045,14 @@ export type Database = {
           last_deployed_at: string | null
           last_updated: string | null
           logo_url: string | null
+          photo_count: number | null
+          photo_rights_confirmed: boolean | null
+          photos_provided: boolean | null
           primary_color: string | null
           staging_url: string | null
+          stock_photos_replaced: boolean | null
           template_used: string | null
+          using_stock_photos: boolean | null
         }
         Insert: {
           brand_vibe?: string | null
@@ -1064,9 +1069,14 @@ export type Database = {
           last_deployed_at?: string | null
           last_updated?: string | null
           logo_url?: string | null
+          photo_count?: number | null
+          photo_rights_confirmed?: boolean | null
+          photos_provided?: boolean | null
           primary_color?: string | null
           staging_url?: string | null
+          stock_photos_replaced?: boolean | null
           template_used?: string | null
+          using_stock_photos?: boolean | null
         }
         Update: {
           brand_vibe?: string | null
@@ -1083,9 +1093,14 @@ export type Database = {
           last_deployed_at?: string | null
           last_updated?: string | null
           logo_url?: string | null
+          photo_count?: number | null
+          photo_rights_confirmed?: boolean | null
+          photos_provided?: boolean | null
           primary_color?: string | null
           staging_url?: string | null
+          stock_photos_replaced?: boolean | null
           template_used?: string | null
+          using_stock_photos?: boolean | null
         }
         Relationships: [
           {

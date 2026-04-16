@@ -1,16 +1,18 @@
-import { useRef } from "react";
+import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Upload, X, ImageIcon } from "lucide-react";
+import { Upload, X, ImageIcon, AlertCircle } from "lucide-react";
 import type { IntakeData } from "./types";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { countIntakePhotos } from "@/lib/photo-utils";
 
 interface Props {
   data: IntakeData;
   onChange: (updates: Partial<IntakeData>) => void;
   onUploadMultiple: (files: File[], category: string) => Promise<string[]>;
   onUpload: (file: File, category: string) => Promise<string | null>;
+  rightsError?: boolean;
 }
 
 function PhotoSection({
@@ -58,7 +60,17 @@ function PhotoSection({
   );
 }
 
-export function StepPhotos({ data, onChange, onUploadMultiple, onUpload }: Props) {
+export function StepPhotos({ data, onChange, onUploadMultiple, onUpload, rightsError }: Props) {
+  const photoCount = countIntakePhotos(data);
+  const hasAnyPhotos = photoCount > 0;
+
+  // If photos are removed back to zero, clear the rights confirmation
+  useEffect(() => {
+    if (!hasAnyPhotos && data.photo_rights_confirmed) {
+      onChange({ photo_rights_confirmed: false });
+    }
+  }, [hasAnyPhotos, data.photo_rights_confirmed, onChange]);
+
   const openPicker = (category: string, multiple: boolean, onDone: (urls: string[]) => void) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -78,7 +90,7 @@ export function StepPhotos({ data, onChange, onUploadMultiple, onUpload }: Props
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" id="step-photos-root">
       <div>
         <h2 className="text-xl font-bold mb-1">Your Photos</h2>
         <p className="text-sm text-muted-foreground">Photos make or break a website. Upload the best ones you have — we'll make them look stunning.</p>
@@ -146,6 +158,37 @@ export function StepPhotos({ data, onChange, onUploadMultiple, onUpload }: Props
         <Checkbox checked={data.use_stock_photos || false} onCheckedChange={(v) => onChange({ use_stock_photos: !!v })} />
         <span className="text-sm">I don't have professional photos yet — use beautiful stock photos as placeholders</span>
       </div>
+
+      {/* Photo rights confirmation — only when at least one photo uploaded */}
+      {hasAnyPhotos && (
+        <div
+          id="photo-rights-confirm"
+          className={`rounded-xl border p-4 transition-colors ${
+            rightsError
+              ? "border-destructive/40 bg-destructive/5"
+              : "border-border bg-secondary/30"
+          }`}
+        >
+          <label className="flex items-start gap-3 cursor-pointer">
+            <Checkbox
+              checked={!!data.photo_rights_confirmed}
+              onCheckedChange={(v) => onChange({ photo_rights_confirmed: !!v })}
+              className="mt-0.5"
+            />
+            <span className="text-sm leading-relaxed">
+              I confirm that I own or have the legal right to use all photos I am
+              uploading. I understand that SiteQueen will use these photos to
+              build my website. ♛
+            </span>
+          </label>
+          {rightsError && (
+            <div className="mt-3 flex items-start gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>Please confirm you have the rights to your uploaded photos before continuing.</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <Collapsible>
         <CollapsibleTrigger className="text-sm text-primary hover:underline flex items-center gap-1">

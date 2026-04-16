@@ -167,6 +167,17 @@ Return ONLY a valid JSON object with these four fields. No explanation or markdo
         admin_notes: result.explanation,
       }).eq("id", crId);
 
+      // Auto-flip stock_photos_replaced when a photo-related change is completed
+      const isPhotoChange = (cr.change_type || "").toLowerCase().includes("photo")
+        || (cr.request_text || "").toLowerCase().includes("photo")
+        || (cr.request_text || "").toLowerCase().includes("image");
+      if (isPhotoChange) {
+        await supabase
+          .from("sites")
+          .update({ stock_photos_replaced: true } as any)
+          .eq("client_id", clientId);
+      }
+
       // Update usage
       if (clientData) {
         await supabase.from("clients").update({

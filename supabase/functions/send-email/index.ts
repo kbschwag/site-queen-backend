@@ -286,6 +286,11 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
         <li>✓ Photos look great</li>
         <li>✓ Everything looks good on your phone</li>
       </ul>
+      ${d.using_stock_photos ? `
+      <div style="background:#FEF3C7;border-left:4px solid #F59E0B;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <p style="margin:0;color:#78350F;">One thing to note — we used professional stock photography as placeholders since we didn't receive any photos from you. Your site looks great, but it will look even more like YOU with real photos of your business.</p>
+        <p style="margin:8px 0 0;color:#78350F;">You can swap any stock photo for a real one anytime using a support ticket. Photo swaps cost 15 credits each. ♛</p>
+      </div>` : ""}
       <p>Log into your dashboard to leave feedback or approve your site:</p>
       ${darkButton("Go to Dashboard →", DASHBOARD_URL)}
       <p>We're excited to get you live. ♛</p>
@@ -1088,6 +1093,28 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
       <p>The changes you requested for <strong>${d.business_name}</strong> are now live.</p>
       ${d.site_url ? `<p><a href="${d.site_url}" style="color:${BRAND_PURPLE};">View your site</a></p>` : ""}
       <p style="margin-top:24px;">— The SiteQueen Team</p>
+    `),
+  },
+
+  // Request photos from client (operator-triggered)
+  request_photos: {
+    subject: "Your SiteQueen website will look even better with your photos ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>We received your website brief and we're excited to get started. ♛</p>
+      <p>One thing that would make your website significantly better — real photos of your business.</p>
+      <p>Even a few good iPhone photos of:</p>
+      <ul style="line-height:2;padding-left:20px;">
+        <li>✓ You or your team</li>
+        <li>✓ Your work or services in action</li>
+        <li>✓ Your location or workspace</li>
+        <li>✓ Before and after results</li>
+      </ul>
+      <p>...make a huge difference in how professional and trustworthy your site looks and how many leads it generates.</p>
+      <p>You can upload photos directly in your dashboard:</p>
+      ${purpleButton("Upload Photos →", DASHBOARD_URL)}
+      <p style="font-size:13px;color:#666;">If we don't hear from you within 48 hours we'll go ahead and build your site using professional stock photography as placeholders. You can always swap them later with a support ticket — it only costs 15 credits per photo swap.</p>
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
 };
