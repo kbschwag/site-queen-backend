@@ -347,6 +347,16 @@ Deno.serve(async (req) => {
     // — Placeholder: requires pause_ends_at column on clients
     // ═══════════════════════════════════════════
 
+    // ═══════════════════════════════════════════
+    // 9. CLEANUP EXPIRED RATE LIMITS
+    // ═══════════════════════════════════════════
+    const { count: cleanedUp } = await supabase
+      .from("rate_limits")
+      .delete()
+      .lt("reset_at", now.toISOString())
+      .select("id", { count: "exact", head: true });
+    results.push(`🧹 Cleaned up ${cleanedUp || 0} expired rate limit records`);
+
     return new Response(JSON.stringify({ success: true, processed: results.length, details: results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

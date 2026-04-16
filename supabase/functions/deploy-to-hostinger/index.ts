@@ -9,6 +9,24 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Auth check — require valid JWT
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const authSupabase = createClient(supabaseUrl, supabaseKey);
+  const { data: { user: caller }, error: authErr } = await authSupabase.auth.getUser(authHeader.replace("Bearer ", ""));
+  if (authErr || !caller) {
+    return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+  // Must be admin
+  const { data: isAdmin } = await authSupabase.rpc("has_role", { _user_id: caller.id, _role: "admin" });
+  if (!isAdmin) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
   let clientId: string | null = null;
 
   try {
