@@ -1,31 +1,31 @@
 export interface ApplicationFormData {
-  // Step 1
+  // Step 1 — Your Business
   business_type: string;
   business_name: string;
   industry: string;
   city: string;
   state_province: string;
   country: string;
-  has_website: string;
-  // Step 2
-  years_in_business: string;
-  monthly_clients: string;
-  decision_maker_status: string;
-  restricted_niches: string[];
-  update_frequency: string;
-  // Step 3
+  business_instagram: string;
+  business_facebook: string;
+
+  // Step 2 — Your Customers
+  ideal_customer: string;
+  google_search_terms: string;
+
+  // Step 3 — Your Vision
   website_goal: string;
-  brand_vibe: string;
-  has_logo: string;
-  logo_file: File | null;
-  inspiration_files: File[];
-  // Step 4
-  plan_interest: string;
-  accepts_commitment: string;
+  has_logo: string; // yes | want_addon | no
+  support_level: string; // basic | standard | full_service | not_sure
+  restricted_niches: string[];
+  readiness: string; // ready_now | within_30_days | few_months | exploring
+  anything_else: string;
+
+  // Step 4 — Let's Connect
   name: string;
   email: string;
   phone: string;
-  additional_notes: string;
+  referral_source: string;
 }
 
 export const initialFormData: ApplicationFormData = {
@@ -34,32 +34,35 @@ export const initialFormData: ApplicationFormData = {
   industry: "",
   city: "",
   state_province: "",
-  country: "",
-  has_website: "",
-  years_in_business: "",
-  monthly_clients: "",
-  decision_maker_status: "",
-  restricted_niches: [],
-  update_frequency: "",
+  country: "United States",
+  business_instagram: "",
+  business_facebook: "",
+  ideal_customer: "",
+  google_search_terms: "",
   website_goal: "",
-  brand_vibe: "",
   has_logo: "",
-  logo_file: null,
-  inspiration_files: [],
-  plan_interest: "",
-  accepts_commitment: "",
+  support_level: "",
+  restricted_niches: ["None of the above"],
+  readiness: "",
+  anything_else: "",
   name: "",
   email: "",
   phone: "",
-  additional_notes: "",
+  referral_source: "",
 };
 
+export const STEP_LABELS = [
+  "Your business",
+  "Your customers",
+  "Your vision",
+  "Let's connect",
+] as const;
+
 export const BUSINESS_TYPES = [
-  { value: "service", label: "Service based business", desc: "plumber, salon, consultant, coach, photographer, etc." },
-  { value: "product", label: "Product based business", desc: "I sell physical or digital products" },
-  { value: "ecommerce", label: "Ecommerce store", desc: "I need a full online shop with cart and checkout" },
-  { value: "student", label: "I'm a student or just starting out", desc: "" },
-  { value: "other", label: "Other", desc: "" },
+  { value: "service", label: "I provide a service", desc: "plumber, salon, coach, contractor, photographer, etc." },
+  { value: "products_offline", label: "I sell products but take orders by phone or in person", desc: "" },
+  { value: "online_shop", label: "I need a full online shop where customers can buy and checkout", desc: "" },
+  { value: "brand_new", label: "I'm brand new — just getting started", desc: "" },
 ];
 
 export const INDUSTRIES = [
@@ -74,31 +77,25 @@ export const INDUSTRIES = [
   "Other service business",
 ];
 
-export const WEBSITE_STATUS = [
-  { value: "none", label: "No website at all" },
-  { value: "social_only", label: "I have a social media page only" },
-  { value: "outdated", label: "Yes, but it looks outdated or unprofessional" },
-  { value: "happy", label: "Yes, and I'm happy with it" },
+export const WEBSITE_GOALS = [
+  { value: "get_more_leads", label: "Get more leads and phone calls" },
+  { value: "look_professional", label: "Look more professional and credible" },
+  { value: "replace_outdated", label: "Replace my outdated website" },
+  { value: "establish_presence", label: "Establish my online presence for the first time" },
+  { value: "all_of_above", label: "All of the above" },
 ];
 
-export const YEARS_OPTIONS = [
-  { value: "under_6_months", label: "Just getting started (under 6 months)" },
-  { value: "less_than_1", label: "Less than 1 year" },
-  { value: "1_to_3", label: "1 to 3 years" },
-  { value: "3_plus", label: "3 years or more" },
+export const LOGO_OPTIONS = [
+  { value: "yes", label: "Yes I have one ready" },
+  { value: "want_addon", label: "No — I'd like to add a professional logo design for $50 ♛" },
+  { value: "no", label: "No and I'll sort it out myself" },
 ];
 
-export const MONTHLY_CLIENTS = [
-  { value: "1_to_5", label: "1 to 5" },
-  { value: "6_to_20", label: "6 to 20" },
-  { value: "21_to_50", label: "21 to 50" },
-  { value: "50_plus", label: "More than 50" },
-];
-
-export const DECISION_MAKER = [
-  { value: "yes", label: "Yes, that's me" },
-  { value: "check_first", label: "I need to check with someone else first" },
-  { value: "shared", label: "This is a shared decision" },
+export const SUPPORT_LEVELS = [
+  { value: "basic", label: "Basic — I just need a great website live and maintained" },
+  { value: "standard", label: "Standard — I want a website plus some help making updates each month" },
+  { value: "full_service", label: "Full service — I want a website, regular updates, and dedicated support" },
+  { value: "not_sure", label: "Not sure yet — I'd love guidance on our call" },
 ];
 
 export const RESTRICTED_NICHES = [
@@ -110,106 +107,102 @@ export const RESTRICTED_NICHES = [
   "None of the above",
 ];
 
-export const UPDATE_FREQUENCY = [
-  { value: "rarely", label: "Rarely — maybe a few times a year" },
-  { value: "occasionally", label: "Occasionally — once or twice a month" },
-  { value: "frequently", label: "Frequently — I expect weekly changes" },
-  { value: "not_sure", label: "I'm not sure yet" },
+export const READINESS_OPTIONS = [
+  { value: "ready_now", label: "I'm ready now — within the next 2 weeks" },
+  { value: "within_30_days", label: "Soon — within the next 30 days" },
+  { value: "few_months", label: "In the next few months" },
+  { value: "exploring", label: "Just exploring for now" },
 ];
 
-export const WEBSITE_GOALS = [
-  { value: "leads", label: "Get more leads and phone calls" },
-  { value: "professional", label: "Look more professional and credible" },
-  { value: "replace", label: "Replace my outdated website" },
-  { value: "establish", label: "Establish my online presence for the first time" },
-  { value: "all", label: "All of the above" },
+export const REFERRAL_SOURCES = [
+  "Instagram",
+  "TikTok",
+  "Facebook",
+  "Facebook group",
+  "Google search",
+  "Friend or family referral",
+  "Another business owner recommended you",
+  "YouTube",
+  "Other",
 ];
 
-export const BRAND_VIBES = [
-  { value: "clean_minimal", label: "Clean & Minimal", desc: "Simple, modern, lots of white space", color: "from-slate-100 to-slate-200", icon: "✨" },
-  { value: "bold_modern", label: "Bold & Modern", desc: "Strong colors, confident, eye-catching", color: "from-purple-500 to-pink-500", icon: "⚡" },
-  { value: "warm_friendly", label: "Warm & Friendly", desc: "Soft tones, approachable, personal", color: "from-amber-200 to-orange-300", icon: "🌸" },
-  { value: "professional_corporate", label: "Professional & Corporate", desc: "Traditional, trustworthy, formal", color: "from-blue-800 to-slate-700", icon: "🏛️" },
+// Map support_level to internal plan name
+export function mapSupportToPlan(supportLevel: string): string {
+  if (supportLevel === "basic") return "starter";
+  if (supportLevel === "standard") return "growth";
+  if (supportLevel === "full_service") return "pro";
+  return "not_sure";
+}
+
+// Basic profanity / aggressive language detection
+const PROFANITY_LIST = [
+  "fuck", "shit", "bitch", "asshole", "dick", "pussy", "cunt", "fag", "nigger", "retard",
+  "scam", "garbage", "trash", "stupid idiot", "morons",
 ];
 
-export const LOGO_OPTIONS = [
-  { value: "yes", label: "Yes, I have a logo ready" },
-  { value: "want_one", label: "No, but I want one designed" },
-  { value: "no", label: "No, and I don't need one right now" },
+const AGGRESSIVE_PHRASES = [
+  "i hate", "you suck", "rip off", "ripoff", "screw you", "shut up",
 ];
 
-export const PLAN_OPTIONS = [
-  { value: "starter", label: "Starter", price: "$79/month", features: ["Free website build", "Custom domain", "Hosting & SSL", "Standard support"] },
-  { value: "growth", label: "Growth", price: "$129/month", popular: true, features: ["Everything in Starter", "1 content update/month", "Weekly backups", "Priority support"] },
-  { value: "pro", label: "Pro", price: "$199/month", features: ["Everything in Growth", "3 content updates/month", "Logo design included", "Dedicated account manager"] },
-  { value: "not_sure", label: "Not sure yet", price: "Help me decide", features: ["We'll discuss on the call"] },
-];
-
-export const COMMITMENT_OPTIONS = [
-  { value: "yes", label: "That sounds completely fair — I'm in" },
-  { value: "questions", label: "I have a few questions first" },
-  { value: "too_long", label: "That's too long of a commitment for me right now" },
-];
-
-export function calculateScore(form: ApplicationFormData): { score: number; temperature: string } {
-  let score = 0;
-
-  // Business type (Q1)
-  if (form.business_type === "service") score += 3;
-  else if (form.business_type === "product") score += 2;
-  else score += 1;
-
-  // Website status (Q5)
-  if (form.has_website === "none" || form.has_website === "social_only") score += 3;
-  else if (form.has_website === "outdated") score += 2;
-
-  // Years in business (Q6)
-  if (form.years_in_business === "3_plus") score += 3;
-  else if (form.years_in_business === "1_to_3") score += 2;
-  else score += 1;
-
-  // Monthly clients (Q7)
-  if (form.monthly_clients === "21_to_50" || form.monthly_clients === "50_plus") score += 3;
-  else if (form.monthly_clients === "6_to_20") score += 2;
-  else score += 1;
-
-  // Decision maker (Q8)
-  if (form.decision_maker_status === "yes") score += 3;
-  else if (form.decision_maker_status === "shared") score += 2;
-  else score += 1;
-
-  // Update frequency (Q10)
-  if (form.update_frequency === "rarely" || form.update_frequency === "occasionally") score += 3;
-  else score += 2;
-
-  // Plan interest (Q16)
-  if (form.plan_interest === "pro") score += 3;
-  else if (form.plan_interest === "growth") score += 2;
-  else score += 1;
-
-  // Commitment (Q17)
-  if (form.accepts_commitment === "yes") score += 3;
-  else if (form.accepts_commitment === "questions") score += 2;
-
-  const temperature = score >= 18 ? "HOT" : score >= 12 ? "WARM" : "COLD";
-  return { score, temperature };
+export function containsProfanity(text: string): boolean {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  for (const word of PROFANITY_LIST) {
+    // word-boundary-ish check
+    const re = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    if (re.test(lower)) return true;
+  }
+  for (const phrase of AGGRESSIVE_PHRASES) {
+    if (lower.includes(phrase)) return true;
+  }
+  return false;
 }
 
 export function checkInstantDecline(form: ApplicationFormData): string | null {
-  if (form.business_type === "ecommerce") {
-    return "ecommerce";
-  }
+  if (form.business_type === "online_shop") return "online_shop";
+
+  const combined = [form.ideal_customer, form.google_search_terms, form.anything_else, form.business_name].join(" ");
+  if (containsProfanity(combined)) return "inappropriate_content";
+
   return null;
 }
 
 export function checkFlags(form: ApplicationFormData): string[] {
   const flags: string[] = [];
-  if (form.restricted_niches.length > 0 && !form.restricted_niches.includes("None of the above")) {
-    flags.push("sensitive_niche");
-  }
-  const text = (form.additional_notes + " " + form.business_name).toLowerCase();
-  if (text.includes("web design") || text.includes("agency") || text.includes("white label") || text.includes("my clients") || text.includes("for clients")) {
-    flags.push("potential_white_label");
-  }
+  const niches = form.restricted_niches.filter((n) => n !== "None of the above");
+  if (niches.length > 0) flags.push("sensitive_niche");
   return flags;
+}
+
+export function calculateScore(form: ApplicationFormData): { score: number; temperature: string } {
+  let score = 0;
+
+  // Business type
+  if (["service", "products_offline"].includes(form.business_type)) score += 3;
+  else if (form.business_type === "brand_new") score += 1;
+
+  // Website goal
+  if (form.website_goal === "get_more_leads" || form.website_goal === "all_of_above") score += 3;
+  else if (form.website_goal === "look_professional") score += 2;
+  else score += 1;
+
+  // Support level
+  if (form.support_level === "full_service") score += 3;
+  else if (form.support_level === "standard") score += 2;
+  else score += 1;
+
+  // Readiness
+  if (form.readiness === "ready_now") score += 3;
+  else if (form.readiness === "within_30_days") score += 2;
+  else if (form.readiness === "few_months") score += 1;
+
+  // Anything else (effort signal)
+  if (form.anything_else && form.anything_else.length > 50) score += 2;
+
+  // Social provided
+  if (form.business_instagram || form.business_facebook) score += 1;
+
+  // Thresholds
+  const temperature = score >= 10 ? "HOT" : score >= 6 ? "WARM" : "COLD";
+  return { score, temperature };
 }
