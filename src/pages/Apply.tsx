@@ -75,6 +75,10 @@ export default function Apply() {
     }
   };
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleNext = () => {
     const error = validateStep();
     if (error) {
@@ -82,9 +86,13 @@ export default function Apply() {
       return;
     }
     setStep((s) => Math.min(s + 1, TOTAL_STEPS));
+    scrollToTop();
   };
 
-  const handleBack = () => setStep((s) => Math.max(s - 1, 1));
+  const handleBack = () => {
+    setStep((s) => Math.max(s - 1, 1));
+    scrollToTop();
+  };
 
   const submitDecline = async (reason: string) => {
     try {
