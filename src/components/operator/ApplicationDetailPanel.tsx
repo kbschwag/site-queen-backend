@@ -32,6 +32,7 @@ export default function ApplicationDetailPanel({ application, onClose }: Props) 
   const [declineReason, setDeclineReason] = useState("");
   const [convertPlan, setConvertPlan] = useState(application.plan_interest || "starter");
   const [loading, setLoading] = useState(false);
+  const [convertSuccess, setConvertSuccess] = useState<{ businessName: string; email: string } | null>(null);
 
   const canTakeAction = isOwner || isPartner || canReviewApplications;
   const app = application;
@@ -168,9 +169,7 @@ export default function ApplicationDetailPanel({ application, onClose }: Props) 
 
       queryClient.invalidateQueries({ queryKey: ["operator-applications"] });
       queryClient.invalidateQueries({ queryKey: ["operator-dashboard-stats"] });
-      toast.success(`${app.business_name} is now a SiteQueen client ♛`);
-      setShowConvertModal(false);
-      onClose();
+      setConvertSuccess({ businessName: app.business_name, email: app.email });
     } catch (err: any) {
       toast.error(err.message || "Failed to convert");
     }
@@ -417,34 +416,56 @@ This can change — you're welcome to reapply in 3 months.
       </Dialog>
 
       {/* Convert modal */}
-      <Dialog open={showConvertModal} onOpenChange={setShowConvertModal}>
+      <Dialog open={showConvertModal} onOpenChange={(open) => {
+        if (!open && convertSuccess) {
+          setConvertSuccess(null);
+          setShowConvertModal(false);
+          onClose();
+        } else {
+          setShowConvertModal(open);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Convert to Client ♛</DialogTitle>
+            <DialogTitle>{convertSuccess ? `${convertSuccess.businessName} is now a client ♛` : "Convert to Client ♛"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <p className="font-medium">{app.name}</p>
-              <p className="text-sm text-muted-foreground">{app.business_name}</p>
+          {convertSuccess ? (
+            <div className="space-y-4">
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-2">
+                <p className="text-sm font-medium">✅ A welcome email with their account setup link has been sent to <strong>{convertSuccess.email}</strong></p>
+                <p className="text-xs text-muted-foreground">The link expires in 24 hours — if they don't set up within that time you can resend from their client profile.</p>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => { setConvertSuccess(null); setShowConvertModal(false); onClose(); }}>Done</Button>
+              </DialogFooter>
             </div>
-            <div>
-              <label className="text-sm font-medium">Plan</label>
-              <Select value={convertPlan} onValueChange={setConvertPlan}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="starter">Starter — $79/mo</SelectItem>
-                  <SelectItem value="growth">Growth — $129/mo</SelectItem>
-                  <SelectItem value="pro">Pro — $199/mo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConvertModal(false)}>Cancel</Button>
-            <Button onClick={handleConvert} disabled={loading} className="gap-2">
-              {loading ? "Converting..." : <><Crown className="h-4 w-4" /> Yes, convert to client</>}
-            </Button>
-          </DialogFooter>
+          ) : (
+            <>
+              <div className="space-y-4">
+                <div>
+                  <p className="font-medium">{app.name}</p>
+                  <p className="text-sm text-muted-foreground">{app.business_name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Plan</label>
+                  <Select value={convertPlan} onValueChange={setConvertPlan}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="starter">Starter — $79/mo</SelectItem>
+                      <SelectItem value="growth">Growth — $129/mo</SelectItem>
+                      <SelectItem value="pro">Pro — $199/mo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowConvertModal(false)}>Cancel</Button>
+                <Button onClick={handleConvert} disabled={loading} className="gap-2">
+                  {loading ? "Converting..." : <><Crown className="h-4 w-4" /> Yes, convert to client</>}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>
