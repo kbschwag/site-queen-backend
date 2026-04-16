@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { SitePreviewFrame } from "./SitePreviewFrame";
 import { toast } from "sonner";
 import {
-  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles
+  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles, ImageIcon, Mail
 } from "lucide-react";
 import { useFileUpload } from "@/hooks/useFileUpload";
 
@@ -33,6 +33,8 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareNote, setShareNote] = useState("");
   const [goLiveChecked, setGoLiveChecked] = useState(false);
+  const [requestingPhotos, setRequestingPhotos] = useState(false);
+  const [togglingStockReplaced, setTogglingStockReplaced] = useState(false);
 
   const { data: clientData } = useQuery({
     queryKey: ["operator-client-deploy-status", clientId],
@@ -245,10 +247,68 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     return <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   }
 
+  const photosProvided = !!(site as any)?.photos_provided;
+  const photoCount = (site as any)?.photo_count || 0;
+  const usingStockPhotos = !!(site as any)?.using_stock_photos;
+  const stockPhotosReplaced = !!(site as any)?.stock_photos_replaced;
+
+  const handleRequestPhotos = async () => {
+    if (!clientProfile?.email) {
+      toast.error("No client email on file");
+      return;
+    }
+    setRequestingPhotos(true);
+    try {
+      await supabase.functions.invoke("send-email", {
+        body: {
+          to: clientProfile.email,
+          template: "request_photos",
+          data: {
+            name: clientProfile.full_name || businessName,
+            first_name: (clientProfile.full_name || "").split(" ")[0] || businessName,
+            business_name: businessName,
+          },
+          clientId,
+        },
+      });
+      await supabase.from("audit_log").insert({
+        user_id: user!.id, user_email: user!.email,
+        action: `Requested photos from ${businessName}`,
+        target_table: "sites", target_id: clientId,
+      });
+      toast.success("Photo request email sent ♛");
+    } catch {
+      toast.error("Failed to send photo request");
+    } finally {
+      setRequestingPhotos(false);
+    }
+  };
+
+  const handleToggleStockReplaced = async () => {
+    setTogglingStockReplaced(true);
+    try {
+      await supabase
+        .from("sites")
+        .update({ stock_photos_replaced: !stockPhotosReplaced } as any)
+        .eq("client_id", clientId);
+      await supabase.from("audit_log").insert({
+        user_id: user!.id, user_email: user!.email,
+        action: `Marked stock photos as ${!stockPhotosReplaced ? "replaced" : "not replaced"} for ${businessName}`,
+        target_table: "sites", target_id: clientId,
+      });
+      queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+      toast.success(!stockPhotosReplaced ? "Marked as replaced ♛" : "Marked as not replaced");
+    } catch {
+      toast.error("Failed to update");
+    } finally {
+      setTogglingStockReplaced(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Status Badge */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Badge className={status.color}>
           <StatusIcon className={`h-3 w-3 mr-1 ${generationStatus === "generating" ? "animate-spin" : ""}`} />
           {status.label}
@@ -259,6 +319,60 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </span>
         )}
       </div>
+
+      {/* Photo status — only meaningful once intake is done */}
+      {(clientData as any)?.intake_completed && (
+        <Card className={photosProvided ? "border-emerald-200 bg-emerald-50/40" : "border-amber-200 bg-amber-50/40"}>
+          <CardContent className="pt-4 pb-4 space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <ImageIcon className="h-4 w-4 text-muted-foreground" />
+              {photosProvided ? (
+                <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200">
+                  {photoCount} photo{photoCount === 1 ? "" : "s"} uploaded ✓
+                </Badge>
+              ) : (
+                <Badge className="bg-amber-500/10 text-amber-700 border-amber-200">
+                  No photos — stock imagery will be used
+                </Badge>
+              )}
+              {usingStockPhotos && stockPhotosReplaced && (
+                <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200">
+                  Stock replaced ♛
+                </Badge>
+              )}
+              {usingStockPhotos && !stockPhotosReplaced && photosProvided === false && (
+                <Badge variant="outline" className="text-xs">Stock not yet replaced</Badge>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {!photosProvided && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRequestPhotos}
+                  disabled={requestingPhotos}
+                  className="gap-2"
+                >
+                  {requestingPhotos ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                  Request photos from client
+                </Button>
+              )}
+              {usingStockPhotos && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleToggleStockReplaced}
+                  disabled={togglingStockReplaced}
+                  className="gap-2 text-xs"
+                >
+                  {togglingStockReplaced ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {stockPhotosReplaced ? "Mark as not replaced" : "Mark stock as replaced"}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pending — show generate button with state indicators */}
       {generationStatus === "pending" && (() => {
