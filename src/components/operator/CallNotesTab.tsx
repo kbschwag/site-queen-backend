@@ -210,7 +210,7 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
   }, []);
 
   // Speech recognition
-  const startListening = (fieldSetter: (val: string) => void, fieldName: string) => {
+  const startListening = (fieldGetter: () => string, fieldSetter: (val: string) => void, fieldName: string) => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       toast.error("Speech recognition not supported in this browser");
@@ -231,11 +231,9 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
           interim += event.results[i][0].transcript;
         }
       }
-      fieldSetter((prev: any) => {
-        const base = typeof prev === "string" ? prev : "";
-        // Only append final transcript
-        return base ? `${base} ${finalTranscript}${interim}`.trim() : `${finalTranscript}${interim}`.trim();
-      });
+      const base = fieldGetter();
+      const newVal = base ? `${base} ${finalTranscript}${interim}`.trim() : `${finalTranscript}${interim}`.trim();
+      fieldSetter(newVal);
     };
 
     recognition.onerror = () => { setListening(false); setActiveField(null); };
@@ -362,13 +360,13 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
   }
 
   // State 2: Form (editable)
-  const MicButton = ({ field, setter }: { field: string; setter: any }) => (
+  const MicButton = ({ field, getter, setter }: { field: string; getter: () => string; setter: (v: string) => void }) => (
     <Button
       type="button"
       variant="ghost"
       size="icon"
       className={`h-8 w-8 shrink-0 ${listening && activeField === field ? "text-destructive" : "text-muted-foreground"}`}
-      onClick={() => listening && activeField === field ? stopListening() : startListening(setter, field)}
+      onClick={() => listening && activeField === field ? stopListening() : startListening(getter, setter, field)}
     >
       {listening && activeField === field ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
     </Button>
