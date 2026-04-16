@@ -39,7 +39,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("domain_name, domain_status, deployment_path_confirmed, user_id")
+        .select("domain_name, domain_status, deployment_path_confirmed, user_id, intake_completed, call_notes_completed")
         .eq("id", clientId)
         .single();
       if (error) throw error;
