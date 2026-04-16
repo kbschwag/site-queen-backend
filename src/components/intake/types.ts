@@ -69,6 +69,7 @@ export interface IntakeData {
   location_photos?: string[];
   extra_photos?: string[];
   use_stock_photos?: boolean;
+  photo_rights_confirmed?: boolean;
 
   // Step 6 — Social Proof
   google_business_url?: string;
