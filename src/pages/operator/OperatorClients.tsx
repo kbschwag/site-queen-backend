@@ -12,7 +12,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
 import { WebsiteBuildPanel } from "@/components/operator/WebsiteBuildPanel";
 import { DomainDeployTab } from "@/components/operator/DomainDeployTab";
-import { CallNotesTab } from "@/components/operator/CallNotesTab";
 import { SoftDeleteModal } from "@/components/operator/SoftDeleteModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
@@ -243,15 +242,11 @@ export default function OperatorClients() {
               <Badge className={selected.intake_completed ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-amber-500/10 text-amber-700 border-amber-200"}>
                 Intake: {selected.intake_completed ? "Complete" : "Pending"}
               </Badge>
-              <Badge className={(selected as any).call_notes_completed ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-amber-500/10 text-amber-700 border-amber-200"}>
-                Call Notes: {(selected as any).call_notes_completed ? "Complete" : "Pending"}
-              </Badge>
             </div>
 
             <Tabs defaultValue="details" className="mt-4">
               <TabsList className="w-full">
                 <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
-                <TabsTrigger value="callnotes" className="flex-1">Call Notes</TabsTrigger>
                 <TabsTrigger value="build" className="flex-1">Website Build</TabsTrigger>
                 <TabsTrigger value="domain" className="flex-1">Domain</TabsTrigger>
                 <TabsTrigger value="brief" className="flex-1">Brief</TabsTrigger>
@@ -371,9 +366,6 @@ export default function OperatorClients() {
                     </Button>
                   </div>
                 )}
-              </TabsContent>
-              <TabsContent value="callnotes" className="mt-4">
-                <CallNotesTab clientId={selected.id} businessName={selected.business_name} />
               </TabsContent>
               <TabsContent value="build" className="mt-4">
                 <WebsiteBuildPanel clientId={selected.id} businessName={selected.business_name} />

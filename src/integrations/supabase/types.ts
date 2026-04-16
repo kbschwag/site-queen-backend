@@ -119,6 +119,8 @@ export type Database = {
           brand_vibe: string | null
           business_name: string
           business_type: string
+          call_notes_completed: boolean | null
+          call_notes_completed_at: string | null
           city: string | null
           city_state: string | null
           country: string | null
@@ -163,6 +165,8 @@ export type Database = {
           brand_vibe?: string | null
           business_name: string
           business_type: string
+          call_notes_completed?: boolean | null
+          call_notes_completed_at?: string | null
           city?: string | null
           city_state?: string | null
           country?: string | null
@@ -207,6 +211,8 @@ export type Database = {
           brand_vibe?: string | null
           business_name?: string
           business_type?: string
+          call_notes_completed?: boolean | null
+          call_notes_completed_at?: string | null
           city?: string | null
           city_state?: string | null
           country?: string | null
@@ -281,8 +287,9 @@ export type Database = {
       }
       call_notes: {
         Row: {
+          application_id: string | null
           booking_url: string | null
-          client_id: string
+          client_id: string | null
           color_direction: string | null
           completed: boolean | null
           completed_at: string | null
@@ -309,8 +316,9 @@ export type Database = {
           website_goal: string | null
         }
         Insert: {
+          application_id?: string | null
           booking_url?: string | null
-          client_id: string
+          client_id?: string | null
           color_direction?: string | null
           completed?: boolean | null
           completed_at?: string | null
@@ -337,8 +345,9 @@ export type Database = {
           website_goal?: string | null
         }
         Update: {
+          application_id?: string | null
           booking_url?: string | null
-          client_id?: string
+          client_id?: string | null
           color_direction?: string | null
           completed?: boolean | null
           completed_at?: string | null
@@ -365,6 +374,13 @@ export type Database = {
           website_goal?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "call_notes_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: true
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "call_notes_client_id_fkey"
             columns: ["client_id"]

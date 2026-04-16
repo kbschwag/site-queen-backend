@@ -61,12 +61,15 @@ serve(async (req) => {
 
     const intakeData = siteData.intake_data;
 
-    // Fetch call notes (operator discovery call notes)
-    const { data: callNotes } = await supabase
-      .from("call_notes")
-      .select("*")
-      .eq("client_id", clientId)
-      .maybeSingle();
+    // Fetch call notes via application_id from the client record
+    const applicationId = clientData?.application_id;
+    const { data: callNotes } = applicationId
+      ? await supabase
+          .from("call_notes")
+          .select("*")
+          .eq("application_id", applicationId)
+          .maybeSingle()
+      : { data: null };
 
     if (!intakeData && !callNotes) throw new Error("No intake data or call notes found");
 
