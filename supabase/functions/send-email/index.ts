@@ -442,8 +442,29 @@ serve(async (req) => {
       });
     }
 
+    // For welcome_set_password template, generate magic link if not provided
+    const templateData = { ...(data || {}) };
+    if (template === "welcome_set_password" && !templateData.magic_link) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const sb = createClient(supabaseUrl, supabaseKey);
+        const siteUrl = "https://site-queen-backend.lovable.app";
+        const { data: linkData } = await sb.auth.admin.generateLink({
+          type: "magiclink",
+          email: to,
+          options: { redirectTo: `${siteUrl}/set-password` },
+        });
+        if (linkData?.properties?.action_link) {
+          templateData.magic_link = linkData.properties.action_link;
+        }
+      } catch (e) {
+        console.error("Failed to generate magic link for resend:", e);
+      }
+    }
+
     const subject = typeof emailTemplate.subject === "function"
-      ? (emailTemplate.subject as (d: any) => string)(data || {})
+      ? (emailTemplate.subject as (d: any) => string)(templateData)
       : emailTemplate.subject;
 
     const response = await fetch(`${GATEWAY_URL}/emails`, {
@@ -457,7 +478,7 @@ serve(async (req) => {
         from: FROM_ADDRESS,
         to: [to],
         subject,
-        html: emailTemplate.html(data || {}),
+        html: emailTemplate.html(templateData),
       }),
     });
 
