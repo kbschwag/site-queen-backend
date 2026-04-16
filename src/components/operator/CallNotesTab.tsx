@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 interface Props {
-  clientId: string;
+  applicationId: string;
   businessName: string;
   callScheduled?: boolean;
 }
@@ -66,7 +66,7 @@ const TEMPLATE_OPTIONS = [
   { id: "modern", name: "The Modern Business", desc: "Sleek, minimal, contemporary" },
 ];
 
-export function CallNotesTab({ clientId, businessName, callScheduled = true }: Props) {
+export function CallNotesTab({ applicationId, businessName, callScheduled = true }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -101,28 +101,28 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
   const [internalNotes, setInternalNotes] = useState("");
 
   const { data: callNotes, isLoading } = useQuery({
-    queryKey: ["call-notes", clientId],
+    queryKey: ["call-notes", applicationId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("call_notes" as any)
+        .from("call_notes")
         .select("*")
-        .eq("client_id", clientId)
+        .eq("application_id" as any, applicationId)
         .maybeSingle();
       if (error) throw error;
       return data as any;
     },
   });
 
-  const { data: clientData } = useQuery({
-    queryKey: ["client-intake-status", clientId],
+  const { data: applicationData } = useQuery({
+    queryKey: ["application-status", applicationId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("clients")
-        .select("intake_completed, call_notes_completed")
-        .eq("id", clientId)
+        .from("applications")
+        .select("status, call_notes_completed" as any)
+        .eq("id", applicationId)
         .single();
       if (error) throw error;
-      return data;
+      return data as any;
     },
   });
 
@@ -160,7 +160,7 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
   }, [callNotes]);
 
   const buildPayload = useCallback(() => ({
-    client_id: clientId,
+    application_id: applicationId,
     their_story: theirStory || null,
     ideal_customer: idealCustomer || null,
     inspiration_sites: inspirationSites.filter(s => s.url || s.notes),
@@ -180,24 +180,24 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
     exact_phrases: exactPhrases || null,
     final_notes: finalNotes || null,
     internal_notes: internalNotes || null,
-  }), [theirStory, idealCustomer, inspirationSites, instagramHandle, googleSearchTerms, websiteGoal, websiteGoalOther, contactPreferences, bookingUrl, pagesAgreed, templateSelected, colorDirection, vibeNotes, toneOfVoice, toneCustom, expertAdditions, expertAvoid, exactPhrases, finalNotes, internalNotes, clientId]);
+  }), [theirStory, idealCustomer, inspirationSites, instagramHandle, googleSearchTerms, websiteGoal, websiteGoalOther, contactPreferences, bookingUrl, pagesAgreed, templateSelected, colorDirection, vibeNotes, toneOfVoice, toneCustom, expertAdditions, expertAvoid, exactPhrases, finalNotes, internalNotes, applicationId]);
 
   const autoSave = useCallback(async () => {
     setSaveStatus("saving");
     try {
       const payload = buildPayload();
       if (callNotes?.id) {
-        await supabase.from("call_notes" as any).update(payload as any).eq("id", callNotes.id);
+        await supabase.from("call_notes").update(payload as any).eq("id", callNotes.id);
       } else {
-        await supabase.from("call_notes" as any).insert(payload as any);
-        queryClient.invalidateQueries({ queryKey: ["call-notes", clientId] });
+        await supabase.from("call_notes").insert(payload as any);
+        queryClient.invalidateQueries({ queryKey: ["call-notes", applicationId] });
       }
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch {
       setSaveStatus("idle");
     }
-  }, [buildPayload, callNotes, clientId, queryClient]);
+  }, [buildPayload, callNotes, applicationId, queryClient]);
 
   const triggerAutoSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -256,14 +256,14 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
     try {
       const payload = buildPayload();
       if (callNotes?.id) {
-        await supabase.from("call_notes" as any).update({ ...payload, completed: true, completed_at: new Date().toISOString(), completed_by: user!.id } as any).eq("id", callNotes.id);
+        await supabase.from("call_notes").update({ ...payload, completed: true, completed_at: new Date().toISOString(), completed_by: user!.id } as any).eq("id", callNotes.id);
       } else {
-        await supabase.from("call_notes" as any).insert({ ...payload, completed: true, completed_at: new Date().toISOString(), completed_by: user!.id } as any);
+        await supabase.from("call_notes").insert({ ...payload, completed: true, completed_at: new Date().toISOString(), completed_by: user!.id } as any);
       }
-      await supabase.from("clients").update({ call_notes_completed: true, call_notes_completed_at: new Date().toISOString() } as any).eq("id", clientId);
-      queryClient.invalidateQueries({ queryKey: ["call-notes", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["client-intake-status", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["operator-clients"] });
+      await supabase.from("applications").update({ call_notes_completed: true, call_notes_completed_at: new Date().toISOString() } as any).eq("id", applicationId);
+      queryClient.invalidateQueries({ queryKey: ["call-notes", applicationId] });
+      queryClient.invalidateQueries({ queryKey: ["application-status", applicationId] });
+      queryClient.invalidateQueries({ queryKey: ["operator-applications"] });
       toast.success("Call notes saved ♛ — Claude will use these alongside the client's intake form");
       setEditMode(false);
     } catch {
@@ -276,12 +276,22 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
   const handleRegenerate = async () => {
     setSaving(true);
     try {
+      // Find the client record linked to this application
+      const { data: client } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("application_id", applicationId)
+        .maybeSingle();
+      if (!client) {
+        toast.error("Client not yet created — convert the application first");
+        setSaving(false);
+        return;
+      }
       const { data, error } = await supabase.functions.invoke("generate-website", {
-        body: { client_id: clientId },
+        body: { client_id: client.id },
       });
       if (error) throw error;
       toast.success("Website regeneration started with updated call notes!");
-      queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
     } catch {
       toast.error("Failed to trigger regeneration");
     } finally {
@@ -764,14 +774,14 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
       </Button>
 
       {/* Status messages */}
-      {(clientData as any)?.intake_completed && (
+      {applicationData?.status === "converted" && (
         <p className="text-sm text-emerald-600 text-center">
-          ✓ Both the intake form and call notes will be ready — you can generate the website from the Website Build tab
+          ✓ Application converted — call notes will be used when generating the website
         </p>
       )}
-      {!(clientData as any)?.intake_completed && (
+      {applicationData?.status !== "converted" && (
         <p className="text-sm text-muted-foreground text-center">
-          Waiting for client to complete their intake form — you'll be able to generate once both are ready
+          Call notes will be used alongside the intake form when the website is generated after conversion
         </p>
       )}
     </div>
