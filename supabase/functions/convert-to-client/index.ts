@@ -164,6 +164,7 @@ serve(async (req) => {
     }
 
     const magicLink = magicLinkData?.properties?.action_link || null;
+    const firstName = app.name ? app.name.split(" ")[0] : "there";
 
     // 7. Send welcome email with account setup link
     await supabase.functions.invoke("send-email", {
@@ -179,6 +180,32 @@ serve(async (req) => {
         clientId,
       },
     });
+
+    // 8. Schedule onboarding sequence emails
+    const onboardingEmails = [
+      { email_type: "onboarding_day1", hours: 2 },
+      { email_type: "onboarding_day2", hours: 48 },
+      { email_type: "onboarding_day3", hours: 72 },
+      { email_type: "onboarding_day5", hours: 120 },
+    ];
+
+    for (const oe of onboardingEmails) {
+      const sendAt = new Date(Date.now() + oe.hours * 60 * 60 * 1000);
+      await supabase.from("scheduled_emails").insert({
+        client_id: clientId,
+        recipient_email: app.email,
+        email_type: oe.email_type,
+        send_at: sendAt.toISOString(),
+        payload: {
+          name: app.name,
+          first_name: firstName,
+          business_name: app.business_name,
+          plan: plan,
+          monthly_credits: credits.monthly,
+          rollover_cap: credits.rollover,
+        },
+      });
+    }
 
     // 8. Audit log
     await supabase.from("audit_log").insert({

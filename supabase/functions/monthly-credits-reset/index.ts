@@ -52,6 +52,26 @@ Deno.serve(async (req) => {
         description: `Monthly credit refresh — ${monthlyAllowance} credits added`,
       });
 
+      // Send credits refreshed email
+      if (client.user_id) {
+        const { data: profile } = await supabase.from("profiles").select("email, full_name").eq("user_id", client.user_id).maybeSingle();
+        if (profile?.email) {
+          await supabase.functions.invoke("send-email", {
+            body: {
+              to: profile.email,
+              template: "credits_refreshed",
+              data: {
+                name: profile.full_name,
+                first_name: (profile.full_name || "").split(" ")[0],
+                new_balance: newBalance,
+                monthly_allowance: monthlyAllowance,
+              },
+              clientId: client.id,
+            },
+          }).catch(console.error);
+        }
+      }
+
       resetCount++;
     }
 

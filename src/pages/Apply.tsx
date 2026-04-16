@@ -201,25 +201,39 @@ export default function Apply() {
       // Trigger AI scoring
       supabase.functions.invoke("score-lead", { body: { applicationId } }).catch(console.error);
 
+      // Send operator notification for all applications
+      supabase.functions.invoke("send-email", {
+        body: {
+          to: "hello@sitequeen.ai",
+          template: temperature === "HOT" ? "operator_hot_lead" : "operator_new_application",
+          data: {
+            business_name: form.business_name, business_type: form.business_type,
+            score, temperature, plan_interest: form.plan_interest,
+            applicant_name: form.name, applicant_email: form.email, phone: form.phone,
+          },
+          applicationId,
+        },
+      }).catch(console.error);
+
       if (isAutoApproved) {
         // Send approval email and redirect straight to booking
         supabase.functions.invoke("send-email", {
           body: {
             to: form.email,
-            template: "application_approved",
-            data: { name: form.name, business_name: form.business_name, booking_url: bookingUrl },
+            template: "hot_auto_approved",
+            data: { name: form.name, first_name: form.name.split(" ")[0], business_name: form.business_name, booking_url: bookingUrl },
             applicationId,
           },
         }).catch(console.error);
 
         navigate(`/book-call?name=${encodeURIComponent(form.name)}`);
       } else {
-        // Flagged — needs manual review, show "we'll be in touch" screen
+        // Flagged — needs manual review
         supabase.functions.invoke("send-email", {
           body: {
             to: form.email,
             template: "application_received",
-            data: { name: form.name, business_name: form.business_name },
+            data: { name: form.name, first_name: form.name.split(" ")[0], business_name: form.business_name },
             applicationId,
           },
         }).catch(console.error);
