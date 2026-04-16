@@ -60,7 +60,15 @@ serve(async (req) => {
       .single();
 
     const intakeData = siteData.intake_data;
-    if (!intakeData) throw new Error("No intake data found");
+
+    // Fetch call notes (operator discovery call notes)
+    const { data: callNotes } = await supabase
+      .from("call_notes")
+      .select("*")
+      .eq("client_id", clientId)
+      .maybeSingle();
+
+    if (!intakeData && !callNotes) throw new Error("No intake data or call notes found");
 
     // Try to fetch template if template_id exists
     let templateHTML = "";
