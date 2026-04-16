@@ -16,7 +16,7 @@ import { SoftDeleteModal } from "@/components/operator/SoftDeleteModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Search, Globe, ExternalLink, Users, Trash2 } from "lucide-react";
+import { Search, Globe, ExternalLink, Users, Trash2, Mail, Loader2 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 
 export default function OperatorClients() {
@@ -28,6 +28,7 @@ export default function OperatorClients() {
   const [selected, setSelected] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resendingWelcome, setResendingWelcome] = useState(false);
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["operator-clients"],
@@ -311,6 +312,51 @@ export default function OperatorClients() {
                         if (e.target.value !== (selected.site_url || "")) handleUpdateField(selected.id, "site_url", e.target.value);
                       }} />
                     </div>
+                    <Separator />
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      disabled={resendingWelcome}
+                      onClick={async () => {
+                        setResendingWelcome(true);
+                        try {
+                          // Get client email from application or profile
+                          const { data: profile } = await supabase
+                            .from("profiles")
+                            .select("email, full_name")
+                            .eq("user_id", selected.user_id)
+                            .single();
+                          
+                          if (!profile?.email) {
+                            toast.error("No email found for this client");
+                            setResendingWelcome(false);
+                            return;
+                          }
+
+                          // Generate new magic link via edge function
+                          const { data, error } = await supabase.functions.invoke("send-email", {
+                            body: {
+                              to: profile.email,
+                              template: "welcome_set_password",
+                              data: {
+                                name: profile.full_name || selected.business_name,
+                                first_name: (profile.full_name || "").split(" ")[0] || "there",
+                                business_name: selected.business_name,
+                              },
+                              clientId: selected.id,
+                            },
+                          });
+
+                          toast.success(`Welcome email resent to ${profile.email}`);
+                        } catch (err: any) {
+                          toast.error(err.message || "Failed to resend");
+                        }
+                        setResendingWelcome(false);
+                      }}
+                    >
+                      {resendingWelcome ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                      Resend Welcome Email
+                    </Button>
                   </div>
                 )}
               </TabsContent>
