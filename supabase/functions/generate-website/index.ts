@@ -177,6 +177,27 @@ Do not include any explanation, markdown formatting, or code blocks. Return raw 
       finalHTML = finalHTML.replace(/<link[^>]*href=["']styles\.css["'][^>]*>/gi, "");
     }
 
+    // Inject analytics tracking script before </body>
+    const trackingScript = `
+<!-- SiteQueen Analytics -->
+<script>
+(function(){
+  var CID='${clientId}';
+  var EP='${supabaseUrl}/functions/v1/track-event';
+  function dt(){return /Mobile|Android|iPhone/i.test(navigator.userAgent)?'mobile':'desktop'}
+  function sid(){var s=sessionStorage.getItem('sq_sid');if(!s){s=Math.random().toString(36).substr(2,9);sessionStorage.setItem('sq_sid',s)}return s}
+  function t(e,m){fetch(EP,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:CID,event_type:e,page_path:location.pathname,page_title:document.title,referrer:document.referrer,device_type:dt(),session_id:sid(),metadata:m||{}})}).catch(function(){})}
+  t('page_view');
+  document.addEventListener('click',function(e){var a=e.target.closest('a');if(!a)return;if(a.href&&a.href.indexOf('tel:')===0)t('phone_click',{phone:a.href});if(a.href&&a.href.indexOf('mailto:')===0)t('email_click',{email:a.href});if(a.classList.contains('cta-button')||a.classList.contains('btn-primary'))t('cta_click',{text:a.textContent.trim()})});
+  document.addEventListener('submit',function(e){t('form_submission',{form_id:e.target.id||'contact-form'})});
+})();
+</script>`;
+    if (finalHTML.includes("</body>")) {
+      finalHTML = finalHTML.replace("</body>", `${trackingScript}\n</body>`);
+    } else {
+      finalHTML += trackingScript;
+    }
+
     // Store generated HTML in Supabase storage
     const htmlBlob = new Blob([finalHTML], { type: "text/html" });
     await supabase.storage
