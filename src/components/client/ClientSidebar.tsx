@@ -7,6 +7,7 @@ import {
   HelpCircle,
   Settings,
   LogOut,
+  BarChart3,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -47,6 +48,7 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
   const navItems = [
     { title: "Overview", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Website", url: "/dashboard/website", icon: Globe },
+    { title: "Analytics", url: "/dashboard/analytics", icon: BarChart3 },
     { title: "Support Tickets", url: "/dashboard/support", icon: MessageSquare, badge: creditsBalance },
     { title: "Billing", url: "/dashboard/billing", icon: CreditCard },
     { title: "Help", url: "/dashboard/help", icon: HelpCircle },
