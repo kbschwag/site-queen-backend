@@ -61,6 +61,93 @@ serve(async (req) => {
 
     const intakeData = siteData.intake_data;
 
+    // Photo handling — decide if we're using client photos or stock
+    const usingStockPhotos = !!(siteData as any).using_stock_photos;
+
+    // Industry → Unsplash search keywords
+    const INDUSTRY_PHOTO_TERMS: Record<string, string[]> = {
+      trades_contractors: ["plumber", "electrician", "contractor", "tools", "construction"],
+      wellness_beauty: ["salon", "spa", "beauty", "hair", "wellness"],
+      professional_services: ["office", "business", "professional", "consulting", "meeting"],
+      food_hospitality: ["restaurant", "food", "cafe", "cooking", "dining"],
+      retail_products: ["retail", "products", "shopping", "store", "merchandise"],
+      creative_photography: ["photography", "creative", "studio", "camera", "art"],
+      health_fitness: ["fitness", "gym", "workout", "health", "exercise"],
+      education_coaching: ["coaching", "education", "teaching", "learning", "mentoring"],
+      other: ["business", "professional", "office", "work", "service"],
+    };
+
+    // Collect uploaded client photo URLs (if any)
+    const clientPhotoUrls: string[] = [];
+    const id = intakeData || {};
+    if (id.hero_photo_url) clientPhotoUrls.push(id.hero_photo_url);
+    if (id.owner_photo_url) clientPhotoUrls.push(id.owner_photo_url);
+    for (const arr of [id.portfolio_photos, id.team_photos, id.location_photos, id.extra_photos, id.award_logos]) {
+      if (Array.isArray(arr)) for (const u of arr) if (u) clientPhotoUrls.push(u);
+    }
+    for (const s of id.services || []) if (s.photo_url) clientPhotoUrls.push(s.photo_url);
+    for (const m of id.team_members || []) if (m.photo_url) clientPhotoUrls.push(m.photo_url);
+    for (const t of id.testimonials || []) if (t.photo_url) clientPhotoUrls.push(t.photo_url);
+    for (const p of id.custom_pages || []) if (Array.isArray(p.photos)) for (const u of p.photos) if (u) clientPhotoUrls.push(u);
+
+    const businessTypeKey = (clientData?.business_type || "other").toLowerCase().replace(/[\s-]/g, "_");
+    const photoKeywords = INDUSTRY_PHOTO_TERMS[businessTypeKey] || INDUSTRY_PHOTO_TERMS.other;
+
+    // Optional Unsplash API enrichment — pre-fetch a handful of relevant images so Claude can use real URLs
+    const UNSPLASH_ACCESS_KEY = Deno.env.get("UNSPLASH_ACCESS_KEY");
+    const unsplashPhotos: { keyword: string; url: string; alt: string; credit: string }[] = [];
+    if (usingStockPhotos && UNSPLASH_ACCESS_KEY) {
+      for (const kw of photoKeywords) {
+        try {
+          const r = await fetch(
+            `https://api.unsplash.com/search/photos?query=${encodeURIComponent(kw)}&per_page=4&orientation=landscape`,
+            { headers: { Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}` } }
+          );
+          if (r.ok) {
+            const j = await r.json();
+            for (const p of (j.results || []).slice(0, 4)) {
+              unsplashPhotos.push({
+                keyword: kw,
+                url: p.urls?.regular || p.urls?.full,
+                alt: p.alt_description || kw,
+                credit: `Photo by ${p.user?.name || "Unsplash"} on Unsplash`,
+              });
+            }
+          }
+        } catch (e) {
+          console.warn(`Unsplash fetch failed for "${kw}":`, e);
+        }
+      }
+    }
+
+    const photoSection = usingStockPhotos
+      ? `
+
+PHOTO HANDLING — STOCK PHOTOGRAPHY:
+No client photos were provided. Source all images from Unsplash.
+Use these industry-specific keywords for this client's business type (${clientData?.business_type || "general"}): ${photoKeywords.join(", ")}.
+
+${unsplashPhotos.length > 0 ? `
+Pre-curated Unsplash photos you may use directly (preferred — these are real, working URLs):
+${unsplashPhotos.map((p) => `- "${p.keyword}": ${p.url} (alt: ${p.alt}; ${p.credit})`).join("\n")}
+` : `
+Use the Unsplash source URL format as a fallback: https://source.unsplash.com/800x600/?[keyword]
+Examples:
+- Hero image: https://source.unsplash.com/1200x800/?${photoKeywords[0]}
+- Service image: https://source.unsplash.com/800x600/?${photoKeywords[1] || photoKeywords[0]}
+- Team placeholder: https://source.unsplash.com/400x400/?professional
+`}
+Every image in the site must have a relevant photo. The site must look completely professional. Choose keywords carefully to match the business type, tone, and vibe described in the intake form and call notes.`
+      : `
+
+PHOTO HANDLING — CLIENT-PROVIDED PHOTOS:
+The client uploaded ${clientPhotoUrls.length} photo${clientPhotoUrls.length === 1 ? "" : "s"} stored in our system. Use these real client photos throughout the site:
+${clientPhotoUrls.map((u, i) => `- ${i + 1}. ${u}`).join("\n")}
+
+${id.hero_photo_url ? `Hero image (use as the main hero): ${id.hero_photo_url}` : ""}
+Place portfolio photos in galleries/services, team photos in about/team sections, location photos in contact sections.
+Only use Unsplash stock photos for sections where no client photo was provided. If you need stock fallback use keywords: ${photoKeywords.join(", ")}.`;
+
     // Fetch call notes via application_id from the client record
     const applicationId = clientData?.application_id;
     const { data: callNotes } = applicationId
