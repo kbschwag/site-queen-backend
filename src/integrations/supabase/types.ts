@@ -14,6 +14,100 @@ export type Database = {
   }
   public: {
     Tables: {
+      analytics_daily_summary: {
+        Row: {
+          client_id: string
+          cta_clicks: number
+          date: string
+          form_submissions: number
+          id: string
+          page_views: number
+          phone_clicks: number
+          unique_sessions: number
+        }
+        Insert: {
+          client_id: string
+          cta_clicks?: number
+          date: string
+          form_submissions?: number
+          id?: string
+          page_views?: number
+          phone_clicks?: number
+          unique_sessions?: number
+        }
+        Update: {
+          client_id?: string
+          cta_clicks?: number
+          date?: string
+          form_submissions?: number
+          id?: string
+          page_views?: number
+          phone_clicks?: number
+          unique_sessions?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_daily_summary_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analytics_events: {
+        Row: {
+          client_id: string
+          country: string | null
+          created_at: string
+          device_type: string | null
+          event_type: string
+          id: string
+          metadata: Json | null
+          page_path: string | null
+          page_title: string | null
+          referrer: string | null
+          session_id: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          client_id: string
+          country?: string | null
+          created_at?: string
+          device_type?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          page_path?: string | null
+          page_title?: string | null
+          referrer?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          client_id?: string
+          country?: string | null
+          created_at?: string
+          device_type?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          page_path?: string | null
+          page_title?: string | null
+          referrer?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       applications: {
         Row: {
           accepts_commitment: string | null
@@ -888,6 +982,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_analytics_summary: {
+        Args: { p_client_id: string; p_date: string; p_event_type: string }
+        Returns: undefined
       }
     }
     Enums: {
