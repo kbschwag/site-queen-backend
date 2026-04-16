@@ -286,6 +286,11 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
         <li>✓ Photos look great</li>
         <li>✓ Everything looks good on your phone</li>
       </ul>
+      ${d.using_stock_photos ? `
+      <div style="background:#FEF3C7;border-left:4px solid #F59E0B;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <p style="margin:0;color:#78350F;">One thing to note — we used professional stock photography as placeholders since we didn't receive any photos from you. Your site looks great, but it will look even more like YOU with real photos of your business.</p>
+        <p style="margin:8px 0 0;color:#78350F;">You can swap any stock photo for a real one anytime using a support ticket. Photo swaps cost 15 credits each. ♛</p>
+      </div>` : ""}
       <p>Log into your dashboard to leave feedback or approve your site:</p>
       ${darkButton("Go to Dashboard →", DASHBOARD_URL)}
       <p>We're excited to get you live. ♛</p>

@@ -127,6 +127,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               business_name: businessName,
               staging_url: stagingUrl,
               operator_note: shareNote || null,
+              using_stock_photos: !!(site as any)?.using_stock_photos,
             },
             clientId,
           },
