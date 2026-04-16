@@ -12,8 +12,47 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Crown, Calendar, Flag, ThumbsDown, ThumbsUp, Send } from "lucide-react";
+import { Crown, Calendar, Flag, ThumbsDown, ThumbsUp, Send, Instagram, Facebook, ExternalLink, Search, Sparkles } from "lucide-react";
 import { CallNotesTab } from "@/components/operator/CallNotesTab";
+
+const SUPPORT_LEVEL_TO_PLAN: Record<string, string> = {
+  basic: "Starter",
+  standard: "Growth",
+  full_service: "Pro",
+  not_sure: "Not sure yet",
+};
+
+const READINESS_LABELS: Record<string, { label: string; className: string }> = {
+  ready_now: { label: "Ready now", className: "bg-emerald-500/15 text-emerald-700 border border-emerald-300" },
+  within_30_days: { label: "Within 30 days", className: "bg-blue-500/15 text-blue-700 border border-blue-300" },
+  few_months: { label: "Few months", className: "bg-amber-500/15 text-amber-700 border border-amber-300" },
+  exploring: { label: "Just exploring", className: "bg-muted text-muted-foreground border" },
+};
+
+const REFERRAL_ICON: Record<string, string> = {
+  Instagram: "📸",
+  TikTok: "🎵",
+  Facebook: "👥",
+  "Facebook group": "👥",
+  "Google search": "🔎",
+  "Friend or family referral": "💜",
+  "Another business owner recommended you": "🤝",
+  YouTube: "▶️",
+  Other: "✨",
+};
+
+const normalizeInstagram = (handle: string) => {
+  if (!handle) return "";
+  const clean = handle.replace(/^@/, "").trim();
+  if (clean.startsWith("http")) return clean;
+  return `https://instagram.com/${clean}`;
+};
+
+const normalizeFacebook = (url: string) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  return `https://${url.replace(/^\/+/, "")}`;
+};
 
 interface Props {
   application: any;
@@ -260,24 +299,80 @@ This can change — you're welcome to reapply in 3 months.
 
             <Separator />
 
+            {/* Readiness + flags */}
+            <div className="flex flex-wrap items-center gap-2">
+              {app.readiness && READINESS_LABELS[app.readiness] && (
+                <Badge className={READINESS_LABELS[app.readiness].className}>
+                  ⚡ {READINESS_LABELS[app.readiness].label}
+                </Badge>
+              )}
+              {app.logo_addon_requested && (
+                <Badge className="bg-primary/15 text-primary border border-primary/30">
+                  <Sparkles className="h-3 w-3 mr-1" /> Logo add-on requested ($50)
+                </Badge>
+              )}
+              {app.referral_source && (
+                <Badge variant="outline" className="gap-1">
+                  <span>{REFERRAL_ICON[app.referral_source] || "✨"}</span>
+                  {app.referral_source}
+                </Badge>
+              )}
+            </div>
+
+            <Separator />
+
             <div>
               <h3 className="font-semibold mb-2">Business Info</h3>
               {fieldRow("Business Type", app.business_type)}
               {fieldRow("Business Name", app.business_name)}
               {fieldRow("Industry", app.industry)}
               {fieldRow("Location", [app.city, app.state_province, app.country].filter(Boolean).join(", "))}
-              {fieldRow("Has Website", app.has_website)}
+              {(app.business_instagram || app.business_facebook) && (
+                <div className="flex gap-2 mt-2">
+                  {app.business_instagram && (
+                    <a
+                      href={normalizeInstagram(app.business_instagram)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                    >
+                      <Instagram className="h-3.5 w-3.5" /> {app.business_instagram}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                  {app.business_facebook && (
+                    <a
+                      href={normalizeFacebook(app.business_facebook)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                    >
+                      <Facebook className="h-3.5 w-3.5" /> Facebook
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             <Separator />
 
             <div>
-              <h3 className="font-semibold mb-2">Business Health</h3>
-              {fieldRow("Years in Business", app.years_in_business)}
-              {fieldRow("Monthly Clients", app.monthly_clients)}
-              {fieldRow("Decision Maker", app.decision_maker_status)}
-              {fieldRow("Restricted Niches", app.restricted_niches)}
-              {fieldRow("Update Frequency", app.update_frequency)}
+              <h3 className="font-semibold mb-2">Their Customers</h3>
+              {app.ideal_customer && (
+                <div className="text-sm bg-muted/40 rounded-lg p-3 mb-2 whitespace-pre-wrap">
+                  <span className="font-medium block mb-1">Ideal customer</span>
+                  {app.ideal_customer}
+                </div>
+              )}
+              {app.google_search_terms && (
+                <div className="text-sm bg-muted/40 rounded-lg p-3 whitespace-pre-wrap">
+                  <span className="font-medium flex items-center gap-1 mb-1">
+                    <Search className="h-3.5 w-3.5" /> Google search terms
+                  </span>
+                  {app.google_search_terms}
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -285,26 +380,38 @@ This can change — you're welcome to reapply in 3 months.
             <div>
               <h3 className="font-semibold mb-2">Website Vision</h3>
               {fieldRow("Website Goal", app.website_goal)}
-              {fieldRow("Brand Vibe", app.brand_vibe)}
               {fieldRow("Has Logo", app.has_logo)}
+              {fieldRow("Support Level", app.support_level ? `${app.support_level} → ${SUPPORT_LEVEL_TO_PLAN[app.support_level] || app.support_level}` : "—")}
+              {fieldRow("Restricted Niches", app.restricted_niches)}
               {app.logo_url && (
                 <div className="mt-2">
                   <img src={app.logo_url} alt="Logo" className="h-16 rounded border" />
                 </div>
               )}
-              {fieldRow("Inspiration", app.inspiration_urls)}
             </div>
+
+            {app.anything_else && (
+              <>
+                <Separator />
+                <div>
+                  <h3 className="font-semibold mb-2 flex items-center gap-1">
+                    <Crown className="h-4 w-4 text-primary" /> Anything else
+                  </h3>
+                  <div className="text-sm bg-primary/5 border-l-4 border-primary rounded-r-lg p-3 whitespace-pre-wrap">
+                    {app.anything_else}
+                  </div>
+                </div>
+              </>
+            )}
 
             <Separator />
 
             <div>
-              <h3 className="font-semibold mb-2">Commitment & Contact</h3>
-              {fieldRow("Plan Interest", app.plan_interest)}
-              {fieldRow("Accepts Commitment", app.accepts_commitment)}
+              <h3 className="font-semibold mb-2">Contact</h3>
               {fieldRow("Name", app.name)}
               {fieldRow("Email", app.email)}
               {fieldRow("Phone", app.phone)}
-              {fieldRow("Additional Notes", app.additional_notes)}
+              {fieldRow("Referral source", app.referral_source)}
             </div>
 
             <Separator />
