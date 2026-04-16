@@ -49,16 +49,24 @@ export function IntakeForm({ clientId, userId, plan, businessName, onComplete }:
     [intakeData]
   );
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const goNext = () => {
     if (currentStep < TOTAL_STEPS) {
       const completed = markStepComplete(currentStep);
       debouncedSave({ ...intakeData, current_step: currentStep + 1, completed_steps: completed });
       setStep(currentStep + 1);
+      scrollToTop();
     }
   };
 
   const goPrev = () => {
-    if (currentStep > 1) setStep(currentStep - 1);
+    if (currentStep > 1) {
+      setStep(currentStep - 1);
+      scrollToTop();
+    }
   };
 
   const handleSubmit = async () => {
