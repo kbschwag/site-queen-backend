@@ -471,6 +471,29 @@ export default function ClientWebsite() {
           </Card>
         )}
 
+        {(site as any)?.using_stock_photos && !(site as any)?.stock_photos_replaced && (
+          <Card className="bg-amber-50 border-amber-300">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2 text-amber-900">
+                <ImageIcon className="h-4 w-4" /> Make your website truly yours ♛
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-amber-900/90">
+                Your site is currently using stock photography. Swapping them for real photos of your business — even iPhone shots — will make it look significantly more authentic and trustworthy.
+              </p>
+              <p className="text-sm text-amber-900/80">
+                Submit a photo swap request using your credits (15 credits each).
+              </p>
+              <Button asChild size="sm" className="bg-amber-600 hover:bg-amber-700 text-white gap-2">
+                <Link to="/dashboard/support">
+                  <ImageIcon className="h-4 w-4" /> Submit a photo request
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
