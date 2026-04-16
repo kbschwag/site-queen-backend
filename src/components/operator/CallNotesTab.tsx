@@ -391,7 +391,7 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <Label>Tell me about your business</Label>
-            <MicButton field="theirStory" setter={setTheirStory} />
+            <MicButton field="theirStory" getter={() => theirStory} setter={setTheirStory} />
           </div>
           <p className="text-xs text-muted-foreground mb-2">What did they say when you asked them this? Capture their words not yours.</p>
           <Textarea
@@ -408,7 +408,7 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <Label>Who is their ideal customer?</Label>
-            <MicButton field="idealCustomer" setter={setIdealCustomer} />
+            <MicButton field="idealCustomer" getter={() => idealCustomer} setter={setIdealCustomer} />
           </div>
           <p className="text-xs text-muted-foreground mb-2">Be specific — age, situation, problem they have, what they're looking for</p>
           <Textarea
@@ -489,7 +489,7 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <Label>What do people search on Google to find them?</Label>
-            <MicButton field="googleSearch" setter={setGoogleSearchTerms} />
+            <MicButton field="googleSearch" getter={() => googleSearchTerms} setter={setGoogleSearchTerms} />
           </div>
           <p className="text-xs text-muted-foreground mb-2">Their exact words — this tells you their keywords, their customer's language</p>
           <Textarea
@@ -684,7 +684,7 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <Label>What should Claude ADD that the client didn't mention?</Label>
-            <MicButton field="expertAdditions" setter={setExpertAdditions} />
+            <MicButton field="expertAdditions" getter={() => expertAdditions} setter={setExpertAdditions} />
           </div>
           <p className="text-xs text-muted-foreground mb-2">Think about what great websites in this industry always have.</p>
           <Textarea
@@ -699,7 +699,7 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <Label>What should Claude NOT do?</Label>
-            <MicButton field="expertAvoid" setter={setExpertAvoid} />
+            <MicButton field="expertAvoid" getter={() => expertAvoid} setter={setExpertAvoid} />
           </div>
           <p className="text-xs text-muted-foreground mb-2">Avoid these mistakes for this specific client</p>
           <Textarea
@@ -713,7 +713,7 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <Label>Exact phrases from the call to use in the copy</Label>
-            <MicButton field="exactPhrases" setter={setExactPhrases} />
+            <MicButton field="exactPhrases" getter={() => exactPhrases} setter={setExactPhrases} />
           </div>
           <p className="text-xs text-muted-foreground mb-2">Words they actually said that should appear in headlines and copy</p>
           <Textarea
@@ -730,7 +730,7 @@ export function CallNotesTab({ clientId, businessName, callScheduled = true }: P
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <Label>Anything else Claude needs to know?</Label>
-            <MicButton field="finalNotes" setter={setFinalNotes} />
+            <MicButton field="finalNotes" getter={() => finalNotes} setter={setFinalNotes} />
           </div>
           <Textarea
             value={finalNotes}
