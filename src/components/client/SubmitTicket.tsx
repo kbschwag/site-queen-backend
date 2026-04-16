@@ -142,6 +142,21 @@ export function SubmitTicket({ clientId, userId, creditsBalance, onBuyCredits, o
         } as any);
       }
 
+      // Send ticket submitted confirmation email
+      supabase.functions.invoke("send-email", {
+        body: {
+          to: "", // will be resolved by the edge function via client lookup
+          template: "ticket_submitted",
+          data: {
+            request_text: description,
+            change_type: selectedType.name,
+            credits_cost: isCustom ? null : costToDeduct,
+            priority: isUrgent ? "urgent" : "normal",
+          },
+          clientId,
+        },
+      }).catch(console.error);
+
       setTicketRef(ref);
       setStep(3);
       queryClient.invalidateQueries({ queryKey: ["my-client"] });
