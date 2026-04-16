@@ -1,22 +1,30 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOperatorRole } from "@/hooks/useOperatorRole";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQuery } from "@tanstack/react-query";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Filter } from "lucide-react";
 import ApplicationDetailPanel from "@/components/operator/ApplicationDetailPanel";
 
 type TempFilter = "all" | "HOT" | "WARM" | "COLD" | "flagged" | "approved" | "declined" | "converted";
+type ReadinessFilter = "all" | "ready_now" | "within_30_days" | "few_months" | "exploring";
+
+const READINESS_BADGE: Record<string, { label: string; className: string }> = {
+  ready_now: { label: "Ready now", className: "bg-emerald-500/15 text-emerald-700 border border-emerald-300" },
+  within_30_days: { label: "Within 30d", className: "bg-blue-500/15 text-blue-700 border border-blue-300" },
+  few_months: { label: "Few months", className: "bg-amber-500/15 text-amber-700 border border-amber-300" },
+  exploring: { label: "Exploring", className: "bg-muted text-muted-foreground border" },
+};
 
 export default function OperatorApplications() {
   const { isTeamMember, canReviewApplications } = useOperatorRole();
   const [search, setSearch] = useState("");
   const [tempFilter, setTempFilter] = useState<TempFilter>("all");
+  const [readinessFilter, setReadinessFilter] = useState<ReadinessFilter>("all");
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("all");
 
@@ -33,14 +41,10 @@ export default function OperatorApplications() {
   });
 
   const filtered = (applications || []).filter((app) => {
-    // Tab filter
     if (activeTab === "flagged" && app.status !== "needs_review") return false;
     if (activeTab === "converted" && app.status !== "converted") return false;
-
-    // Team members with review access only see flagged
     if (isTeamMember && canReviewApplications && app.status !== "needs_review") return false;
 
-    // Temperature / status filter
     if (tempFilter === "HOT" && app.lead_temperature !== "HOT") return false;
     if (tempFilter === "WARM" && app.lead_temperature !== "WARM") return false;
     if (tempFilter === "COLD" && app.lead_temperature !== "COLD") return false;
@@ -49,7 +53,8 @@ export default function OperatorApplications() {
     if (tempFilter === "declined" && app.status !== "declined") return false;
     if (tempFilter === "converted" && app.status !== "converted") return false;
 
-    // Search
+    if (readinessFilter !== "all" && (app as any).readiness !== readinessFilter) return false;
+
     if (search) {
       const s = search.toLowerCase();
       if (
@@ -85,7 +90,6 @@ export default function OperatorApplications() {
     return "";
   };
 
-  // If team member, force flagged tab
   const showTabs = !isTeamMember;
 
   return (
@@ -111,7 +115,6 @@ export default function OperatorApplications() {
         <p className="text-sm text-muted-foreground">Showing flagged applications for your review</p>
       )}
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -123,26 +126,39 @@ export default function OperatorApplications() {
           />
         </div>
         {showTabs && activeTab === "all" && (
-          <Select value={tempFilter} onValueChange={(v) => setTempFilter(v as TempFilter)}>
-            <SelectTrigger className="w-40">
-              <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Filter" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="HOT">🔥 HOT</SelectItem>
-              <SelectItem value="WARM">💜 WARM</SelectItem>
-              <SelectItem value="COLD">COLD</SelectItem>
-              <SelectItem value="flagged">Flagged</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="declined">Declined</SelectItem>
-              <SelectItem value="converted">Converted</SelectItem>
-            </SelectContent>
-          </Select>
+          <>
+            <Select value={tempFilter} onValueChange={(v) => setTempFilter(v as TempFilter)}>
+              <SelectTrigger className="w-40">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filter" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="HOT">🔥 HOT</SelectItem>
+                <SelectItem value="WARM">💜 WARM</SelectItem>
+                <SelectItem value="COLD">COLD</SelectItem>
+                <SelectItem value="flagged">Flagged</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="declined">Declined</SelectItem>
+                <SelectItem value="converted">Converted</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={readinessFilter} onValueChange={(v) => setReadinessFilter(v as ReadinessFilter)}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Readiness" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All readiness</SelectItem>
+                <SelectItem value="ready_now">Ready now</SelectItem>
+                <SelectItem value="within_30_days">Within 30 days</SelectItem>
+                <SelectItem value="few_months">Few months</SelectItem>
+                <SelectItem value="exploring">Just exploring</SelectItem>
+              </SelectContent>
+            </Select>
+          </>
         )}
       </div>
 
-      {/* Table */}
       <div className="border rounded-lg overflow-auto">
         <Table>
           <TableHeader>
@@ -154,41 +170,52 @@ export default function OperatorApplications() {
               <TableHead className="hidden lg:table-cell">Country</TableHead>
               <TableHead>Score</TableHead>
               <TableHead>Temp</TableHead>
+              <TableHead className="hidden md:table-cell">Readiness</TableHead>
               <TableHead className="hidden md:table-cell">Plan</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No applications found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No applications found</TableCell></TableRow>
             ) : (
-              filtered.map((app) => (
-                <TableRow
-                  key={app.id}
-                  className={`cursor-pointer hover:bg-muted/50 ${rowBg(app)}`}
-                  onClick={() => setSelectedAppId(app.id)}
-                >
-                  <TableCell className="text-xs whitespace-nowrap">
-                    {new Date(app.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="font-medium">{app.name}</TableCell>
-                  <TableCell>{app.business_name}</TableCell>
-                  <TableCell className="hidden md:table-cell">{app.industry || "—"}</TableCell>
-                  <TableCell className="hidden lg:table-cell">{app.country || "—"}</TableCell>
-                  <TableCell className="font-mono text-sm">{app.ai_score ?? "—"}</TableCell>
-                  <TableCell>{tempBadge(app.lead_temperature)}</TableCell>
-                  <TableCell className="hidden md:table-cell text-sm">{app.plan_interest || "—"}</TableCell>
-                  <TableCell>{statusBadge(app.status)}</TableCell>
-                </TableRow>
-              ))
+              filtered.map((app) => {
+                const readiness = (app as any).readiness;
+                const readinessBadge = readiness && READINESS_BADGE[readiness];
+                return (
+                  <TableRow
+                    key={app.id}
+                    className={`cursor-pointer hover:bg-muted/50 ${rowBg(app)}`}
+                    onClick={() => setSelectedAppId(app.id)}
+                  >
+                    <TableCell className="text-xs whitespace-nowrap">
+                      {new Date(app.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="font-medium">{app.name}</TableCell>
+                    <TableCell>{app.business_name}</TableCell>
+                    <TableCell className="hidden md:table-cell">{app.industry || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{app.country || "—"}</TableCell>
+                    <TableCell className="font-mono text-sm">{app.ai_score ?? "—"}</TableCell>
+                    <TableCell>{tempBadge(app.lead_temperature)}</TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {readinessBadge ? (
+                        <Badge className={readinessBadge.className}>{readinessBadge.label}</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{app.plan_interest || "—"}</TableCell>
+                    <TableCell>{statusBadge(app.status)}</TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </div>
 
-      {/* Detail panel */}
       {selectedApp && (
         <ApplicationDetailPanel
           application={selectedApp}

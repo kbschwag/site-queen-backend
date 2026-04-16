@@ -33,7 +33,7 @@ serve(async (req) => {
       });
     }
 
-    // If already declined, skip scoring
+    // Already declined — skip
     if (app.status === "declined") {
       return new Response(JSON.stringify({ score: 0, temperature: "COLD", skipped: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -43,35 +43,33 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Use AI to analyze the additional_notes field for sentiment and flag detection
-    const prompt = `Analyze this business application for a done-for-you website service. Return ONLY a JSON object.
+    const prompt = `Analyze this business application for a done-for-you website service. Return ONLY a JSON object via the tool call.
 
-Application data:
-- Business: ${app.business_name} (${app.business_type})
+Application:
+- Business: ${app.business_name} (type: ${app.business_type})
 - Industry: ${app.industry || "N/A"}
-- Location: ${[app.city, app.state_province, app.country].filter(Boolean).join(", ") || app.city_state || "N/A"}
-- Years in business: ${app.years_in_business}
-- Monthly clients: ${app.monthly_clients}
-- Decision maker: ${app.decision_maker_status || (app.is_decision_maker ? "yes" : "no")}
-- Has website: ${app.has_website}
+- Location: ${[app.city, app.state_province, app.country].filter(Boolean).join(", ") || "N/A"}
+- Instagram: ${app.business_instagram || "N/A"}
+- Facebook: ${app.business_facebook || "N/A"}
+- Ideal customer: ${app.ideal_customer || "N/A"}
+- Google search terms they expect: ${app.google_search_terms || "N/A"}
 - Website goal: ${app.website_goal || "N/A"}
-- Brand vibe: ${app.brand_vibe || "N/A"}
 - Has logo: ${app.has_logo || "N/A"}
-- Plan interest: ${app.plan_interest || "N/A"}
-- Commitment: ${app.accepts_commitment || "N/A"}
-- Update frequency: ${app.update_frequency || "N/A"}
+- Support level: ${app.support_level || "N/A"}
+- Readiness: ${app.readiness || "N/A"}
 - Restricted niches: ${app.restricted_niches || "None"}
-- Additional notes: ${app.additional_notes || "None"}
+- Anything else: ${app.anything_else || "None"}
+- Referral source: ${app.referral_source || "N/A"}
 
-The client-side score is ${app.ai_score}/24. Temperature is ${app.lead_temperature}.
+The client-side score is ${app.ai_score}/15. Temperature is ${app.lead_temperature}.
 
 Tasks:
-1. Analyze the "additional notes" for sentiment: is the tone aggressive, rude, demanding, or disrespectful? If so, flag for instant decline.
-2. Check if the applicant mentions being a web designer, agency, or wanting to use the service for their own clients (white label concern).
-3. Check if the tone seems suspicious, unclear, or unusual.
-4. Provide a refined score (0-24) and temperature (HOT, WARM, COLD).
+1. Analyze the free-text fields (ideal_customer, google_search_terms, anything_else) for sentiment. If aggressive, rude, demanding, abusive, or contains profanity, flag for instant decline.
+2. Check if they appear to be a web designer / agency / reseller (white label concern) — phrases like "for my clients", "white label", "agency", etc.
+3. Check if the tone seems suspicious or low-quality.
+4. Provide a refined score (0-15) and temperature thresholds: HOT >= 10, WARM 6-9, COLD < 6.
 
-Return JSON with: score (number 0-24), temperature (HOT/WARM/COLD), sentiment (positive/neutral/negative/aggressive), flags (array of strings like "aggressive_tone", "potential_white_label", "suspicious_tone"), should_decline (boolean), needs_review (boolean)`;
+Return via the tool call.`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -82,7 +80,7 @@ Return JSON with: score (number 0-24), temperature (HOT/WARM/COLD), sentiment (p
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-lite",
         messages: [
-          { role: "system", content: "You are a lead qualification assistant. Return only valid JSON." },
+          { role: "system", content: "You are a lead qualification assistant. Always respond by calling the analyze_application tool." },
           { role: "user", content: prompt },
         ],
         tools: [{
@@ -93,7 +91,7 @@ Return JSON with: score (number 0-24), temperature (HOT/WARM/COLD), sentiment (p
             parameters: {
               type: "object",
               properties: {
-                score: { type: "number", description: "Score 0-24" },
+                score: { type: "number", description: "Score 0-15" },
                 temperature: { type: "string", enum: ["HOT", "WARM", "COLD"] },
                 sentiment: { type: "string", enum: ["positive", "neutral", "negative", "aggressive"] },
                 flags: { type: "array", items: { type: "string" } },
@@ -125,14 +123,13 @@ Return JSON with: score (number 0-24), temperature (HOT/WARM/COLD), sentiment (p
         if (parsed.should_decline && parsed.sentiment === "aggressive") {
           finalStatus = "declined";
           notes = [notes, "AI: Declined due to aggressive/rude tone"].filter(Boolean).join("; ");
-        } else if (parsed.needs_review || parsed.flags?.length > 0) {
+        } else if (parsed.needs_review || (parsed.flags && parsed.flags.length > 0)) {
           if (finalStatus !== "declined") finalStatus = "needs_review";
           notes = [notes, `AI FLAGS: ${parsed.flags.join(", ")}`].filter(Boolean).join("; ");
         }
       }
     } else {
       console.error("AI error:", aiResponse.status, await aiResponse.text());
-      // Keep client-side score as fallback
     }
 
     await supabase.from("applications").update({
@@ -145,7 +142,7 @@ Return JSON with: score (number 0-24), temperature (HOT/WARM/COLD), sentiment (p
     return new Response(JSON.stringify({ score: finalScore, temperature: finalTemperature, status: finalStatus }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
+  } catch (e: any) {
     console.error("score-lead error:", e);
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },

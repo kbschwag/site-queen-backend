@@ -7,11 +7,20 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeInput } from "@/lib/sanitize";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { ApplicationFormData, initialFormData, calculateScore, checkInstantDecline, checkFlags } from "@/components/apply/types";
-import StepAboutBusiness from "@/components/apply/StepAboutBusiness";
-import StepBusinessHealth from "@/components/apply/StepBusinessHealth";
-import StepWebsiteVision from "@/components/apply/StepWebsiteVision";
-import StepCommitment from "@/components/apply/StepCommitment";
+import {
+  ApplicationFormData,
+  initialFormData,
+  calculateScore,
+  checkInstantDecline,
+  checkFlags,
+  mapSupportToPlan,
+  STEP_LABELS,
+} from "@/components/apply/types";
+import IntroScreen from "@/components/apply/IntroScreen";
+import StepBusiness from "@/components/apply/StepBusiness";
+import StepCustomers from "@/components/apply/StepCustomers";
+import StepVision from "@/components/apply/StepVision";
+import StepConnect from "@/components/apply/StepConnect";
 import DeclineScreen from "@/components/apply/DeclineScreen";
 import SuccessScreen from "@/components/apply/SuccessScreen";
 import { ArrowLeft, ArrowRight, Send } from "lucide-react";
@@ -27,6 +36,7 @@ const TOTAL_STEPS = 4;
 export default function Apply() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [showIntro, setShowIntro] = useState(true);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<ApplicationFormData>(initialFormData);
   const [loading, setLoading] = useState(false);
@@ -38,29 +48,27 @@ export default function Apply() {
   const validateStep = (): string | null => {
     switch (step) {
       case 1:
-        if (!form.business_type) return "Please select your business type.";
+        if (!form.business_type) return "Please tell us what kind of business you're running.";
         if (!form.business_name.trim()) return "Please enter your business name.";
         if (!form.industry) return "Please select your industry.";
-        if (!form.has_website) return "Please tell us about your current website.";
+        if (!form.city.trim() || !form.state_province.trim() || !form.country.trim()) return "Please fill out your location.";
         return null;
       case 2:
-        if (!form.years_in_business) return "Please select how long you've been in business.";
-        if (!form.monthly_clients) return "Please select your monthly client range.";
-        if (!form.decision_maker_status) return "Please tell us about decision-making.";
-        if (form.restricted_niches.length === 0) return "Please select at least one option for restricted niches.";
-        if (!form.update_frequency) return "Please select your update frequency preference.";
+        if (!form.ideal_customer.trim()) return "Tell us a bit about your ideal customer.";
+        if (!form.google_search_terms.trim()) return "Tell us what people search on Google to find you.";
         return null;
       case 3:
-        if (!form.website_goal) return "Please select your website goal.";
-        if (!form.brand_vibe) return "Please pick a brand vibe.";
-        if (!form.has_logo) return "Please tell us about your logo.";
+        if (!form.website_goal) return "Please pick the main goal for your website.";
+        if (!form.has_logo) return "Let us know about your logo.";
+        if (!form.support_level) return "Pick the level of support you're looking for.";
+        if (!form.readiness) return "Let us know when you'd like to get started.";
         return null;
       case 4:
-        if (!form.plan_interest) return "Please select a plan.";
-        if (!form.accepts_commitment) return "Please answer the commitment question.";
         if (!form.name.trim()) return "Please enter your full name.";
         if (!form.email.trim()) return "Please enter your email address.";
-        if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return "Please enter a valid email address.";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return "Please enter a valid email address.";
+        if (!form.phone.trim()) return "Please enter your phone number.";
+        if (!form.referral_source) return "Let us know how you heard about SiteQueen.";
         return null;
       default:
         return null;
@@ -73,60 +81,49 @@ export default function Apply() {
       toast({ title: "Hold on", description: error, variant: "destructive" });
       return;
     }
-
-    // Check instant decline after step 1
-    if (step === 1) {
-      const declineReason = checkInstantDecline(form);
-      if (declineReason) {
-        // Submit decline silently
-        submitDecline(declineReason);
-        setDeclined(true);
-        return;
-      }
-    }
-
     setStep((s) => Math.min(s + 1, TOTAL_STEPS));
   };
 
   const handleBack = () => setStep((s) => Math.max(s - 1, 1));
 
-  const uploadFile = async (file: File, folder: string): Promise<string | null> => {
-    const ext = file.name.split(".").pop();
-    const path = `${folder}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await anonClient.storage.from("application-uploads").upload(path, file);
-    if (error) {
-      console.error("Upload error:", error);
-      return null;
-    }
-    const { data } = anonClient.storage.from("application-uploads").getPublicUrl(path);
-    return data.publicUrl;
-  };
-
   const submitDecline = async (reason: string) => {
-    await anonClient.from("applications").insert([{
-      business_type: form.business_type,
-      business_name: form.business_name || "Declined - Ecommerce",
-      industry: form.industry,
-      has_website: form.has_website || "none",
-      city_state: form.city || "",
-      city: form.city,
-      state_province: form.state_province,
-      country: form.country,
-      years_in_business: "N/A",
-      monthly_clients: "N/A",
-      email: "declined@placeholder.com",
-      name: "Declined Applicant",
-      status: "declined",
-      decline_reason: reason,
-      ai_score: 0,
-      lead_temperature: "COLD",
-    }]);
+    try {
+      await anonClient.from("applications").insert([{
+        business_type: form.business_type || "unknown",
+        business_name: sanitizeInput(form.business_name) || "Declined",
+        industry: form.industry || null,
+        has_website: null,
+        city: sanitizeInput(form.city) || null,
+        state_province: sanitizeInput(form.state_province) || null,
+        country: sanitizeInput(form.country) || null,
+        city_state: [form.city, form.state_province].filter(Boolean).map(sanitizeInput).join(", "),
+        ideal_customer: sanitizeInput(form.ideal_customer) || null,
+        google_search_terms: sanitizeInput(form.google_search_terms) || null,
+        website_goal: form.website_goal || null,
+        has_logo: form.has_logo || null,
+        support_level: form.support_level || null,
+        readiness: form.readiness || null,
+        anything_else: sanitizeInput(form.anything_else) || null,
+        business_instagram: sanitizeInput(form.business_instagram) || null,
+        business_facebook: sanitizeInput(form.business_facebook) || null,
+        referral_source: form.referral_source || null,
+        restricted_niches: form.restricted_niches.join(", "),
+        name: sanitizeInput(form.name) || "Declined Applicant",
+        email: sanitizeInput(form.email) || "declined@placeholder.com",
+        phone: sanitizeInput(form.phone) || null,
+        status: "declined",
+        decline_reason: reason,
+        ai_score: 0,
+        lead_temperature: "COLD",
+      }]);
 
-    // Send decline email if we have contact info
-    if (form.email) {
-      supabase.functions.invoke("send-email", {
-        body: { to: form.email, template: "application_declined", data: { name: form.name || "there" } },
-      }).catch(console.error);
+      if (form.email) {
+        supabase.functions.invoke("send-email", {
+          body: { to: form.email, template: "application_declined", data: { name: form.name || "there" } },
+        }).catch(console.error);
+      }
+    } catch (e) {
+      console.error("Decline submission error:", e);
     }
   };
 
@@ -147,19 +144,16 @@ export default function Apply() {
       return;
     }
 
+    // Instant decline check (silent — doesn't reveal reasons)
+    const declineReason = checkInstantDecline(form);
+    if (declineReason) {
+      await submitDecline(declineReason);
+      setDeclined(true);
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Upload files
-      let logoUrl: string | null = null;
-      let inspirationUrls: string[] = [];
-
-      if (form.logo_file) {
-        logoUrl = await uploadFile(form.logo_file, "logos");
-      }
-      for (const file of form.inspiration_files) {
-        const url = await uploadFile(file, "inspiration");
-        if (url) inspirationUrls.push(url);
-      }
-
       const { score, temperature } = calculateScore(form);
       const flags = checkFlags(form);
       const isAutoApproved = flags.length === 0;
@@ -167,6 +161,7 @@ export default function Apply() {
 
       const applicationId = crypto.randomUUID();
       const bookingUrl = `${window.location.origin}/book-call?name=${encodeURIComponent(form.name)}`;
+      const niches = form.restricted_niches.filter((n) => n !== "None of the above");
 
       const { error: insertError } = await anonClient.from("applications").insert([{
         id: applicationId,
@@ -177,25 +172,22 @@ export default function Apply() {
         state_province: sanitizeInput(form.state_province),
         country: sanitizeInput(form.country),
         city_state: [form.city, form.state_province].filter(Boolean).map(sanitizeInput).join(", "),
-        has_website: form.has_website,
-        years_in_business: form.years_in_business,
-        monthly_clients: form.monthly_clients,
-        decision_maker_status: form.decision_maker_status,
-        is_decision_maker: form.decision_maker_status === "yes",
-        restricted_niches: form.restricted_niches.join(", "),
-        update_frequency: form.update_frequency,
+        business_instagram: sanitizeInput(form.business_instagram) || null,
+        business_facebook: sanitizeInput(form.business_facebook) || null,
+        ideal_customer: sanitizeInput(form.ideal_customer),
+        google_search_terms: sanitizeInput(form.google_search_terms),
         website_goal: form.website_goal,
-        brand_vibe: form.brand_vibe,
         has_logo: form.has_logo,
-        logo_url: logoUrl,
-        logo_file_url: logoUrl,
-        inspiration_urls: inspirationUrls.join(", "),
-        plan_interest: form.plan_interest,
-        accepts_commitment: form.accepts_commitment,
+        logo_addon_requested: form.has_logo === "want_addon",
+        support_level: form.support_level,
+        plan_interest: mapSupportToPlan(form.support_level),
+        readiness: form.readiness,
+        restricted_niches: niches.length > 0 ? niches.join(", ") : "None",
+        anything_else: sanitizeInput(form.anything_else) || null,
         name: sanitizeInput(form.name),
         email: sanitizeInput(form.email),
         phone: sanitizeInput(form.phone),
-        additional_notes: sanitizeInput(form.additional_notes),
+        referral_source: form.referral_source,
         ai_score: score,
         lead_temperature: temperature,
         status,
@@ -203,6 +195,7 @@ export default function Apply() {
       }]);
 
       if (insertError) {
+        console.error(insertError);
         toast({ title: "Error", description: insertError.message, variant: "destructive" });
         setLoading(false);
         return;
@@ -211,39 +204,51 @@ export default function Apply() {
       // Trigger AI scoring
       supabase.functions.invoke("score-lead", { body: { applicationId } }).catch(console.error);
 
-      // Send operator notification for all applications
+      // Operator notification
       supabase.functions.invoke("send-email", {
         body: {
           to: "hello@sitequeen.ai",
           template: temperature === "HOT" ? "operator_hot_lead" : "operator_new_application",
           data: {
-            business_name: form.business_name, business_type: form.business_type,
-            score, temperature, plan_interest: form.plan_interest,
-            applicant_name: form.name, applicant_email: form.email, phone: form.phone,
+            business_name: form.business_name,
+            business_type: form.business_type,
+            score,
+            temperature,
+            plan_interest: mapSupportToPlan(form.support_level),
+            applicant_name: form.name,
+            applicant_email: form.email,
+            phone: form.phone,
           },
           applicationId,
         },
       }).catch(console.error);
 
       if (isAutoApproved) {
-        // Send approval email and redirect straight to booking
         supabase.functions.invoke("send-email", {
           body: {
             to: form.email,
             template: "hot_auto_approved",
-            data: { name: form.name, first_name: form.name.split(" ")[0], business_name: form.business_name, booking_url: bookingUrl },
+            data: {
+              name: form.name,
+              first_name: form.name.split(" ")[0],
+              business_name: form.business_name,
+              booking_url: bookingUrl,
+            },
             applicationId,
           },
         }).catch(console.error);
 
         navigate(`/book-call?name=${encodeURIComponent(form.name)}`);
       } else {
-        // Flagged — needs manual review
         supabase.functions.invoke("send-email", {
           body: {
             to: form.email,
             template: "application_received",
-            data: { name: form.name, first_name: form.name.split(" ")[0], business_name: form.business_name },
+            data: {
+              name: form.name,
+              first_name: form.name.split(" ")[0],
+              business_name: form.business_name,
+            },
             applicationId,
           },
         }).catch(console.error);
@@ -251,6 +256,7 @@ export default function Apply() {
         setSubmitted(true);
       }
     } catch (err) {
+      console.error(err);
       toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
     }
 
@@ -259,6 +265,7 @@ export default function Apply() {
 
   if (declined) return <DeclineScreen />;
   if (submitted) return <SuccessScreen name={form.name} email={form.email} />;
+  if (showIntro) return <IntroScreen onStart={() => setShowIntro(false)} />;
 
   return (
     <div className="min-h-screen bg-background">
@@ -269,12 +276,7 @@ export default function Apply() {
             <p className="text-sm font-medium text-muted-foreground">
               Step {step} of {TOTAL_STEPS}
             </p>
-            <p className="text-sm text-muted-foreground">
-              {step === 1 && "About Your Business"}
-              {step === 2 && "Business Health"}
-              {step === 3 && "Website Vision"}
-              {step === 4 && "Commitment & Contact"}
-            </p>
+            <p className="text-sm text-muted-foreground">{STEP_LABELS[step - 1]}</p>
           </div>
           <Progress value={(step / TOTAL_STEPS) * 100} className="h-2" />
         </div>
@@ -283,10 +285,10 @@ export default function Apply() {
       {/* Form content */}
       <div className="max-w-2xl mx-auto px-4 py-8 pb-32">
         <div className="transition-opacity duration-300">
-          {step === 1 && <StepAboutBusiness form={form} update={update} />}
-          {step === 2 && <StepBusinessHealth form={form} update={update} />}
-          {step === 3 && <StepWebsiteVision form={form} update={update} />}
-          {step === 4 && <StepCommitment form={form} update={update} />}
+          {step === 1 && <StepBusiness form={form} update={update} />}
+          {step === 2 && <StepCustomers form={form} update={update} />}
+          {step === 3 && <StepVision form={form} update={update} />}
+          {step === 4 && <StepConnect form={form} update={update} />}
         </div>
       </div>
 
@@ -305,9 +307,12 @@ export default function Apply() {
               Continue <ArrowRight className="w-4 h-4" />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={loading} className="gap-2">
-              {loading ? "Submitting..." : <>Submit Application <Send className="w-4 h-4" /></>}
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button onClick={handleSubmit} disabled={loading} className="gap-2">
+                {loading ? "Submitting..." : <>Submit my application ♛ <Send className="w-4 h-4" /></>}
+              </Button>
+              <p className="text-xs text-muted-foreground">We review every application personally and will be in touch within 24 hours. ♛</p>
+            </div>
           )}
         </div>
       </div>
