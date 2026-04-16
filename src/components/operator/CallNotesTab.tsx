@@ -103,10 +103,10 @@ export function CallNotesTab({ applicationId, businessName, callScheduled = true
   const { data: callNotes, isLoading } = useQuery({
     queryKey: ["call-notes", applicationId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from("call_notes")
-        .select("*")
-        .eq("application_id" as any, applicationId)
+        .select("*") as any)
+        .eq("application_id", applicationId)
         .maybeSingle();
       if (error) throw error;
       return data as any;
