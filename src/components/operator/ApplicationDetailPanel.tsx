@@ -7,11 +7,13 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Crown, Calendar, Flag, ThumbsDown, ThumbsUp, Send } from "lucide-react";
+import { CallNotesTab } from "@/components/operator/CallNotesTab";
 
 interface Props {
   application: any;
@@ -222,7 +224,24 @@ This can change — you're welcome to reapply in 3 months.
             </SheetTitle>
           </SheetHeader>
 
-          <div className="mt-4 space-y-4">
+          <div className="mt-4">
+            {/* Call notes status badge */}
+            <div className="flex items-center gap-2 mb-4">
+              <Badge className={(app as any).call_notes_completed ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-amber-500/10 text-amber-700 border-amber-200"}>
+                Call Notes: {(app as any).call_notes_completed ? "Complete" : "Pending"}
+              </Badge>
+              {app.status && (
+                <span className="text-xs text-muted-foreground">Status: {app.status}</span>
+              )}
+            </div>
+
+            <Tabs defaultValue="details">
+              <TabsList className="w-full">
+                <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+                <TabsTrigger value="callnotes" className="flex-1">Call Notes</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="details" className="space-y-4 mt-4">
             {/* Score */}
             <div className="flex items-center gap-3">
               <div className="text-3xl font-bold">{app.ai_score ?? "—"}</div>
@@ -336,6 +355,16 @@ This can change — you're welcome to reapply in 3 months.
                 </Button>
               </div>
             )}
+              </TabsContent>
+
+              <TabsContent value="callnotes" className="mt-4">
+                <CallNotesTab
+                  applicationId={app.id}
+                  businessName={app.business_name}
+                  callScheduled={app.status === "approved" || app.status === "converted" || app.status === "needs_review"}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         </SheetContent>
       </Sheet>
