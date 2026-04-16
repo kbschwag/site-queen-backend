@@ -13,6 +13,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { toast } from "sonner";
 import { Settings, Mail, Link2, Shield, AlertTriangle, CheckCircle2, XCircle, RotateCcw, Loader2 } from "lucide-react";
 import { PasswordSection } from "@/components/PasswordSection";
+import { SecuritySection } from "@/components/operator/SecuritySection";
 import { format } from "date-fns";
 
 export default function OperatorSettings() {
@@ -149,6 +150,21 @@ export default function OperatorSettings() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Security Section — Owner only */}
+      {isOwner && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Shield className="h-4 w-4" /> Security
+            </CardTitle>
+            <CardDescription>Login activity, sessions, and API status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SecuritySection />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Danger Zone — Owner only */}
       {isOwner && (

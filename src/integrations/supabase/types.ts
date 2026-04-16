@@ -115,6 +115,7 @@ export type Database = {
           ai_score: number | null
           approval_note: string | null
           approved_by: string | null
+          bot_risk: boolean | null
           brand_vibe: string | null
           business_name: string
           business_type: string
@@ -144,6 +145,7 @@ export type Database = {
           notes: string | null
           phone: string | null
           plan_interest: string | null
+          recaptcha_score: number | null
           restricted_niches: string | null
           state_province: string | null
           status: string | null
@@ -157,6 +159,7 @@ export type Database = {
           ai_score?: number | null
           approval_note?: string | null
           approved_by?: string | null
+          bot_risk?: boolean | null
           brand_vibe?: string | null
           business_name: string
           business_type: string
@@ -186,6 +189,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           plan_interest?: string | null
+          recaptcha_score?: number | null
           restricted_niches?: string | null
           state_province?: string | null
           status?: string | null
@@ -199,6 +203,7 @@ export type Database = {
           ai_score?: number | null
           approval_note?: string | null
           approved_by?: string | null
+          bot_risk?: boolean | null
           brand_vibe?: string | null
           business_name?: string
           business_type?: string
@@ -228,6 +233,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           plan_interest?: string | null
+          recaptcha_score?: number | null
           restricted_niches?: string | null
           state_province?: string | null
           status?: string | null
@@ -805,6 +811,30 @@ export type Database = {
           role?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          count: number | null
+          created_at: string | null
+          id: string
+          key: string
+          reset_at: string
+        }
+        Insert: {
+          count?: number | null
+          created_at?: string | null
+          id?: string
+          key: string
+          reset_at: string
+        }
+        Update: {
+          count?: number | null
+          created_at?: string | null
+          id?: string
+          key?: string
+          reset_at?: string
         }
         Relationships: []
       }

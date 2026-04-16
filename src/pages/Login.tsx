@@ -8,12 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Crown, Loader2, Eye, EyeOff, Mail } from "lucide-react";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showMagicLink, setShowMagicLink] = useState(false);
   const [magicEmail, setMagicEmail] = useState("");
@@ -27,6 +29,15 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setNoPasswordHint(false);
+
+    // Rate limit: 5 attempts per 15 minutes
+    const rl = checkRateLimit("login", 5, 15 * 60 * 1000);
+    if (!rl.allowed) {
+      setRateLimited(true);
+      toast({ title: "Too many attempts", description: "Please wait a few minutes before trying again.", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
