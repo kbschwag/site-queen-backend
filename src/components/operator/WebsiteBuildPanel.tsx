@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { SitePreviewFrame } from "./SitePreviewFrame";
 import { toast } from "sonner";
 import {
-  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket
+  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles
 } from "lucide-react";
 import { useFileUpload } from "@/hooks/useFileUpload";
 
