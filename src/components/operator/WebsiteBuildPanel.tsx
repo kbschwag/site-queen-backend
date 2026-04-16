@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { SitePreviewFrame } from "./SitePreviewFrame";
 import { toast } from "sonner";
 import {
-  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket
+  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles
 } from "lucide-react";
 import { useFileUpload } from "@/hooks/useFileUpload";
 
@@ -39,7 +39,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("domain_name, domain_status, deployment_path_confirmed, user_id")
+        .select("domain_name, domain_status, deployment_path_confirmed, user_id, intake_completed, call_notes_completed")
         .eq("id", clientId)
         .single();
       if (error) throw error;
@@ -259,6 +259,73 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </span>
         )}
       </div>
+
+      {/* Pending — show generate button with state indicators */}
+      {generationStatus === "pending" && (() => {
+        const intakeComplete = !!(clientData as any)?.intake_completed;
+        const callNotesComplete = !!(clientData as any)?.call_notes_completed;
+        const bothReady = intakeComplete && callNotesComplete;
+        const onlyIntake = intakeComplete && !callNotesComplete;
+        const onlyCallNotes = !intakeComplete && callNotesComplete;
+        const neitherReady = !intakeComplete && !callNotesComplete;
+
+        return (
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge className={intakeComplete ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-amber-500/10 text-amber-700 border-amber-200"}>
+                  Intake: {intakeComplete ? "Complete" : "Pending"}
+                </Badge>
+                <Badge className={callNotesComplete ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-amber-500/10 text-amber-700 border-amber-200"}>
+                  Call Notes: {callNotesComplete ? "Complete" : "Pending"}
+                </Badge>
+              </div>
+              {bothReady && (
+                <Button
+                  onClick={async () => {
+                    try {
+                      await supabase.functions.invoke("generate-website", { body: { client_id: clientId } });
+                      queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+                      toast.success("Website generation started!");
+                    } catch { toast.error("Failed to start generation"); }
+                  }}
+                  className="w-full gap-2"
+                >
+                  <Sparkles className="h-4 w-4" /> Generate website ♛
+                </Button>
+              )}
+              {onlyIntake && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await supabase.functions.invoke("generate-website", { body: { client_id: clientId } });
+                        queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+                        toast.success("Website generation started!");
+                      } catch { toast.error("Failed to start generation"); }
+                    }}
+                    className="w-full gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" /> Generate website (no call notes)
+                  </Button>
+                  <p className="text-xs text-amber-600 text-center">Call notes not added — website quality will be lower without your expert input</p>
+                </>
+              )}
+              {onlyCallNotes && (
+                <Button disabled className="w-full gap-2">
+                  Waiting for client intake form
+                </Button>
+              )}
+              {neitherReady && (
+                <Button disabled className="w-full gap-2">
+                  Waiting for intake form and call notes
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Ready for review — show Share modal trigger */}
       {generationStatus === "complete" && stagingUrl && (

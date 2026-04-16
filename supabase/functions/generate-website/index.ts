@@ -60,7 +60,15 @@ serve(async (req) => {
       .single();
 
     const intakeData = siteData.intake_data;
-    if (!intakeData) throw new Error("No intake data found");
+
+    // Fetch call notes (operator discovery call notes)
+    const { data: callNotes } = await supabase
+      .from("call_notes")
+      .select("*")
+      .eq("client_id", clientId)
+      .maybeSingle();
+
+    if (!intakeData && !callNotes) throw new Error("No intake data or call notes found");
 
     // Try to fetch template if template_id exists
     let templateHTML = "";
@@ -89,17 +97,56 @@ serve(async (req) => {
 
     let prompt: string;
 
+    // Build call notes section for prompt
+    const callNotesSection = callNotes ? `
+
+SOURCE 2 — DISCOVERY CALL NOTES (expert observations from our designer who spoke with the client on a call — THIS IS MORE VALUABLE THAN THE INTAKE FORM):
+${JSON.stringify({
+  their_story: callNotes.their_story,
+  ideal_customer: callNotes.ideal_customer,
+  inspiration_sites: callNotes.inspiration_sites,
+  instagram_handle: callNotes.instagram_handle,
+  google_search_terms: callNotes.google_search_terms,
+  website_goal: callNotes.website_goal,
+  contact_preferences: callNotes.contact_preferences,
+  booking_url: callNotes.booking_url,
+  pages_agreed: callNotes.pages_agreed,
+  template_selected: callNotes.template_selected,
+  color_direction: callNotes.color_direction,
+  vibe_notes: callNotes.vibe_notes,
+  tone_of_voice: callNotes.tone_of_voice,
+  tone_custom: callNotes.tone_custom,
+  expert_additions: callNotes.expert_additions,
+  expert_avoid: callNotes.expert_avoid,
+  exact_phrases: callNotes.exact_phrases,
+  final_notes: callNotes.final_notes,
+}, null, 2)}
+
+CRITICAL INSTRUCTIONS FOR CALL NOTES:
+- The call notes from our designer carry MORE WEIGHT than the client's self-reported intake form
+- Pay special attention to expert_additions — include ALL elements the designer requested
+- Pay special attention to expert_avoid — these are things you must NOT do
+- Use exact_phrases — weave these exact words naturally into headlines and copy
+- website_goal determines the entire hierarchy and structure — build around this goal
+- pages_agreed overrides the client's page selection — build exactly these pages
+- Match tone_of_voice exactly — this is how they actually communicate` : `
+
+No discovery call notes available — use intake form data only.`;
+
     if (templateHTML) {
       prompt = `You are a professional web developer building a website for a small business client.
+
+You have two sources of information:
+
+SOURCE 1 — CLIENT INTAKE FORM (what the client told us directly):
+${JSON.stringify(intakeData, null, 2)}
+${callNotesSection}
 
 Here is the HTML template with placeholders in double curly braces:
 ${templateHTML}
 
 Here is the CSS template with color variables as placeholders:
 ${templateCSS}
-
-Here is the client's complete business data from their intake form:
-${JSON.stringify(intakeData, null, 2)}
 
 Your instructions:
 1. Replace every {{PLACEHOLDER}} with the corresponding client data
@@ -116,13 +163,16 @@ Your instructions:
     - "css": the complete finished CSS as a single string
 Do not include any explanation, markdown formatting, or code blocks. Return raw JSON only.`;
     } else {
-      prompt = `You are a professional web developer. Build a complete, beautiful, modern single-page website for a small business.
+      prompt = `You are a professional web designer building a website for a small business client.
 
-Here is the client's complete business data from their intake form:
+You have two sources of information:
+
+SOURCE 1 — CLIENT INTAKE FORM (what the client told us directly):
 ${JSON.stringify(intakeData, null, 2)}
 
 Business name: ${clientData?.business_name || "Business"}
 Business type: ${clientData?.business_type || "Service Business"}
+${callNotesSection}
 
 Your instructions:
 1. Create a complete, production-ready single-page website with HTML and CSS

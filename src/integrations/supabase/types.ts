@@ -279,6 +279,101 @@ export type Database = {
         }
         Relationships: []
       }
+      call_notes: {
+        Row: {
+          booking_url: string | null
+          client_id: string
+          color_direction: string | null
+          completed: boolean | null
+          completed_at: string | null
+          completed_by: string | null
+          contact_preferences: string[] | null
+          created_at: string
+          exact_phrases: string | null
+          expert_additions: string | null
+          expert_avoid: string | null
+          final_notes: string | null
+          google_search_terms: string | null
+          id: string
+          ideal_customer: string | null
+          inspiration_sites: Json | null
+          instagram_handle: string | null
+          internal_notes: string | null
+          pages_agreed: Json | null
+          template_selected: string | null
+          their_story: string | null
+          tone_custom: string | null
+          tone_of_voice: string | null
+          updated_at: string
+          vibe_notes: string | null
+          website_goal: string | null
+        }
+        Insert: {
+          booking_url?: string | null
+          client_id: string
+          color_direction?: string | null
+          completed?: boolean | null
+          completed_at?: string | null
+          completed_by?: string | null
+          contact_preferences?: string[] | null
+          created_at?: string
+          exact_phrases?: string | null
+          expert_additions?: string | null
+          expert_avoid?: string | null
+          final_notes?: string | null
+          google_search_terms?: string | null
+          id?: string
+          ideal_customer?: string | null
+          inspiration_sites?: Json | null
+          instagram_handle?: string | null
+          internal_notes?: string | null
+          pages_agreed?: Json | null
+          template_selected?: string | null
+          their_story?: string | null
+          tone_custom?: string | null
+          tone_of_voice?: string | null
+          updated_at?: string
+          vibe_notes?: string | null
+          website_goal?: string | null
+        }
+        Update: {
+          booking_url?: string | null
+          client_id?: string
+          color_direction?: string | null
+          completed?: boolean | null
+          completed_at?: string | null
+          completed_by?: string | null
+          contact_preferences?: string[] | null
+          created_at?: string
+          exact_phrases?: string | null
+          expert_additions?: string | null
+          expert_avoid?: string | null
+          final_notes?: string | null
+          google_search_terms?: string | null
+          id?: string
+          ideal_customer?: string | null
+          inspiration_sites?: Json | null
+          instagram_handle?: string | null
+          internal_notes?: string | null
+          pages_agreed?: Json | null
+          template_selected?: string | null
+          their_story?: string | null
+          tone_custom?: string | null
+          tone_of_voice?: string | null
+          updated_at?: string
+          vibe_notes?: string | null
+          website_goal?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_notes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       change_requests: {
         Row: {
           admin_notes: string | null
@@ -400,6 +495,8 @@ export type Database = {
           application_id: string | null
           business_name: string
           business_type: string
+          call_notes_completed: boolean | null
+          call_notes_completed_at: string | null
           created_at: string
           credits_balance: number | null
           credits_last_reset: string | null
@@ -438,6 +535,8 @@ export type Database = {
           application_id?: string | null
           business_name: string
           business_type: string
+          call_notes_completed?: boolean | null
+          call_notes_completed_at?: string | null
           created_at?: string
           credits_balance?: number | null
           credits_last_reset?: string | null
@@ -476,6 +575,8 @@ export type Database = {
           application_id?: string | null
           business_name?: string
           business_type?: string
+          call_notes_completed?: boolean | null
+          call_notes_completed_at?: string | null
           created_at?: string
           credits_balance?: number | null
           credits_last_reset?: string | null
