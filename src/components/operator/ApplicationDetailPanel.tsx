@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOperatorRole } from "@/hooks/useOperatorRole";
@@ -12,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Crown, Calendar, Flag, ThumbsDown, ThumbsUp, Send, Instagram, Facebook, ExternalLink, Search, Sparkles } from "lucide-react";
+import { Crown, Calendar, Flag, ThumbsDown, ThumbsUp, Send, Instagram, Facebook, ExternalLink, Search, Sparkles, CheckCircle2, ArrowRight } from "lucide-react";
 import { CallNotesTab } from "@/components/operator/CallNotesTab";
 
 const SUPPORT_LEVEL_TO_PLAN: Record<string, string> = {
@@ -462,13 +463,27 @@ This can change — you're welcome to reapply in 3 months.
                 </Button>
               </div>
             )}
+
+            {/* Already converted — show link to client */}
+            {app.status === "converted" && (
+              <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-emerald-700 text-sm font-medium">
+                  <CheckCircle2 className="h-4 w-4" /> Already converted to client
+                </div>
+                <Button asChild variant="outline" className="w-full gap-2 bg-background">
+                  <Link to="/operator/clients">
+                    View client <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            )}
               </TabsContent>
 
               <TabsContent value="callnotes" className="mt-4">
                 <CallNotesTab
                   applicationId={app.id}
                   businessName={app.business_name}
-                  callScheduled={app.status === "approved" || app.status === "converted" || app.status === "needs_review"}
+                  callScheduled={true}
                 />
               </TabsContent>
             </Tabs>
