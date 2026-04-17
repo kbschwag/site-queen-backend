@@ -225,37 +225,9 @@ serve(async (req) => {
     // 5. Update application status
     await supabase.from("applications").update({ status: "converted" }).eq("id", app.id);
 
-    // 6. Generate magic link with redirect to set-password page
-    const siteUrl = "https://site-queen-backend.lovable.app";
-    const { data: magicLinkData, error: magicError } = await supabase.auth.admin.generateLink({
-      type: "magiclink",
-      email: app.email,
-      options: {
-        redirectTo: `${siteUrl}/set-password`,
-      },
-    });
-
-    if (magicError) {
-      console.error("Magic link error:", magicError);
-    }
-
-    const magicLink = magicLinkData?.properties?.action_link || null;
+    // 6. Send welcome email with magic link to set password (uses helper defined above)
+    const emailResult = await sendWelcomeEmail(clientId);
     const firstName = app.name ? app.name.split(" ")[0] : "there";
-
-    // 7. Send welcome email with account setup link
-    await supabase.functions.invoke("send-email", {
-      body: {
-        to: app.email,
-        template: "welcome_set_password",
-        data: {
-          name: app.name,
-          first_name: firstName,
-          business_name: app.business_name,
-          magic_link: magicLink,
-        },
-        clientId,
-      },
-    });
 
     // 8. Schedule onboarding sequence emails
     const onboardingEmails = [
