@@ -190,28 +190,50 @@ serve(async (req) => {
       pro: { balance: 100, monthly: 100, rollover: 200 },
     };
     const credits = creditConfig[plan] || creditConfig.starter;
-    const clientId = crypto.randomUUID();
 
-    const { error: clientError } = await supabase.from("clients").insert({
-      id: clientId,
-      application_id: app.id,
-      user_id: userId,
-      business_name: app.business_name,
-      business_type: app.business_type,
-      plan,
-      site_status: "building",
-      subscription_status: "active",
-      credits_balance: credits.balance,
-      credits_monthly_allowance: credits.monthly,
-      credits_rollover_cap: credits.rollover,
-      credits_last_reset: new Date().toISOString(),
-    });
+    // Guard: if an active client already exists for this user_id (different application,
+    // or the application_id check above missed it), reuse that client instead of inserting.
+    const { data: clientByUser } = await supabase
+      .from("clients")
+      .select("id, business_name")
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (clientError) {
-      console.error("Create client error:", clientError);
-      return new Response(JSON.stringify({ error: "Failed to create client record", details: clientError.message }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    let clientId: string;
+
+    if (clientByUser) {
+      clientId = clientByUser.id;
+      // Link this application to the existing client and keep plan in sync
+      await supabase
+        .from("clients")
+        .update({ application_id: app.id, plan })
+        .eq("id", clientId);
+    } else {
+      clientId = crypto.randomUUID();
+      const { error: clientError } = await supabase.from("clients").insert({
+        id: clientId,
+        application_id: app.id,
+        user_id: userId,
+        business_name: app.business_name,
+        business_type: app.business_type,
+        plan,
+        site_status: "building",
+        subscription_status: "active",
+        credits_balance: credits.balance,
+        credits_monthly_allowance: credits.monthly,
+        credits_rollover_cap: credits.rollover,
+        credits_last_reset: new Date().toISOString(),
       });
+
+      if (clientError) {
+        console.error("Create client error:", clientError);
+        return new Response(JSON.stringify({ error: "Failed to create client record", details: clientError.message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // 4. Create site record
