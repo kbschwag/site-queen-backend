@@ -325,38 +325,24 @@ export default function OperatorClients() {
                       className="w-full gap-2"
                       disabled={resendingWelcome}
                       onClick={async () => {
+                        const override = window.prompt(
+                          "Send the welcome / set-password email to this address (leave blank to use the client's account email):",
+                          ""
+                        );
+                        if (override === null) return; // cancelled
                         setResendingWelcome(true);
                         try {
-                          // Get client email from application or profile
-                          const { data: profile } = await supabase
-                            .from("profiles")
-                            .select("email, full_name")
-                            .eq("user_id", selected.user_id)
-                            .single();
-                          
-                          if (!profile?.email) {
-                            toast.error("No email found for this client");
-                            setResendingWelcome(false);
-                            return;
-                          }
-
-                          // Generate new magic link via edge function
-                          const { data, error } = await supabase.functions.invoke("send-email", {
+                          const { data, error } = await supabase.functions.invoke("resend-welcome-email", {
                             body: {
-                              to: profile.email,
-                              template: "welcome_set_password",
-                              data: {
-                                name: profile.full_name || selected.business_name,
-                                first_name: (profile.full_name || "").split(" ")[0] || "there",
-                                business_name: selected.business_name,
-                              },
                               clientId: selected.id,
+                              overrideEmail: override.trim() || undefined,
                             },
                           });
-
-                          toast.success(`Welcome email resent to ${profile.email}`);
+                          if (error) throw error;
+                          if (data?.error) throw new Error(data.error);
+                          toast.success(data?.message || "Welcome email resent");
                         } catch (err: any) {
-                          toast.error(err.message || "Failed to resend");
+                          toast.error(err.message || "Failed to resend welcome email");
                         }
                         setResendingWelcome(false);
                       }}
