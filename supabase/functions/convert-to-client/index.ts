@@ -270,7 +270,11 @@ serve(async (req) => {
       success: true,
       clientId,
       userId,
-      message: `${app.business_name} converted to client successfully`,
+      welcomeEmailSent: emailResult.sent,
+      welcomeEmailError: emailResult.error,
+      message: emailResult.sent
+        ? `${app.business_name} converted to client successfully — welcome email sent to ${app.email}`
+        : `${app.business_name} converted, but welcome email failed to send. Please resend manually.`,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
