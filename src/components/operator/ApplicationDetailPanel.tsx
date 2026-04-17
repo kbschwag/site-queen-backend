@@ -211,6 +211,17 @@ export default function ApplicationDetailPanel({ application, onClose }: Props) 
 
       queryClient.invalidateQueries({ queryKey: ["operator-applications"] });
       queryClient.invalidateQueries({ queryKey: ["operator-dashboard-stats"] });
+
+      // Surface welcome-email status so operator knows whether to manually resend
+      if (data?.welcomeEmailSent === false) {
+        toast.error(
+          `Client created, but the welcome email FAILED to send to ${app.email}. Please resend manually.`,
+          { duration: 10000 }
+        );
+      } else if (data?.alreadyConverted) {
+        toast.success(`Already a client — welcome email re-sent to ${app.email} ♛`);
+      }
+
       setConvertSuccess({ businessName: app.business_name, email: app.email });
     } catch (err: any) {
       toast.error(err.message || "Failed to convert");
