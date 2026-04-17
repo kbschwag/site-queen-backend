@@ -15,6 +15,9 @@ export function ClientLayout() {
         .from("clients")
         .select("*")
         .eq("user_id", user!.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
       return data;
