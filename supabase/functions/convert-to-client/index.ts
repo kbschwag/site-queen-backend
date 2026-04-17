@@ -60,8 +60,51 @@ serve(async (req) => {
     }
 
     if (app.status === "converted") {
-      return new Response(JSON.stringify({ error: "Application already converted" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      // Idempotency: return the existing active client instead of erroring or duplicating
+      const { data: existingClient } = await supabase
+        .from("clients")
+        .select("id, user_id, business_name")
+        .eq("application_id", app.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingClient) {
+        return new Response(JSON.stringify({
+          success: true,
+          alreadyConverted: true,
+          clientId: existingClient.id,
+          userId: existingClient.user_id,
+          message: `${existingClient.business_name} is already a client — returning existing record.`,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // status says converted but no active client exists — fall through and recreate
+    }
+
+    // Also guard against an active client already existing for this application even if status wasn't flipped
+    const { data: preExistingClient } = await supabase
+      .from("clients")
+      .select("id, user_id, business_name")
+      .eq("application_id", app.id)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (preExistingClient) {
+      // Make sure the application is marked converted, then short-circuit
+      await supabase.from("applications").update({ status: "converted" }).eq("id", app.id);
+      return new Response(JSON.stringify({
+        success: true,
+        alreadyConverted: true,
+        clientId: preExistingClient.id,
+        userId: preExistingClient.user_id,
+        message: `${preExistingClient.business_name} is already a client — returning existing record.`,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
