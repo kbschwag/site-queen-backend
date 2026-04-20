@@ -8,6 +8,8 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { OperatorProtectedRoute } from "@/components/operator/OperatorProtectedRoute";
 import { OperatorLayout } from "@/components/operator/OperatorLayout";
 import Index from "./pages/Index";
+import MarketingLayout from "@/layouts/MarketingLayout";
+import MarketingHome from "@/pages/marketing/Home";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -45,12 +47,17 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
+            {/* Marketing site (public, brand-scoped layout) */}
+            <Route element={<MarketingLayout />}>
+              <Route path="/" element={<MarketingHome />} />
+              <Route path="/apply" element={<Apply />} />
+            </Route>
+
             {/* Public */}
-            <Route path="/" element={<Index />} />
+            <Route path="/old-home" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-            <Route path="/apply" element={<Apply />} />
             <Route path="/book-call" element={<BookCall />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
