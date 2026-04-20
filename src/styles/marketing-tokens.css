@@ -1,0 +1,148 @@
+/* =============================================================
+   SiteQueen Brand Tokens
+   -------------------------------------------------------------
+   This file OVERRIDES the Caladan template's base color & font
+   variables for the marketing site only. Everything is scoped
+   under .marketing-scope so it CANNOT leak into /dashboard
+   or /operator routes.
+
+   Only the base tokens are overridden — the rest of the Caladan
+   design system (spacing, radii, typography scale) inherits.
+   ============================================================= */
+
+/* Google Fonts — Playfair Display for headings, Inter for body */
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap");
+
+.marketing-scope {
+  /* ---------- Base color overrides ---------- */
+  /* Caladan's "dark" becomes SiteQueen aubergine */
+  --_🎨-color--base---base--dark-100: #3C1F3B;
+  /* Caladan's "light" becomes SiteQueen warm cream (NOT white — this matters) */
+  --_🎨-color--base---base--light-100: #F5EFE6;
+
+  /* ---------- Font overrides ---------- */
+  --_🔠-typography---font--heading-sans: "Playfair Display", Georgia, serif;
+  --_🔠-typography---font--heading-serif: "Playfair Display", Georgia, serif;
+  --_🔠-typography---font--body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --_🔠-typography---font--label: "Inter", -apple-system, sans-serif;
+
+  /* ---------- SiteQueen-specific tokens (new) ---------- */
+  --sq-aubergine: #3C1F3B;
+  --sq-plum: #5E2A5C;
+  --sq-cream: #F5EFE6;
+  --sq-parchment: #E8DDD0;
+  --sq-gold: #C9A961;
+  --sq-charcoal: #2C2B28;
+  --sq-stone: #9A8C7C;
+
+  /* Body text should be charcoal on cream — not pure black on white */
+  color: var(--sq-charcoal);
+  background-color: var(--sq-cream);
+}
+
+/* Make sure headings use Playfair with a bit more air than Caladan's sans */
+.marketing-scope h1,
+.marketing-scope h2,
+.marketing-scope h3,
+.marketing-scope h4,
+.marketing-scope h5,
+.marketing-scope h6 {
+  font-family: "Playfair Display", Georgia, serif;
+  color: var(--sq-aubergine);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Sentence case rule — never ALL CAPS, never Title Case overrides */
+.marketing-scope .text-uppercase,
+.marketing-scope [class*="uppercase"] {
+  text-transform: none !important;
+  letter-spacing: 0.08em;
+}
+
+/* Eyebrow/label pattern — lowercase with letter spacing */
+.marketing-scope .sq-eyebrow {
+  font-family: "Inter", sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  color: var(--sq-stone);
+  margin-bottom: 1rem;
+}
+
+/* Gold accent — used sparingly: thin dividers, tiny details */
+.marketing-scope .sq-divider {
+  width: 40px;
+  height: 1px;
+  background-color: var(--sq-gold);
+  border: none;
+  margin: 0 auto;
+}
+
+/* Button override — no pill shapes, square-ish corners, restrained */
+.marketing-scope .button,
+.marketing-scope .w-button,
+.marketing-scope .sq-button {
+  background-color: var(--sq-aubergine);
+  color: var(--sq-cream);
+  font-family: "Inter", sans-serif;
+  font-weight: 500;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+  padding: 1rem 1.75rem;
+  border-radius: 2px; /* almost square, never pill */
+  border: none;
+  transition: background-color 0.25s ease;
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.marketing-scope .button:hover,
+.marketing-scope .w-button:hover,
+.marketing-scope .sq-button:hover {
+  background-color: var(--sq-plum);
+}
+
+/* Inverted button variant — used in final CTA section on aubergine bg */
+.marketing-scope .sq-button--inverted {
+  background-color: var(--sq-cream);
+  color: var(--sq-aubergine);
+}
+
+.marketing-scope .sq-button--inverted:hover {
+  background-color: #ffffff;
+}
+
+/* Section backgrounds */
+.marketing-scope .sq-section--cream { background-color: var(--sq-cream); }
+.marketing-scope .sq-section--parchment { background-color: var(--sq-parchment); }
+.marketing-scope .sq-section--aubergine {
+  background-color: var(--sq-aubergine);
+  color: var(--sq-cream);
+}
+.marketing-scope .sq-section--aubergine h1,
+.marketing-scope .sq-section--aubergine h2,
+.marketing-scope .sq-section--aubergine h3 {
+  color: var(--sq-cream);
+}
+
+/* Editorial body text — narrow column, generous line-height */
+.marketing-scope .sq-prose {
+  max-width: 38rem;
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--sq-charcoal);
+}
+
+.marketing-scope .sq-prose--narrow {
+  max-width: 32rem;
+}
+
+/* Serif italic — used for pull quotes and editorial asides */
+.marketing-scope .sq-serif-italic {
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+}
