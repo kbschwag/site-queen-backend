@@ -223,6 +223,39 @@ CRITICAL INSTRUCTIONS FOR CALL NOTES:
 
 No discovery call notes available — use intake form data only.`;
 
+    const brandingInstructions = `
+BRANDING INSTRUCTIONS:
+- PRIMARY_COLOR: Use the client's brand color from their intake form or call notes. If none provided, choose a color appropriate for their industry — trades: deep red or navy, wellness: sage green or blush, professional: navy or charcoal, food: warm orange or terracotta
+- ACCENT_COLOR: Choose a complementary accent. If primary is dark use a warm gold or bright contrasting color. If primary is light use a deep complementary tone.
+- DARK_COLOR: Default to #0d1d3b unless client has a specific dark brand color
+- FONT_HEADING: Choose from these Google Fonts based on their brand personality — bold/trades: Oswald or Bebas Neue, professional: Montserrat or Raleway, warm/friendly: Nunito or Poppins, luxury: Cormorant or Playfair Display
+- FONT_BODY: Always pair with Open Sans, Inter, or Lato for readability
+`;
+
+    const missingDataInstructions = `
+MISSING DATA INSTRUCTIONS — handle gracefully, never leave a placeholder visible:
+
+If HERO_BADGE is missing: use "TRUSTED LOCAL EXPERTS" or "SERVING [CITY] SINCE [YEAR]"
+If HERO_HEADLINE_LINE2 or LINE3 is missing: restructure the headline to work on 1-2 lines without gaps
+If ABOUT_IMAGE_URL is missing: use a relevant Unsplash image for their industry
+If WHY_US_IMAGE_URL is missing: use a relevant Unsplash image
+If EMERGENCY_BG_URL is missing: use a dark overlay without background image — it still looks great
+If GOOGLE_RATING is missing: remove the rating display entirely rather than showing empty stars
+If GOOGLE_REVIEW_COUNT is missing: remove the review count
+If MAP_EMBED_URL is missing: replace the map section with a styled text list of service areas only
+If SHOW_COUPONS is false or missing: remove the entire coupons section
+If SHOW_FINANCING is false or missing: remove the financing banner
+If SHOW_AWARDS is false or missing: remove the awards section
+If FAQ_ITEMS has fewer than 3 items: generate 3 relevant FAQs based on their industry and services
+If TESTIMONIALS has fewer than 3: generate 2-3 realistic sounding testimonials based on their services and location — use realistic first names and neighborhood names from their city
+If SERVICE_AREA_LOCATIONS is empty: use the client's city and 6-8 nearby suburbs based on their location
+If FOOTER_NEWSLETTER_TEXT is missing: use "Monthly tips and exclusive deals for [city] homeowners"
+If COPYRIGHT_YEAR is missing: use the current year
+If INSTAGRAM_URL or FACEBOOK_URL are missing: remove those social links rather than showing broken links
+
+For any placeholder that has no data and no sensible default — remove that element entirely. Never show a visible placeholder, empty bracket, or broken section to the end user. The site must look complete and intentional even with minimal data.
+`;
+
     if (templateHTML) {
       prompt = `You are a professional web developer building a website for a small business client.
 
@@ -238,11 +271,13 @@ ${templateHTML}
 
 Here is the CSS template with color variables as placeholders:
 ${templateCSS}
+${brandingInstructions}
+${missingDataInstructions}
 
 Your instructions:
 1. Replace every {{PLACEHOLDER}} with the corresponding client data
 2. For repeatable sections marked {{#SECTION}} and {{/SECTION}} generate one block per item in the data array
-3. If any placeholder has no data use a professional sensible default appropriate for their business type
+3. If any placeholder has no data use a professional sensible default appropriate for their business type — follow the MISSING DATA INSTRUCTIONS above precisely
 4. Generate compelling professional copy for headlines and descriptions based on their business answers
 5. Make all phone numbers click-to-call links
 6. Make all email addresses mailto links
@@ -265,11 +300,13 @@ Business name: ${clientData?.business_name || "Business"}
 Business type: ${clientData?.business_type || "Service Business"}
 ${callNotesSection}
 ${photoSection}
+${brandingInstructions}
+${missingDataInstructions}
 
 Your instructions:
 1. Create a complete, production-ready single-page website with HTML and CSS
 2. Include sections: Hero with CTA, About/Story, Services, Testimonials (if provided), Contact, Footer
-3. Use their brand colors, fonts, and style preferences from the intake data
+3. Use their brand colors, fonts, and style preferences from the intake data — apply the BRANDING INSTRUCTIONS above for any missing color or font choices
 4. Generate compelling professional copy for all sections based on their business answers
 5. Make all phone numbers click-to-call links
 6. Make all email addresses mailto links
@@ -277,7 +314,8 @@ Your instructions:
 8. The site MUST be fully responsive and mobile-first
 9. Use modern CSS (flexbox, grid, custom properties)
 10. Include smooth scroll behavior and clean typography
-11. Return ONLY a valid JSON object with exactly two fields:
+11. Follow the MISSING DATA INSTRUCTIONS above — never show empty placeholders or broken sections
+12. Return ONLY a valid JSON object with exactly two fields:
     - "html": the complete finished HTML as a single string (include CSS in a <style> tag in the head, or link to styles.css)
     - "css": the complete finished CSS as a single string
 Do not include any explanation, markdown formatting, or code blocks. Return raw JSON only.`;
