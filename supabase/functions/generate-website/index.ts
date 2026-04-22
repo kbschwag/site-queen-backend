@@ -23,6 +23,7 @@ serve(async (req) => {
   }
 
   let clientId: string | null = null;
+  let rawText = "";
 
   try {
     const body = await req.json();
