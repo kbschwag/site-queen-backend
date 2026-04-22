@@ -70,13 +70,18 @@ export function CallNotesTab({ applicationId, businessName, callScheduled = true
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [completing, setCompleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [listening, setListening] = useState(false);
   const [activeField, setActiveField] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const savedFadeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasUnsavedChangesRef = useRef(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const buildPayloadRef = useRef<(() => any) | null>(null);
+  const callNotesIdRef = useRef<string | null>(null);
 
   // Form state
   const [theirStory, setTheirStory] = useState("");
