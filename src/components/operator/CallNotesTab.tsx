@@ -187,31 +187,69 @@ export function CallNotesTab({ applicationId, businessName, callScheduled = true
     internal_notes: internalNotes || null,
   }), [theirStory, idealCustomer, inspirationSites, instagramHandle, googleSearchTerms, websiteGoal, websiteGoalOther, contactPreferences, bookingUrl, pagesAgreed, templateSelected, colorDirection, vibeNotes, toneOfVoice, toneCustom, expertAdditions, expertAvoid, exactPhrases, finalNotes, internalNotes, applicationId]);
 
-  const autoSave = useCallback(async () => {
+  // Keep refs in sync so unmount-flush uses the latest values
+  useEffect(() => { buildPayloadRef.current = buildPayload; }, [buildPayload]);
+  useEffect(() => { callNotesIdRef.current = callNotes?.id ?? null; }, [callNotes]);
+
+  const performSave = useCallback(async () => {
+    const payloadFn = buildPayloadRef.current;
+    if (!payloadFn) return;
     setSaveStatus("saving");
     try {
-      const payload = buildPayload();
-      if (callNotes?.id) {
-        await supabase.from("call_notes").update(payload as any).eq("id", callNotes.id);
+      const payload = payloadFn();
+      const existingId = callNotesIdRef.current;
+      if (existingId) {
+        const { error } = await supabase.from("call_notes").update(payload as any).eq("id", existingId);
+        if (error) throw error;
       } else {
-        await supabase.from("call_notes").insert(payload as any);
+        const { data, error } = await supabase.from("call_notes").insert(payload as any).select("id").single();
+        if (error) throw error;
+        if (data?.id) callNotesIdRef.current = data.id;
         queryClient.invalidateQueries({ queryKey: ["call-notes", applicationId] });
       }
+      hasUnsavedChangesRef.current = false;
+      setHasUnsavedChanges(false);
       setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
-    } catch {
-      setSaveStatus("idle");
+      if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current);
+      savedFadeTimerRef.current = setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (err) {
+      console.error("Call notes auto-save failed:", err);
+      setSaveStatus("error");
     }
-  }, [buildPayload, callNotes, applicationId, queryClient]);
+  }, [applicationId, queryClient]);
 
   const triggerAutoSave = useCallback(() => {
+    hasUnsavedChangesRef.current = true;
+    setHasUnsavedChanges(true);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(autoSave, 1500);
-  }, [autoSave]);
+    saveTimerRef.current = setTimeout(performSave, 1000);
+  }, [performSave]);
 
-  // Cleanup
+  // On unmount: flush any pending save instead of dropping it (prevents data loss when switching tabs)
   useEffect(() => {
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+        if (hasUnsavedChangesRef.current) {
+          // Fire-and-forget — component is unmounting but the request will complete
+          void performSave();
+        }
+      }
+      if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current);
+    };
+  }, [performSave]);
+
+  // Warn before closing tab / navigating away with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChangesRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
   // Speech recognition
