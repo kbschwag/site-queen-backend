@@ -264,37 +264,30 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     `),
   },
 
-  // #12 — Website ready for staging review
+  // #12 — Website ready for staging review (three-option layout)
   website_ready_for_review: {
-    subject: "Your website is ready to preview ♛",
+    subject: "Your SiteQueen website is ready to preview ♛",
     html: (d) => emailWrapper(`
       <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
-      <p>Your SiteQueen website is ready for your review. ♛</p>
-      <p>We've built something we're really proud of and we can't wait to hear what you think.</p>
+      <p>Your website is ready. Take a look and let us know what you think.</p>
       ${d.operator_note ? `
       <div style="background:${LIGHT_BG};border-radius:8px;padding:16px 20px;margin:20px 0;border-left:4px solid ${BRAND_PURPLE};">
         <p style="margin:0 0 4px;font-weight:bold;font-size:13px;color:#666;">A note from your designer:</p>
         <p style="margin:0;font-style:italic;">"${d.operator_note}"</p>
       </div>` : ""}
-      <p>Click below to preview your website:</p>
       ${purpleButton("Preview Your Website →", d.staging_url || "#")}
-      <p>Take your time reviewing it. Check that:</p>
-      <ul style="line-height:2;">
-        <li>✓ All your business information is correct</li>
-        <li>✓ Your phone number and email are right</li>
-        <li>✓ Your services are accurate</li>
-        <li>✓ Photos look great</li>
-        <li>✓ Everything looks good on your phone</li>
-      </ul>
+      <p style="margin-top:28px;">After reviewing, choose one of these options in your dashboard:</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:16px 0;">
+        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;"><strong style="color:#15803d;">✓ &nbsp;Approve it</strong> — if everything looks perfect</td></tr>
+        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;"><strong style="color:#b45309;">✏ &nbsp;Request small changes</strong> — for quick tweaks</td></tr>
+        <tr><td style="padding:10px 0;"><strong style="color:${BRAND_PURPLE};">📞 &nbsp;Book a revision call</strong> — to talk through bigger changes</td></tr>
+      </table>
       ${d.using_stock_photos ? `
       <div style="background:#FEF3C7;border-left:4px solid #F59E0B;border-radius:8px;padding:16px 20px;margin:20px 0;">
         <p style="margin:0;color:#78350F;">One thing to note — we used professional stock photography as placeholders since we didn't receive any photos from you. Your site looks great, but it will look even more like YOU with real photos of your business.</p>
-        <p style="margin:8px 0 0;color:#78350F;">You can swap any stock photo for a real one anytime using a support ticket. Photo swaps cost 15 credits each. ♛</p>
       </div>` : ""}
-      <p>Log into your dashboard to leave feedback or approve your site:</p>
-      ${darkButton("Go to Dashboard →", DASHBOARD_URL)}
-      <p>We're excited to get you live. ♛</p>
-      <p style="margin-top:24px;">— The SiteQueen Team</p>
+      ${darkButton("Go to My Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
 
