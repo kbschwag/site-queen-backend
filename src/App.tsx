@@ -25,6 +25,7 @@ import ClientDashboard from "./pages/ClientDashboard";
 import ClientOverview from "./pages/client/ClientOverview";
 import ClientWebsite from "./pages/client/ClientWebsite";
 import ClientSupport from "./pages/client/ClientSupport";
+import ClientContact from "./pages/client/ClientContact";
 import ClientBilling from "./pages/client/ClientBilling";
 import ClientHelp from "./pages/client/ClientHelp";
 import ClientSettings from "./pages/client/ClientSettings";
@@ -74,6 +75,7 @@ const App = () => (
               <Route index element={<ClientOverview />} />
               <Route path="website" element={<ClientWebsite />} />
               <Route path="support" element={<ClientSupport />} />
+              <Route path="contact" element={<ClientContact />} />
               <Route path="analytics" element={<ClientAnalytics />} />
               <Route path="billing" element={<ClientBilling />} />
               <Route path="help" element={<ClientHelp />} />

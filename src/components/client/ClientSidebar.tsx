@@ -5,6 +5,7 @@ import {
   MessageSquare,
   CreditCard,
   HelpCircle,
+  LifeBuoy,
   Settings,
   LogOut,
   BarChart3,
@@ -50,6 +51,7 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
     { title: "My Website", url: "/dashboard/website", icon: Globe },
     { title: "Analytics", url: "/dashboard/analytics", icon: BarChart3 },
     { title: "Support Tickets", url: "/dashboard/support", icon: MessageSquare, badge: creditsBalance },
+    { title: "Support", url: "/dashboard/contact", icon: LifeBuoy },
     { title: "Billing", url: "/dashboard/billing", icon: CreditCard },
     { title: "Help", url: "/dashboard/help", icon: HelpCircle },
   ];
