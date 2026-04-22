@@ -22,10 +22,22 @@ const SPECIAL_FEATURES = [
   "Online menu",
   "Photo gallery page",
   "FAQ section",
-  "Newsletter signup",
   "Google Maps embed",
   "WhatsApp chat button",
   "Instagram feed embed",
+];
+
+const ADDON_PAGES = [
+  {
+    key: "blog_addon_requested" as const,
+    label: "Blog / News",
+    note: "Add-on service — we'll discuss this separately",
+  },
+  {
+    key: "booking_addon_requested" as const,
+    label: "Online Booking",
+    note: "Add-on service — we'll discuss this separately",
+  },
 ];
 
 export function StepPages({ data, onChange }: Props) {
