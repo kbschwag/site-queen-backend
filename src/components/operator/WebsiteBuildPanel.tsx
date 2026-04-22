@@ -18,6 +18,7 @@ import {
   Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles, ImageIcon, Mail, Pencil, Phone, RefreshCw,
 } from "lucide-react";
 import { QuickEditPanel } from "./QuickEditPanel";
+import { FailureCard } from "./GenerationFailureCard";
 import { useFileUpload } from "@/hooks/useFileUpload";
 
 interface Props {
@@ -579,22 +580,15 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
         </Card>
       )}
 
-      {/* Failed */}
+      {/* Failed — proper failure card with retry, view-data and edit-code actions */}
       {generationStatus === "failed" && (
-        <Card className="border-destructive/30">
-          <CardContent className="pt-4 space-y-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-sm">Generation Failed</p>
-                <p className="text-sm text-muted-foreground">{generationError || "Unknown error"}</p>
-              </div>
-            </div>
-            <Button variant="outline" onClick={handleManualReview} className="gap-2">
-              <Wrench className="h-4 w-4" /> I'll work on it
-            </Button>
-          </CardContent>
-        </Card>
+        <FailureCard
+          clientId={clientId}
+          businessName={businessName}
+          site={site}
+          generationError={generationError}
+          onRetry={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })}
+        />
       )}
 
       {/* Manual review */}

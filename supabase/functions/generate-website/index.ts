@@ -39,10 +39,21 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Update status to generating
+    // Fetch existing site so we can increment attempt counter
+    const { data: existingSite } = await supabase
+      .from("sites")
+      .select("generation_attempts")
+      .eq("client_id", clientId)
+      .maybeSingle();
+
+    // Update status to generating + bump attempt counter + timestamp
     await supabase
       .from("sites")
-      .update({ generation_status: "generating" })
+      .update({
+        generation_status: "generating",
+        generation_attempts: ((existingSite as any)?.generation_attempts || 0) + 1,
+        last_generation_attempt_at: new Date().toISOString(),
+      } as any)
       .eq("client_id", clientId);
 
     // Fetch client + site data
@@ -61,6 +72,17 @@ serve(async (req) => {
       .single();
 
     const intakeData = siteData.intake_data || {};
+
+    // ====================================================================
+    // SNAPSHOT INTAKE DATA — preserved even if generation later fails
+    // ====================================================================
+    await supabase
+      .from("sites")
+      .update({
+        intake_snapshot: intakeData,
+        intake_snapshot_saved_at: new Date().toISOString(),
+      } as any)
+      .eq("client_id", clientId);
 
     // Photo handling — decide if we're using client photos or stock
     const usingStockPhotos = !!(siteData as any).using_stock_photos;
@@ -292,6 +314,14 @@ Only use Unsplash stock photos for sections where no client photo was provided. 
 
     if (!intakeData && !callNotes) throw new Error("No intake data or call notes found");
 
+    // SNAPSHOT CALL NOTES — preserved even if generation later fails
+    if (callNotes) {
+      await supabase
+        .from("sites")
+        .update({ call_notes_snapshot: callNotes } as any)
+        .eq("client_id", clientId);
+    }
+
     // Try to fetch template if a template was selected
     let templateHTML = "";
     let templateCSS = "";
@@ -478,27 +508,52 @@ CRITICAL OUTPUT INSTRUCTIONS:
 - Never include any text before or after the HTML/JSON`;
     }
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        max_tokens: 16000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    // Retry loop — handles transient 429/529/network errors with exponential backoff
+    const MAX_AI_ATTEMPTS = 2;
+    let aiAttempt = 0;
+    let aiResponse: Response | null = null;
+    let aiData: any = null;
+    let lastAiError: Error | null = null;
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI API error:", aiResponse.status, errText);
-      throw new Error(`AI generation failed: ${aiResponse.status}`);
+    while (aiAttempt < MAX_AI_ATTEMPTS) {
+      aiAttempt++;
+      try {
+        aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            max_tokens: 16000,
+            messages: [{ role: "user", content: prompt }],
+          }),
+        });
+
+        if (!aiResponse.ok) {
+          const errText = await aiResponse.text();
+          console.error(`AI API error (attempt ${aiAttempt}/${MAX_AI_ATTEMPTS}):`, aiResponse.status, errText);
+          if ((aiResponse.status === 429 || aiResponse.status === 529) && aiAttempt < MAX_AI_ATTEMPTS) {
+            await new Promise((r) => setTimeout(r, 3000 * aiAttempt));
+            continue;
+          }
+          throw new Error(`AI generation failed: ${aiResponse.status}`);
+        }
+
+        aiData = await aiResponse.json();
+        rawText = aiData.choices?.[0]?.message?.content || "";
+        break; // success
+      } catch (err) {
+        lastAiError = err as Error;
+        console.error(`AI fetch error (attempt ${aiAttempt}/${MAX_AI_ATTEMPTS}):`, err);
+        if (aiAttempt < MAX_AI_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        throw lastAiError;
+      }
     }
-
-    const aiData = await aiResponse.json();
-    rawText = aiData.choices?.[0]?.message?.content || "";
 
     // Defensive parsing — handle markdown wrappers, raw HTML, or JSON
     let cleaned = rawText
