@@ -522,6 +522,15 @@ Do not include any explanation, markdown formatting, or code blocks. Return raw 
       finalHTML += trackingScript;
     }
 
+    // Append Unsplash photo credit comment (license compliance)
+    if (usingStockPhotos && (heroPhoto || aboutPhoto || whyUsPhoto || emergencyBgPhoto)) {
+      const credits = `
+<!-- Photo credits (Unsplash):
+${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unsplash_url})\n` : ""}${aboutPhoto ? `  About: ${aboutPhoto.photographer} on Unsplash (${aboutPhoto.unsplash_url})\n` : ""}${whyUsPhoto ? `  Why us: ${whyUsPhoto.photographer} on Unsplash (${whyUsPhoto.unsplash_url})\n` : ""}${emergencyBgPhoto ? `  Emergency bg: ${emergencyBgPhoto.photographer} on Unsplash (${emergencyBgPhoto.unsplash_url})\n` : ""}  Search terms used: ${photoTerms.join(", ")}
+-->`;
+      finalHTML += credits;
+    }
+
     // Store generated HTML in Supabase storage
     const htmlBlob = new Blob([finalHTML], { type: "text/html" });
     await supabase.storage
