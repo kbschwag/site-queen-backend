@@ -439,7 +439,7 @@ CRITICAL OUTPUT INSTRUCTIONS:
 - Return ONLY the response — no explanation, no commentary, no markdown code fences
 - Do NOT wrap the response in \`\`\`html or \`\`\`json fences
 - The very first character of your response must be either < (for HTML) or { (for JSON)
-- Never include any text before or after the HTML/JSON
+- Never include any text before or after the HTML/JSON`;
     } else {
       prompt = `You are a professional web designer building a website for a small business client.
 
