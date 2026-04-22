@@ -122,11 +122,52 @@ export function IntakeForm({ clientId, userId, plan, businessName, onComplete }:
         } as any)
         .eq("client_id", clientId);
 
-      // Mark client as intake completed
+      // Mark client as intake completed + persist brand/font/addon selections
+      const clientUpdate: Record<string, any> = { intake_completed: true };
+      if (intakeData.primary_color) clientUpdate.primary_color = intakeData.primary_color;
+      if (intakeData.accent_color) clientUpdate.accent_color = intakeData.accent_color;
+      if (intakeData.logo_addon_requested !== undefined)
+        clientUpdate.logo_addon_requested = !!intakeData.logo_addon_requested;
+      if (intakeData.blog_addon_requested !== undefined)
+        clientUpdate.blog_addon_requested = !!intakeData.blog_addon_requested;
+      if (intakeData.booking_addon_requested !== undefined)
+        clientUpdate.booking_addon_requested = !!intakeData.booking_addon_requested;
+      if (intakeData.font_choice_mode === "list" && intakeData.preferred_font) {
+        clientUpdate.preferred_font = intakeData.preferred_font;
+      }
+      if (intakeData.font_choice_mode === "upload") {
+        if (intakeData.custom_font_url) clientUpdate.custom_font_url = intakeData.custom_font_url;
+        if (intakeData.custom_font_name) clientUpdate.custom_font_name = intakeData.custom_font_name;
+      }
+
       await supabase
         .from("clients")
-        .update({ intake_completed: true } as any)
+        .update(clientUpdate as any)
         .eq("id", clientId);
+
+      // Operator notifications for add-on interest
+      const addonNotifications: { type: string; message: string; client_id: string; target_role: string }[] = [];
+      if (intakeData.blog_addon_requested) {
+        addonNotifications.push({
+          type: "addon_interest",
+          target_role: "operator",
+          client_id: clientId,
+          message: `${businessName} is interested in Blog as an add-on — follow up after site launch`,
+        });
+      }
+      if (intakeData.booking_addon_requested) {
+        addonNotifications.push({
+          type: "addon_interest",
+          target_role: "operator",
+          client_id: clientId,
+          message: `${businessName} is interested in Booking as an add-on — follow up after site launch`,
+        });
+      }
+      if (addonNotifications.length > 0) {
+        supabase.from("notifications").insert(addonNotifications as any).then(({ error }) => {
+          if (error) console.error("addon notification error:", error);
+        });
+      }
 
       // Fire and forget — trigger website generation in background
       supabase.functions.invoke("generate-website", {
