@@ -187,15 +187,37 @@ export default function ClientWebsite() {
   const approveWebsite = useMutation({
     mutationFn: async () => {
       if (!client || !site) throw new Error("Missing data");
+      // CRITICAL: Set status to client_approved — DO NOT trigger deployment.
+      // Only an operator can deploy.
+      await supabase.from("sites").update({
+        generation_status: "client_approved",
+        client_approved_at: new Date().toISOString(),
+      } as any).eq("id", site.id);
+
       await supabase.from("notifications").insert({
         type: "client_approved_site",
         client_id: client.id,
-        message: `${client.business_name} approved their website for launch ♛`,
+        message: `${client.business_name} has approved their website and is ready to go live ♛ — deploy when ready`,
         target_role: "operator",
       } as any);
-      await supabase.from("sites").update({ generation_status: "approved" } as any).eq("id", site.id);
 
-      // Send approval confirmation
+      // Notify operator by email
+      await supabase.functions.invoke("send-email", {
+        body: {
+          to: "hello@sitequeen.ai",
+          template: "prelaunch_feedback_operator",
+          data: {
+            business_name: client.business_name,
+            client_name: profile?.full_name || client.business_name,
+            plan: client.plan,
+            feedback_text: "✅ Client approved — ready to go live ♛",
+            attachment_count: 0,
+          },
+          clientId: client.id,
+        },
+      }).catch(console.error);
+
+      // Send approval confirmation to client
       if (profile?.email) {
         await supabase.functions.invoke("send-email", {
           body: {
@@ -212,7 +234,28 @@ export default function ClientWebsite() {
       }
     },
     onSuccess: () => {
-      toast.success("Website approved! We'll make it live shortly ♛");
+      toast.success("Your approval has been received ♛");
+      setShowApproveModal(false);
+      queryClient.invalidateQueries({ queryKey: ["my-site"] });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const bookRevisionCall = useMutation({
+    mutationFn: async () => {
+      if (!client || !site) throw new Error("Missing data");
+      await supabase.from("sites").update({
+        generation_status: "revision_call_scheduled",
+      } as any).eq("id", site.id);
+      await supabase.from("notifications").insert({
+        type: "revision_call_scheduled",
+        client_id: client.id,
+        message: `${client.business_name} has booked a revision call — check your Calendly`,
+        target_role: "operator",
+      } as any);
+      window.open(revisionUrl || "https://calendly.com/sitequeenai/revision-call", "_blank");
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-site"] });
     },
     onError: (e) => toast.error(e.message),
