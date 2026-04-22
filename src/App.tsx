@@ -10,6 +10,7 @@ import { OperatorLayout } from "@/components/operator/OperatorLayout";
 import Index from "./pages/Index";
 import MarketingLayout from "@/layouts/MarketingLayout";
 import MarketingHome from "@/pages/marketing/Home";
+import MarketingHelp from "@/pages/marketing/Help";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -51,6 +52,7 @@ const App = () => (
             <Route element={<MarketingLayout />}>
               <Route path="/" element={<MarketingHome />} />
               <Route path="/apply" element={<Apply />} />
+              <Route path="/help" element={<MarketingHelp />} />
             </Route>
 
             {/* Public */}
