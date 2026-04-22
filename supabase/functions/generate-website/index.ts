@@ -498,20 +498,43 @@ CRITICAL OUTPUT INSTRUCTIONS:
     }
 
     const aiData = await aiResponse.json();
-    const rawText = aiData.choices?.[0]?.message?.content || "";
+    rawText = aiData.choices?.[0]?.message?.content || "";
 
-    // Parse JSON from AI response (handle possible markdown wrapping)
-    let generatedSite: { html: string; css: string };
-    try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found in AI response");
-      generatedSite = JSON.parse(jsonMatch[0]);
-    } catch (parseErr) {
-      console.error("Failed to parse AI response:", rawText.substring(0, 500));
-      throw new Error("Failed to parse generated website code");
+    // Defensive parsing — handle markdown wrappers, raw HTML, or JSON
+    let cleaned = rawText
+      .replace(/^```(?:html|json)?\s*\n?/i, "")
+      .replace(/\n?```\s*$/i, "")
+      .trim();
+
+    let htmlContent = "";
+    let cssContent = "";
+
+    if (cleaned.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(cleaned);
+        htmlContent = parsed.html || parsed.HTML || "";
+        cssContent = parsed.css || parsed.CSS || "";
+      } catch (parseError) {
+        // JSON parse failed — try to extract embedded HTML
+        const htmlMatch = cleaned.match(/<!DOCTYPE html>[\s\S]*/i);
+        if (htmlMatch) {
+          htmlContent = htmlMatch[0];
+        } else {
+          console.error("JSON parse failed, no HTML found:", cleaned.substring(0, 500));
+          throw new Error(`AI returned unparseable content: ${cleaned.substring(0, 200)}`);
+        }
+      }
+    } else {
+      // Treat as raw HTML
+      htmlContent = cleaned;
     }
 
-    if (!generatedSite.html) throw new Error("AI response missing html field");
+    if (!htmlContent || (!htmlContent.includes("<!DOCTYPE html>") && !htmlContent.includes("<html"))) {
+      console.error("AI did not return valid HTML:", htmlContent.substring(0, 500));
+      throw new Error(`AI did not return valid HTML. Response started with: ${htmlContent.substring(0, 200)}`);
+    }
+
+    const generatedSite = { html: htmlContent, css: cssContent };
 
     // Inline CSS into the HTML so the staging page is fully self-contained
     let finalHTML = generatedSite.html;
