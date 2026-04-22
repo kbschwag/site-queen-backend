@@ -435,8 +435,9 @@ export function CallNotesTab({ applicationId, businessName, callScheduled = true
             Fill this out during or right after your call. Combined with the client's intake form it tells Claude everything needed to build an exceptional website.
           </p>
         </div>
-        {saveStatus === "saving" && <Badge variant="outline" className="gap-1 text-xs"><Loader2 className="h-3 w-3 animate-spin" />Saving</Badge>}
-        {saveStatus === "saved" && <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200 gap-1 text-xs"><Save className="h-3 w-3" />Saved</Badge>}
+        {saveStatus === "saving" && <Badge variant="outline" className="gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Saving…</Badge>}
+        {saveStatus === "saved" && <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200 gap-1 text-xs"><Save className="h-3 w-3" />Saved ✓</Badge>}
+        {saveStatus === "error" && <Badge variant="destructive" className="gap-1 text-xs"><AlertCircle className="h-3 w-3" />Save failed — check connection</Badge>}
       </div>
 
       {/* Section 1 — Their Story */}
