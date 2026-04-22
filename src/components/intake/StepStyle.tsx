@@ -8,6 +8,10 @@ interface Props {
   onChange: (updates: Partial<IntakeData>) => void;
 }
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const previewUrl = (slug: string) =>
+  `${SUPABASE_URL}/storage/v1/object/public/templates/${slug}-preview.png`;
+
 const TEMPLATES = [
   {
     id: "professional",
@@ -15,6 +19,7 @@ const TEMPLATES = [
     description: "Clean, minimal, trust-forward.",
     bestFor: "Lawyers, accountants, consultants, financial advisors",
     color: "from-slate-600 to-slate-800",
+    preview: previewUrl("professional"),
   },
   {
     id: "trades",
@@ -22,6 +27,7 @@ const TEMPLATES = [
     description: "Bold, action-oriented, built to get calls.",
     bestFor: "Plumbers, electricians, HVAC, contractors",
     color: "from-amber-500 to-orange-600",
+    preview: previewUrl("trades-hero"),
   },
   {
     id: "warm",
@@ -29,6 +35,7 @@ const TEMPLATES = [
     description: "Soft, inviting, relationship-driven.",
     bestFor: "Salons, spas, coaches, therapists, trainers",
     color: "from-rose-400 to-pink-500",
+    preview: previewUrl("warm-welcome"),
   },
   {
     id: "local",
@@ -36,6 +43,7 @@ const TEMPLATES = [
     description: "Vibrant, appetite-forward, community feel.",
     bestFor: "Restaurants, caterers, bakeries, food businesses",
     color: "from-red-500 to-yellow-500",
+    preview: previewUrl("local-favorite"),
   },
   {
     id: "modern",
@@ -43,6 +51,7 @@ const TEMPLATES = [
     description: "Versatile, contemporary, growth-focused.",
     bestFor: "Any service business, general use",
     color: "from-primary to-accent",
+    preview: previewUrl("modern-business"),
   },
 ];
 
@@ -65,8 +74,17 @@ export function StepStyle({ data, onChange }: Props) {
                 : "border-border hover:border-primary/50"
             }`}
           >
-            <div className={`h-24 bg-gradient-to-br ${t.color} flex items-center justify-center`}>
-              <span className="text-2xl font-bold text-white/90 drop-shadow">♛</span>
+            <div className={`relative aspect-[16/9] bg-gradient-to-br ${t.color} flex items-center justify-center overflow-hidden`}>
+              <img
+                src={t.preview}
+                alt={`${t.name} template preview`}
+                loading="lazy"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                }}
+                className="absolute inset-0 w-full h-full object-cover object-top"
+              />
+              <span className="relative text-2xl font-bold text-white/90 drop-shadow">♛</span>
             </div>
             <div className="p-4 space-y-1">
               <p className="font-semibold text-sm">{t.name}</p>
