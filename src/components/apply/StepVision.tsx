@@ -78,7 +78,7 @@ export default function StepVision({ form, update }: Props) {
             <div className="flex items-start gap-3">
               <Crown className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <p className="font-semibold">Logo add-on — $50 one time ♛</p>
+                <p className="font-semibold">Logo add-on — $75 one time ♛</p>
                 <p className="text-sm text-muted-foreground">
                   Our designer will create a professional AI-generated logo reviewed and polished by hand. You'll receive your logo before your website is built.
                 </p>

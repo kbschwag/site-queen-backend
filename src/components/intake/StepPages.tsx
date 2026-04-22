@@ -154,6 +154,33 @@ export function StepPages({ data, onChange }: Props) {
           ))}
         </div>
       </div>
+
+      {/* Add-on services — visually separated */}
+      <div className="space-y-3 rounded-lg bg-secondary/40 border border-dashed border-border p-4">
+        <div>
+          <Label className="text-base font-semibold">Add-on services</Label>
+          <p className="text-xs text-muted-foreground">
+            These aren't included in the standard build. Mark your interest and we'll follow up after launch.
+          </p>
+        </div>
+        <div className="space-y-2">
+          {ADDON_PAGES.map((addon) => {
+            const checked = !!(data as any)[addon.key];
+            return (
+              <label key={addon.key} className="flex items-start gap-3 p-3 rounded-md bg-background/60 border border-border cursor-pointer">
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(v) => onChange({ [addon.key]: !!v } as any)}
+                />
+                <span className="text-sm">
+                  <span className="font-medium block">{addon.label}</span>
+                  <span className="text-xs text-muted-foreground">{addon.note}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

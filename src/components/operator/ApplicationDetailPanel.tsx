@@ -320,7 +320,7 @@ This can change — you're welcome to reapply in 3 months.
               )}
               {app.logo_addon_requested && (
                 <Badge className="bg-primary/15 text-primary border border-primary/30">
-                  <Sparkles className="h-3 w-3 mr-1" /> Logo add-on requested ($50)
+                  <Sparkles className="h-3 w-3 mr-1" /> Logo add-on requested ($75)
                 </Badge>
               )}
               {app.referral_source && (
