@@ -445,7 +445,7 @@ export default function ClientWebsite() {
                   />
                   <div>
                     <label className="text-xs text-muted-foreground">Attach any reference files or new photos (optional)</label>
-                    <Input type="file" accept="image/*,.pdf" onChange={handleFileUpload} className="mt-1 text-xs" disabled={uploading} />
+                    <Input type="file" accept="image/*,.pdf" onChange={handleFileUpload} className="mt-1 text-xs" disabled={Object.values(uploading).some(Boolean)} />
                     {attachmentUrl && <p className="text-xs text-emerald-600 mt-1">✓ File attached</p>}
                   </div>
                   <div className="flex gap-2">
