@@ -469,15 +469,17 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
                 <Wrench className="h-4 w-4" /> I'll work on it
               </Button>
             </div>
+            <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
         </Card>
       )}
 
-      {/* Shared with client */}
-      {generationStatus === "shared" && stagingUrl && (
-        <Card>
+      {/* Awaiting client review — purple banner + reshare + quick edit */}
+      {(generationStatus === "awaiting_client_review" || generationStatus === "shared") && stagingUrl && (
+        <Card className="border-purple-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Shared with Client</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Send className="h-4 w-4 text-purple-600" /> Awaiting client review
           </CardHeader>
           <CardContent className="space-y-3">
             <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={400} />
