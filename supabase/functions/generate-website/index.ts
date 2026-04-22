@@ -291,10 +291,24 @@ Only use Unsplash stock photos for sections where no client photo was provided. 
 
     if (!intakeData && !callNotes) throw new Error("No intake data or call notes found");
 
-    // Try to fetch template if template_id exists
+    // Try to fetch template if a template was selected
     let templateHTML = "";
     let templateCSS = "";
-    const templateId = (intakeData as any).template_id;
+    // Map intake template_selected ID -> storage filename slug
+    const TEMPLATE_FILE_MAP: Record<string, string> = {
+      trades: "trades-hero",
+      professional: "professional",
+      warm: "warm-welcome",
+      local: "local-favorite",
+      modern: "modern-business",
+    };
+    const selectedTemplate =
+      (intakeData as any)?.template_selected ||
+      (callNotes as any)?.template_selected ||
+      (intakeData as any)?.template_id;
+    const templateId = selectedTemplate
+      ? TEMPLATE_FILE_MAP[selectedTemplate] || selectedTemplate
+      : null;
 
     if (templateId) {
       try {
@@ -307,8 +321,9 @@ Only use Unsplash stock photos for sections where no client photo was provided. 
           .from("templates")
           .download(`${templateId}.css`);
         if (cssFile) templateCSS = await cssFile.text();
-      } catch {
-        console.log("No template files found, generating from scratch");
+        console.log(`Loaded template: ${templateId} (html: ${!!templateHTML}, css: ${!!templateCSS})`);
+      } catch (err) {
+        console.log(`No template files found for ${templateId}, generating from scratch`, err);
       }
     }
 
