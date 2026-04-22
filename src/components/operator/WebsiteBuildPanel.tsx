@@ -18,6 +18,7 @@ import {
   Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles, ImageIcon, Mail, Pencil, Phone, RefreshCw,
 } from "lucide-react";
 import { QuickEditPanel } from "./QuickEditPanel";
+import { FailureCard } from "./GenerationFailureCard";
 import { useFileUpload } from "@/hooks/useFileUpload";
 
 interface Props {
