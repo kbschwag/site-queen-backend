@@ -116,10 +116,15 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const status = statusConfig[generationStatus] || statusConfig.pending;
   const StatusIcon = status.icon;
 
-  const handleShareWithClient = async () => {
+  const handleShareWithClient = async (isReshare = false) => {
     setSharing(true);
     try {
-      await supabase.from("sites").update({ generation_status: "shared" } as any).eq("client_id", clientId);
+      const updatePayload: any = { generation_status: "awaiting_client_review" };
+      if (isReshare) {
+        updatePayload.last_reshared_at = new Date().toISOString();
+        updatePayload.reshared_count = ((site as any)?.reshared_count ?? 0) + 1;
+      }
+      await supabase.from("sites").update(updatePayload).eq("client_id", clientId);
 
       // Send website ready for review email
       if (clientProfile?.email) {
