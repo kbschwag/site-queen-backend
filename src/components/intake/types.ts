@@ -29,13 +29,19 @@ export interface IntakeData {
   logo_dark_url?: string;
   logo_white_url?: string;
   no_logo?: boolean;
+  logo_addon_requested?: boolean;
   primary_color?: string;
   secondary_color?: string;
+  accent_color?: string;
   help_choose_colors?: boolean;
   color_palette?: string;
   heading_font?: string;
   body_font?: string;
-  inspiration_sites?: { url: string; notes: string }[];
+  // Typography preference
+  font_choice_mode?: "auto" | "list" | "upload";
+  preferred_font?: string;
+  custom_font_url?: string;
+  custom_font_name?: string;
 
   // Step 3 — Your Story
   story_started?: string;
@@ -86,6 +92,8 @@ export interface IntakeData {
   // Step 7 — Your Pages
   custom_pages?: { name: string; description: string; photos?: string[]; content_generated?: string }[];
   special_features?: string[];
+  blog_addon_requested?: boolean;
+  booking_addon_requested?: boolean;
 
   // Step 8 — Website Style
   template_selected?: string;

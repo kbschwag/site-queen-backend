@@ -535,7 +535,10 @@ export type Database = {
       }
       clients: {
         Row: {
+          accent_color: string | null
           application_id: string | null
+          blog_addon_requested: boolean | null
+          booking_addon_requested: boolean | null
           business_name: string
           business_type: string
           call_notes_completed: boolean | null
@@ -545,6 +548,8 @@ export type Database = {
           credits_last_reset: string | null
           credits_monthly_allowance: number | null
           credits_rollover_cap: number | null
+          custom_font_name: string | null
+          custom_font_url: string | null
           deleted_at: string | null
           deleted_by: string | null
           deploy_count: number | null
@@ -558,12 +563,15 @@ export type Database = {
           intake_completed: boolean
           join_date: string | null
           last_active: string | null
+          logo_addon_requested: boolean | null
           next_billing_date: string | null
           payment_failed_at: string | null
           payment_failed_count: number | null
           payment_status: string | null
           phone_number: string | null
           plan: string
+          preferred_font: string | null
+          primary_color: string | null
           site_status: string | null
           site_url: string | null
           stripe_customer_id: string | null
@@ -575,7 +583,10 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          accent_color?: string | null
           application_id?: string | null
+          blog_addon_requested?: boolean | null
+          booking_addon_requested?: boolean | null
           business_name: string
           business_type: string
           call_notes_completed?: boolean | null
@@ -585,6 +596,8 @@ export type Database = {
           credits_last_reset?: string | null
           credits_monthly_allowance?: number | null
           credits_rollover_cap?: number | null
+          custom_font_name?: string | null
+          custom_font_url?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           deploy_count?: number | null
@@ -598,12 +611,15 @@ export type Database = {
           intake_completed?: boolean
           join_date?: string | null
           last_active?: string | null
+          logo_addon_requested?: boolean | null
           next_billing_date?: string | null
           payment_failed_at?: string | null
           payment_failed_count?: number | null
           payment_status?: string | null
           phone_number?: string | null
           plan?: string
+          preferred_font?: string | null
+          primary_color?: string | null
           site_status?: string | null
           site_url?: string | null
           stripe_customer_id?: string | null
@@ -615,7 +631,10 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          accent_color?: string | null
           application_id?: string | null
+          blog_addon_requested?: boolean | null
+          booking_addon_requested?: boolean | null
           business_name?: string
           business_type?: string
           call_notes_completed?: boolean | null
@@ -625,6 +644,8 @@ export type Database = {
           credits_last_reset?: string | null
           credits_monthly_allowance?: number | null
           credits_rollover_cap?: number | null
+          custom_font_name?: string | null
+          custom_font_url?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           deploy_count?: number | null
@@ -638,12 +659,15 @@ export type Database = {
           intake_completed?: boolean
           join_date?: string | null
           last_active?: string | null
+          logo_addon_requested?: boolean | null
           next_billing_date?: string | null
           payment_failed_at?: string | null
           payment_failed_count?: number | null
           payment_status?: string | null
           phone_number?: string | null
           plan?: string
+          preferred_font?: string | null
+          primary_color?: string | null
           site_status?: string | null
           site_url?: string | null
           stripe_customer_id?: string | null

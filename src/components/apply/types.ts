@@ -87,7 +87,7 @@ export const WEBSITE_GOALS = [
 
 export const LOGO_OPTIONS = [
   { value: "yes", label: "Yes I have one ready" },
-  { value: "want_addon", label: "No — I'd like to add a professional logo design for $50 ♛" },
+  { value: "want_addon", label: "No — I'd like to add a professional logo design for $75 ♛" },
   { value: "no", label: "No and I'll sort it out myself" },
 ];
 
