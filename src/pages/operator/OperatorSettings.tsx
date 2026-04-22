@@ -21,6 +21,49 @@ export default function OperatorSettings() {
   const { isOwner } = useOperatorRole();
   const queryClient = useQueryClient();
   const [restoring, setRestoring] = useState<string | null>(null);
+  const [calendlyDiscovery, setCalendlyDiscovery] = useState("");
+  const [calendlyRevision, setCalendlyRevision] = useState("");
+  const [savingCalendly, setSavingCalendly] = useState(false);
+
+  // Load Calendly URLs from app_settings
+  const { data: appSettings } = useQuery({
+    queryKey: ["app-settings-calendly"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["calendly_discovery_url", "calendly_revision_url"]);
+      return (data || []).reduce((acc: Record<string, string>, row: any) => {
+        acc[row.key] = row.value || "";
+        return acc;
+      }, {});
+    },
+  });
+
+  useEffect(() => {
+    if (appSettings) {
+      setCalendlyDiscovery(appSettings.calendly_discovery_url || "");
+      setCalendlyRevision(appSettings.calendly_revision_url || "");
+    }
+  }, [appSettings]);
+
+  const handleSaveCalendly = async () => {
+    setSavingCalendly(true);
+    try {
+      const rows = [
+        { key: "calendly_discovery_url", value: calendlyDiscovery, updated_by: user!.id, updated_at: new Date().toISOString() },
+        { key: "calendly_revision_url", value: calendlyRevision, updated_by: user!.id, updated_at: new Date().toISOString() },
+      ];
+      const { error } = await supabase.from("app_settings").upsert(rows, { onConflict: "key" });
+      if (error) throw error;
+      toast.success("Cal.com links saved ♛");
+      queryClient.invalidateQueries({ queryKey: ["app-settings-calendly"] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save");
+    } finally {
+      setSavingCalendly(false);
+    }
+  };
 
   // Fetch deleted records for Owner
   const { data: deletedRecords = [] } = useQuery({
