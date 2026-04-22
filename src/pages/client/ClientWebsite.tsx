@@ -12,7 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   Crown, ArrowRight, Sparkles, Loader2, CheckCircle2, Send, ExternalLink, Share2, Copy, Eye, ImageIcon,
+  Pencil, Phone,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
 import { IntakeForm } from "@/components/intake/IntakeForm";
 import type { IntakeData } from "@/components/intake/types";
