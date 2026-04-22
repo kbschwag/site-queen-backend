@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Settings, Mail, Link2, Shield, AlertTriangle, CheckCircle2, XCircle, RotateCcw, Loader2 } from "lucide-react";
+import { Settings, Mail, Link2, Shield, AlertTriangle, CheckCircle2, XCircle, RotateCcw, Loader2, Calendar } from "lucide-react";
 import { PasswordSection } from "@/components/PasswordSection";
 import { SecuritySection } from "@/components/operator/SecuritySection";
 import { format } from "date-fns";
@@ -21,6 +21,49 @@ export default function OperatorSettings() {
   const { isOwner } = useOperatorRole();
   const queryClient = useQueryClient();
   const [restoring, setRestoring] = useState<string | null>(null);
+  const [calendlyDiscovery, setCalendlyDiscovery] = useState("");
+  const [calendlyRevision, setCalendlyRevision] = useState("");
+  const [savingCalendly, setSavingCalendly] = useState(false);
+
+  // Load Calendly URLs from app_settings
+  const { data: appSettings } = useQuery({
+    queryKey: ["app-settings-calendly"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["calendly_discovery_url", "calendly_revision_url"]);
+      return (data || []).reduce((acc: Record<string, string>, row: any) => {
+        acc[row.key] = row.value || "";
+        return acc;
+      }, {});
+    },
+  });
+
+  useEffect(() => {
+    if (appSettings) {
+      setCalendlyDiscovery(appSettings.calendly_discovery_url || "");
+      setCalendlyRevision(appSettings.calendly_revision_url || "");
+    }
+  }, [appSettings]);
+
+  const handleSaveCalendly = async () => {
+    setSavingCalendly(true);
+    try {
+      const rows = [
+        { key: "calendly_discovery_url", value: calendlyDiscovery, updated_by: user!.id, updated_at: new Date().toISOString() },
+        { key: "calendly_revision_url", value: calendlyRevision, updated_by: user!.id, updated_at: new Date().toISOString() },
+      ];
+      const { error } = await supabase.from("app_settings").upsert(rows, { onConflict: "key" });
+      if (error) throw error;
+      toast.success("Cal.com links saved ♛");
+      queryClient.invalidateQueries({ queryKey: ["app-settings-calendly"] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save");
+    } finally {
+      setSavingCalendly(false);
+    }
+  };
 
   // Fetch deleted records for Owner
   const { data: deletedRecords = [] } = useQuery({
@@ -90,14 +133,47 @@ export default function OperatorSettings() {
             <Input defaultValue="hello@sitequeen.ai" className="mt-1" />
           </div>
           <div>
-            <Label>Cal.com Booking Link</Label>
-            <Input defaultValue="https://cal.com/sitequeen" placeholder="https://cal.com/..." className="mt-1" />
-          </div>
-          <div>
             <Label>Support Response SLA (hours)</Label>
             <Input type="number" defaultValue="24" className="mt-1 w-32" />
           </div>
           <Button size="sm">Save changes</Button>
+        </CardContent>
+      </Card>
+
+      {/* Cal.com booking links */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="h-4 w-4" /> Cal.com booking links
+          </CardTitle>
+          <CardDescription>Used in client and operator emails for scheduling</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label>Discovery call Calendly link</Label>
+            <Input
+              value={calendlyDiscovery}
+              onChange={(e) => setCalendlyDiscovery(e.target.value)}
+              placeholder="https://calendly.com/yourname/discovery-call"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label>Revision call Calendly link</Label>
+            <Input
+              value={calendlyRevision}
+              onChange={(e) => setCalendlyRevision(e.target.value)}
+              placeholder="https://calendly.com/yourname/revision-call"
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Shown to clients in the staging review screen as the "Book a revision call" option.
+            </p>
+          </div>
+          <Button size="sm" onClick={handleSaveCalendly} disabled={savingCalendly} className="gap-2">
+            {savingCalendly && <Loader2 className="h-3 w-3 animate-spin" />}
+            Save Cal.com links
+          </Button>
         </CardContent>
       </Card>
 

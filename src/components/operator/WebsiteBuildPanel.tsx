@@ -116,10 +116,15 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const status = statusConfig[generationStatus] || statusConfig.pending;
   const StatusIcon = status.icon;
 
-  const handleShareWithClient = async () => {
+  const handleShareWithClient = async (isReshare = false) => {
     setSharing(true);
     try {
-      await supabase.from("sites").update({ generation_status: "shared" } as any).eq("client_id", clientId);
+      const updatePayload: any = { generation_status: "awaiting_client_review" };
+      if (isReshare) {
+        updatePayload.last_reshared_at = new Date().toISOString();
+        updatePayload.reshared_count = ((site as any)?.reshared_count ?? 0) + 1;
+      }
+      await supabase.from("sites").update(updatePayload).eq("client_id", clientId);
 
       // Send website ready for review email
       if (clientProfile?.email) {
@@ -464,18 +469,35 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
                 <Wrench className="h-4 w-4" /> I'll work on it
               </Button>
             </div>
+            <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
         </Card>
       )}
 
-      {/* Shared with client */}
-      {generationStatus === "shared" && stagingUrl && (
-        <Card>
+      {/* Awaiting client review — purple banner + reshare + quick edit */}
+      {(generationStatus === "awaiting_client_review" || generationStatus === "shared" || generationStatus === "pre_launch_revision" || generationStatus === "revision_call_scheduled") && stagingUrl && (
+        <Card className="border-purple-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Shared with Client</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Send className="h-4 w-4 text-purple-600" />
+              {generationStatus === "pre_launch_revision"
+                ? "Pre-launch revision requested"
+                : generationStatus === "revision_call_scheduled"
+                ? "Revision call scheduled ♛"
+                : "Awaiting client review"}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={400} />
+
+            {generationStatus === "revision_call_scheduled" && (
+              <div className="rounded-lg bg-purple-50 border border-purple-200 p-3 text-sm">
+                <p className="text-purple-900">
+                  After the call, use the Quick Edit panel below to make any changes discussed, then click <strong>Reshare staging</strong> to send the updated site back to the client.
+                </p>
+              </div>
+            )}
+
             {preLaunchFeedback.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-medium flex items-center gap-2">
@@ -492,28 +514,67 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
                 ))}
               </div>
             )}
+
             <div className="flex gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex-1">
-                      <Button
-                        onClick={() => setShowGoLiveModal(true)}
-                        disabled={approving || !canGoLive}
-                        className="gap-2 w-full bg-primary hover:bg-primary/90"
-                      >
-                        {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                        Approve & Go Live
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {!canGoLive && <TooltipContent><p>{goLiveTooltip}</p></TooltipContent>}
-                </Tooltip>
-              </TooltipProvider>
+              <Button onClick={() => handleShareWithClient(true)} disabled={sharing} className="gap-2 flex-1" variant="outline">
+                {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Reshare staging
+              </Button>
               <Button variant="outline" onClick={handleManualReview} className="gap-2">
                 <Wrench className="h-4 w-4" /> I'll work on it
               </Button>
             </div>
+
+            <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Client approved — prominent green deploy card */}
+      {(generationStatus === "client_approved" || generationStatus === "approved") && stagingUrl && (
+        <Card className="border-emerald-300 bg-emerald-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-emerald-800">
+              <CheckCircle2 className="h-5 w-5" />
+              ♛ Client has approved their website — ready to deploy
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="text-sm space-y-1">
+              <p><strong>Business:</strong> {businessName}</p>
+              {(clientData as any)?.domain_name && <p><strong>Domain:</strong> {(clientData as any).domain_name}</p>}
+              {(site as any)?.client_approved_at && (
+                <p className="text-muted-foreground text-xs">
+                  Approved at: {new Date((site as any).client_approved_at).toLocaleString()}
+                </p>
+              )}
+              {(site as any)?.client_approval_notes && (
+                <p className="text-xs italic text-muted-foreground mt-1">"{(site as any).client_approval_notes}"</p>
+              )}
+            </div>
+
+            <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={300} />
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="block w-full">
+                    <Button
+                      onClick={() => setShowGoLiveModal(true)}
+                      disabled={approving || !canGoLive}
+                      className="gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      size="lg"
+                    >
+                      {approving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Rocket className="h-5 w-5" />}
+                      Approve and go live ♛
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {!canGoLive && <TooltipContent><p>{goLiveTooltip}</p></TooltipContent>}
+              </Tooltip>
+            </TooltipProvider>
+
+            <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
         </Card>
       )}
@@ -587,7 +648,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowShareModal(false)}>Cancel</Button>
-            <Button onClick={handleShareWithClient} disabled={sharing} className="gap-2">
+            <Button onClick={() => handleShareWithClient(false)} disabled={sharing} className="gap-2">
               {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Send for review
             </Button>
