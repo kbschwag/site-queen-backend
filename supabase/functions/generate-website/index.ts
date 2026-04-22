@@ -508,27 +508,52 @@ CRITICAL OUTPUT INSTRUCTIONS:
 - Never include any text before or after the HTML/JSON`;
     }
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        max_tokens: 16000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    // Retry loop — handles transient 429/529/network errors with exponential backoff
+    const MAX_AI_ATTEMPTS = 2;
+    let aiAttempt = 0;
+    let aiResponse: Response | null = null;
+    let aiData: any = null;
+    let lastAiError: Error | null = null;
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI API error:", aiResponse.status, errText);
-      throw new Error(`AI generation failed: ${aiResponse.status}`);
+    while (aiAttempt < MAX_AI_ATTEMPTS) {
+      aiAttempt++;
+      try {
+        aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            max_tokens: 16000,
+            messages: [{ role: "user", content: prompt }],
+          }),
+        });
+
+        if (!aiResponse.ok) {
+          const errText = await aiResponse.text();
+          console.error(`AI API error (attempt ${aiAttempt}/${MAX_AI_ATTEMPTS}):`, aiResponse.status, errText);
+          if ((aiResponse.status === 429 || aiResponse.status === 529) && aiAttempt < MAX_AI_ATTEMPTS) {
+            await new Promise((r) => setTimeout(r, 3000 * aiAttempt));
+            continue;
+          }
+          throw new Error(`AI generation failed: ${aiResponse.status}`);
+        }
+
+        aiData = await aiResponse.json();
+        rawText = aiData.choices?.[0]?.message?.content || "";
+        break; // success
+      } catch (err) {
+        lastAiError = err as Error;
+        console.error(`AI fetch error (attempt ${aiAttempt}/${MAX_AI_ATTEMPTS}):`, err);
+        if (aiAttempt < MAX_AI_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        throw lastAiError;
+      }
     }
-
-    const aiData = await aiResponse.json();
-    rawText = aiData.choices?.[0]?.message?.content || "";
 
     // Defensive parsing — handle markdown wrappers, raw HTML, or JSON
     let cleaned = rawText
