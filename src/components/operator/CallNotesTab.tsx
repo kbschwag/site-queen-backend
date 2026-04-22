@@ -12,7 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
-  Mic, MicOff, Plus, Trash2, CheckCircle2, Pencil, Loader2, Sparkles, Save
+  Mic, MicOff, Plus, Trash2, CheckCircle2, Pencil, Loader2, Sparkles, Save, AlertCircle
 } from "lucide-react";
 
 interface Props {
@@ -70,13 +70,18 @@ export function CallNotesTab({ applicationId, businessName, callScheduled = true
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [completing, setCompleting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [listening, setListening] = useState(false);
   const [activeField, setActiveField] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const savedFadeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasUnsavedChangesRef = useRef(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const buildPayloadRef = useRef<(() => any) | null>(null);
+  const callNotesIdRef = useRef<string | null>(null);
 
   // Form state
   const [theirStory, setTheirStory] = useState("");
@@ -182,31 +187,69 @@ export function CallNotesTab({ applicationId, businessName, callScheduled = true
     internal_notes: internalNotes || null,
   }), [theirStory, idealCustomer, inspirationSites, instagramHandle, googleSearchTerms, websiteGoal, websiteGoalOther, contactPreferences, bookingUrl, pagesAgreed, templateSelected, colorDirection, vibeNotes, toneOfVoice, toneCustom, expertAdditions, expertAvoid, exactPhrases, finalNotes, internalNotes, applicationId]);
 
-  const autoSave = useCallback(async () => {
+  // Keep refs in sync so unmount-flush uses the latest values
+  useEffect(() => { buildPayloadRef.current = buildPayload; }, [buildPayload]);
+  useEffect(() => { callNotesIdRef.current = callNotes?.id ?? null; }, [callNotes]);
+
+  const performSave = useCallback(async () => {
+    const payloadFn = buildPayloadRef.current;
+    if (!payloadFn) return;
     setSaveStatus("saving");
     try {
-      const payload = buildPayload();
-      if (callNotes?.id) {
-        await supabase.from("call_notes").update(payload as any).eq("id", callNotes.id);
+      const payload = payloadFn();
+      const existingId = callNotesIdRef.current;
+      if (existingId) {
+        const { error } = await supabase.from("call_notes").update(payload as any).eq("id", existingId);
+        if (error) throw error;
       } else {
-        await supabase.from("call_notes").insert(payload as any);
+        const { data, error } = await supabase.from("call_notes").insert(payload as any).select("id").single();
+        if (error) throw error;
+        if (data?.id) callNotesIdRef.current = data.id;
         queryClient.invalidateQueries({ queryKey: ["call-notes", applicationId] });
       }
+      hasUnsavedChangesRef.current = false;
+      setHasUnsavedChanges(false);
       setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
-    } catch {
-      setSaveStatus("idle");
+      if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current);
+      savedFadeTimerRef.current = setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (err) {
+      console.error("Call notes auto-save failed:", err);
+      setSaveStatus("error");
     }
-  }, [buildPayload, callNotes, applicationId, queryClient]);
+  }, [applicationId, queryClient]);
 
   const triggerAutoSave = useCallback(() => {
+    hasUnsavedChangesRef.current = true;
+    setHasUnsavedChanges(true);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(autoSave, 1500);
-  }, [autoSave]);
+    saveTimerRef.current = setTimeout(performSave, 1000);
+  }, [performSave]);
 
-  // Cleanup
+  // On unmount: flush any pending save instead of dropping it (prevents data loss when switching tabs)
   useEffect(() => {
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+        if (hasUnsavedChangesRef.current) {
+          // Fire-and-forget — component is unmounting but the request will complete
+          void performSave();
+        }
+      }
+      if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current);
+    };
+  }, [performSave]);
+
+  // Warn before closing tab / navigating away with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChangesRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);
 
   // Speech recognition
@@ -392,8 +435,9 @@ export function CallNotesTab({ applicationId, businessName, callScheduled = true
             Fill this out during or right after your call. Combined with the client's intake form it tells Claude everything needed to build an exceptional website.
           </p>
         </div>
-        {saveStatus === "saving" && <Badge variant="outline" className="gap-1 text-xs"><Loader2 className="h-3 w-3 animate-spin" />Saving</Badge>}
-        {saveStatus === "saved" && <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200 gap-1 text-xs"><Save className="h-3 w-3" />Saved</Badge>}
+        {saveStatus === "saving" && <Badge variant="outline" className="gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Saving…</Badge>}
+        {saveStatus === "saved" && <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200 gap-1 text-xs"><Save className="h-3 w-3" />Saved ✓</Badge>}
+        {saveStatus === "error" && <Badge variant="destructive" className="gap-1 text-xs"><AlertCircle className="h-3 w-3" />Save failed — check connection</Badge>}
       </div>
 
       {/* Section 1 — Their Story */}
