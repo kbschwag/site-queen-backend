@@ -181,13 +181,13 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     toast.success("Marked for manual review");
   };
 
+  const isClientApproved = generationStatus === "client_approved" || generationStatus === "approved";
   const domainReady = (clientData as any)?.domain_status === "ready_to_deploy";
   const deployConfirmed = !!(clientData as any)?.deployment_path_confirmed;
-  const genComplete = generationStatus === "complete" || generationStatus === "shared";
-  const canGoLive = domainReady && deployConfirmed && genComplete;
+  const canGoLive = isClientApproved && domainReady && deployConfirmed;
 
-  const goLiveTooltip = !genComplete
-    ? "Site has not been generated yet"
+  const goLiveTooltip = !isClientApproved
+    ? "Waiting for client approval"
     : !domainReady
     ? "Set domain status to Ready to deploy first"
     : !deployConfirmed
