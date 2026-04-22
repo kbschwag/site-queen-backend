@@ -15,8 +15,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { SitePreviewFrame } from "./SitePreviewFrame";
 import { toast } from "sonner";
 import {
-  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles, ImageIcon, Mail
+  Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles, ImageIcon, Mail, Pencil, Phone, RefreshCw,
 } from "lucide-react";
+import { QuickEditPanel } from "./QuickEditPanel";
 import { useFileUpload } from "@/hooks/useFileUpload";
 
 interface Props {
@@ -97,11 +98,16 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const stagingUrl = site?.staging_url;
   const generationError = (site as any)?.generation_error;
 
-  const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
+  const statusConfig: Record<string, { label: string; color: string; icon: any; pulse?: boolean }> = {
     pending: { label: "Pending", color: "bg-muted text-muted-foreground", icon: Wrench },
     generating: { label: "Generating...", color: "bg-amber-500/10 text-amber-700 border-amber-200", icon: Loader2 },
-    complete: { label: "Ready for your review", color: "bg-blue-500/10 text-blue-700 border-blue-200", icon: Eye },
-    shared: { label: "Shared with client", color: "bg-purple-500/10 text-purple-700 border-purple-200", icon: Send },
+    complete: { label: "Ready for operator review", color: "bg-amber-500/10 text-amber-700 border-amber-200", icon: Eye, pulse: true },
+    shared: { label: "Awaiting client review", color: "bg-purple-500/10 text-purple-700 border-purple-200", icon: Send },
+    awaiting_client_review: { label: "Awaiting client review", color: "bg-purple-500/10 text-purple-700 border-purple-200", icon: Send },
+    pre_launch_revision: { label: "Pre-launch revision requested", color: "bg-amber-500/10 text-amber-700 border-amber-200", icon: Pencil },
+    revision_call_scheduled: { label: "Revision call scheduled", color: "bg-purple-500/10 text-purple-700 border-purple-200", icon: Phone },
+    client_approved: { label: "Client approved — ready to deploy", color: "bg-emerald-500/10 text-emerald-700 border-emerald-200", icon: CheckCircle2, pulse: true },
+    approved: { label: "Client approved — ready to deploy", color: "bg-emerald-500/10 text-emerald-700 border-emerald-200", icon: CheckCircle2, pulse: true },
     live: { label: "Live", color: "bg-emerald-500/10 text-emerald-700 border-emerald-200", icon: Globe },
     failed: { label: "Failed", color: "bg-destructive/10 text-destructive border-destructive/20", icon: AlertTriangle },
     manual_review: { label: "Manual Review", color: "bg-amber-500/10 text-amber-700 border-amber-200", icon: Wrench },
