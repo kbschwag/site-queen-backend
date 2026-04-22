@@ -1125,6 +1125,7 @@ export type Database = {
         Row: {
           brand_vibe: string | null
           business_type: string | null
+          call_notes_snapshot: Json | null
           client_approval_notes: string | null
           client_approved_at: string | null
           client_id: string
@@ -1132,11 +1133,15 @@ export type Database = {
           deploy_count: number | null
           deploy_url: string | null
           generated_at: string | null
+          generation_attempts: number
           generation_error: string | null
           generation_status: string | null
           id: string
           intake_data: Json | null
+          intake_snapshot: Json | null
+          intake_snapshot_saved_at: string | null
           last_deployed_at: string | null
+          last_generation_attempt_at: string | null
           last_reshared_at: string | null
           last_updated: string | null
           logo_url: string | null
@@ -1154,6 +1159,7 @@ export type Database = {
         Insert: {
           brand_vibe?: string | null
           business_type?: string | null
+          call_notes_snapshot?: Json | null
           client_approval_notes?: string | null
           client_approved_at?: string | null
           client_id: string
@@ -1161,11 +1167,15 @@ export type Database = {
           deploy_count?: number | null
           deploy_url?: string | null
           generated_at?: string | null
+          generation_attempts?: number
           generation_error?: string | null
           generation_status?: string | null
           id?: string
           intake_data?: Json | null
+          intake_snapshot?: Json | null
+          intake_snapshot_saved_at?: string | null
           last_deployed_at?: string | null
+          last_generation_attempt_at?: string | null
           last_reshared_at?: string | null
           last_updated?: string | null
           logo_url?: string | null
@@ -1183,6 +1193,7 @@ export type Database = {
         Update: {
           brand_vibe?: string | null
           business_type?: string | null
+          call_notes_snapshot?: Json | null
           client_approval_notes?: string | null
           client_approved_at?: string | null
           client_id?: string
@@ -1190,11 +1201,15 @@ export type Database = {
           deploy_count?: number | null
           deploy_url?: string | null
           generated_at?: string | null
+          generation_attempts?: number
           generation_error?: string | null
           generation_status?: string | null
           id?: string
           intake_data?: Json | null
+          intake_snapshot?: Json | null
+          intake_snapshot_saved_at?: string | null
           last_deployed_at?: string | null
+          last_generation_attempt_at?: string | null
           last_reshared_at?: string | null
           last_updated?: string | null
           logo_url?: string | null
