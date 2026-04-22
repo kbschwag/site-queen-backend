@@ -1110,13 +1110,44 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
       <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
+
+  // ═══════════════════════════════════════════
+  // SUPPORT MESSAGES
+  // ═══════════════════════════════════════════
+
+  // Inbound — sent to hello@sitequeen.ai when a client uses the "Send us a message" form
+  support_message_received: {
+    subject: (d) => `New support message — ${d.business_name || d.client_name || "client"}`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">New support message ♛</h2>
+      <p><strong>From:</strong> ${d.client_name || "Unknown"} &lt;${d.client_email || "no-email"}&gt;</p>
+      <p><strong>Business:</strong> ${d.business_name || "—"}</p>
+      ${divider}
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px;white-space:pre-wrap;">${(d.message || "").replace(/</g, "&lt;")}</div>
+      ${d.client_email ? darkButton("Reply to client", `mailto:${d.client_email}?subject=Re: your SiteQueen message`) : ""}
+      <p style="font-size:12px;color:#999;margin-top:24px;">Open the operator portal to mark this as replied.</p>
+    `),
+  },
+
+  // Outbound — operator quick-reply to a client message
+  support_message_reply: {
+    subject: () => `Re: your SiteQueen message ♛`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)} ♛</h2>
+      <p>Thanks for reaching out. Here's our reply:</p>
+      <div style="background:${LIGHT_BG};border-radius:8px;padding:16px;white-space:pre-wrap;margin:16px 0;">${(d.reply_text || "").replace(/</g, "&lt;")}</div>
+      <p>If you have any follow-up questions just reply to this email — it goes straight to our team.</p>
+      ${purpleButton("Open my dashboard", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
+    `),
+  },
 };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { to, template, data, applicationId, clientId } = await req.json();
+    const { to, template, data, applicationId, clientId, replyTo } = await req.json();
 
     if (!to || !template) {
       return new Response(JSON.stringify({ error: "to and template required" }), {
@@ -1188,6 +1219,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from: FROM_ADDRESS,
         to: [to],
+        ...(replyTo ? { reply_to: replyTo } : {}),
         subject,
         html: emailTemplate.html(templateData),
       }),

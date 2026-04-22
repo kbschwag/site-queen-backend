@@ -10,6 +10,7 @@ import { OperatorLayout } from "@/components/operator/OperatorLayout";
 import Index from "./pages/Index";
 import MarketingLayout from "@/layouts/MarketingLayout";
 import MarketingHome from "@/pages/marketing/Home";
+import MarketingHelp from "@/pages/marketing/Help";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -24,6 +25,7 @@ import ClientDashboard from "./pages/ClientDashboard";
 import ClientOverview from "./pages/client/ClientOverview";
 import ClientWebsite from "./pages/client/ClientWebsite";
 import ClientSupport from "./pages/client/ClientSupport";
+import ClientContact from "./pages/client/ClientContact";
 import ClientBilling from "./pages/client/ClientBilling";
 import ClientHelp from "./pages/client/ClientHelp";
 import ClientSettings from "./pages/client/ClientSettings";
@@ -33,6 +35,7 @@ import OperatorDashboard from "./pages/operator/OperatorDashboard";
 import OperatorApplications from "./pages/operator/OperatorApplications";
 import OperatorClients from "./pages/operator/OperatorClients";
 import OperatorChangeRequests from "./pages/operator/OperatorChangeRequests";
+import OperatorSupportMessages from "./pages/operator/OperatorSupportMessages";
 import OperatorRevenue from "./pages/operator/OperatorRevenue";
 import OperatorTeam from "./pages/operator/OperatorTeam";
 import OperatorSettings from "./pages/operator/OperatorSettings";
@@ -51,6 +54,7 @@ const App = () => (
             <Route element={<MarketingLayout />}>
               <Route path="/" element={<MarketingHome />} />
               <Route path="/apply" element={<Apply />} />
+              <Route path="/help" element={<MarketingHelp />} />
             </Route>
 
             {/* Public */}
@@ -72,6 +76,7 @@ const App = () => (
               <Route index element={<ClientOverview />} />
               <Route path="website" element={<ClientWebsite />} />
               <Route path="support" element={<ClientSupport />} />
+              <Route path="contact" element={<ClientContact />} />
               <Route path="analytics" element={<ClientAnalytics />} />
               <Route path="billing" element={<ClientBilling />} />
               <Route path="help" element={<ClientHelp />} />
@@ -85,6 +90,7 @@ const App = () => (
               <Route path="applications" element={<OperatorApplications />} />
               <Route path="clients" element={<OperatorClients />} />
               <Route path="change-requests" element={<OperatorChangeRequests />} />
+              <Route path="support-messages" element={<OperatorSupportMessages />} />
               <Route path="revenue" element={<OperatorRevenue />} />
               <Route path="team" element={<OperatorTeam />} />
               <Route path="settings" element={<OperatorSettings />} />

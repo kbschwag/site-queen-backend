@@ -3,6 +3,7 @@ import {
   FileText,
   Users,
   MessageSquare,
+  Mail,
   DollarSign,
   UserCog,
   Settings,
@@ -55,6 +56,11 @@ export function OperatorSidebar() {
   // Change Requests — Owner, Partner, or team with CR access
   if (canHandleChangeRequests) {
     navItems.push({ title: "Change Requests", url: "/operator/change-requests", icon: MessageSquare });
+  }
+
+  // Support Messages — Owner, Partner, or team with CR access
+  if (canHandleChangeRequests) {
+    navItems.push({ title: "Support Messages", url: "/operator/support-messages", icon: Mail });
   }
 
   // Revenue — Owner only

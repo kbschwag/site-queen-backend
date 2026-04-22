@@ -81,6 +81,17 @@ function MarketingNav() {
           >
             How it works
           </Link>
+          <Link
+            to="/help"
+            style={{
+              color: "var(--sq-charcoal)",
+              textDecoration: "none",
+              fontSize: "0.9375rem",
+              fontFamily: '"Inter", sans-serif',
+            }}
+          >
+            Help
+          </Link>
           <Link to="/apply" className="sq-button">
             Apply to qualify
           </Link>
@@ -141,6 +152,7 @@ function MarketingFooter() {
           <div style={{ display: "flex", gap: "3rem", flexWrap: "wrap" }}>
             <FooterLink to="/pricing">Pricing</FooterLink>
             <FooterLink to="/how-it-works">How it works</FooterLink>
+            <FooterLink to="/help">Help</FooterLink>
             <FooterLink to="/apply">Apply</FooterLink>
             <FooterLink to="/privacy">Privacy</FooterLink>
             <FooterLink to="/terms">Terms</FooterLink>
