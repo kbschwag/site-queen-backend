@@ -1219,6 +1219,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from: FROM_ADDRESS,
         to: [to],
+        ...(replyTo ? { reply_to: replyTo } : {}),
         subject,
         html: emailTemplate.html(templateData),
       }),
