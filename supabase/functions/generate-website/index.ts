@@ -59,23 +59,10 @@ serve(async (req) => {
       .eq("id", clientId)
       .single();
 
-    const intakeData = siteData.intake_data;
+    const intakeData = siteData.intake_data || {};
 
     // Photo handling — decide if we're using client photos or stock
     const usingStockPhotos = !!(siteData as any).using_stock_photos;
-
-    // Industry → Unsplash search keywords
-    const INDUSTRY_PHOTO_TERMS: Record<string, string[]> = {
-      trades_contractors: ["plumber", "electrician", "contractor", "tools", "construction"],
-      wellness_beauty: ["salon", "spa", "beauty", "hair", "wellness"],
-      professional_services: ["office", "business", "professional", "consulting", "meeting"],
-      food_hospitality: ["restaurant", "food", "cafe", "cooking", "dining"],
-      retail_products: ["retail", "products", "shopping", "store", "merchandise"],
-      creative_photography: ["photography", "creative", "studio", "camera", "art"],
-      health_fitness: ["fitness", "gym", "workout", "health", "exercise"],
-      education_coaching: ["coaching", "education", "teaching", "learning", "mentoring"],
-      other: ["business", "professional", "office", "work", "service"],
-    };
 
     // Collect uploaded client photo URLs (if any)
     const clientPhotoUrls: string[] = [];
@@ -90,54 +77,198 @@ serve(async (req) => {
     for (const t of id.testimonials || []) if (t.photo_url) clientPhotoUrls.push(t.photo_url);
     for (const p of id.custom_pages || []) if (Array.isArray(p.photos)) for (const u of p.photos) if (u) clientPhotoUrls.push(u);
 
-    const businessTypeKey = (clientData?.business_type || "other").toLowerCase().replace(/[\s-]/g, "_");
-    const photoKeywords = INDUSTRY_PHOTO_TERMS[businessTypeKey] || INDUSTRY_PHOTO_TERMS.other;
+    // ========================================================================
+    // INTELLIGENT PHOTO SEARCH TERM GENERATION
+    // Builds business-specific Unsplash search terms based on the client's
+    // actual industry, services, and description — NOT just business_type.
+    // ========================================================================
+    function getPhotoSearchTerms(client: any, intake: any): string[] {
+      const industry = (client?.business_type || client?.industry || "").toLowerCase();
+      const services = Array.isArray(intake?.services)
+        ? intake.services.map((s: any) => (typeof s === "string" ? s : s?.name || s?.title || "")).join(" ")
+        : "";
+      const description = [
+        intake?.business_description,
+        intake?.about_text,
+        intake?.story,
+        intake?.tagline,
+        intake?.hero_subheadline,
+      ].filter(Boolean).join(" ");
+      const businessName = client?.business_name || "";
 
-    // Optional Unsplash API enrichment — pre-fetch a handful of relevant images so Claude can use real URLs
-    const UNSPLASH_ACCESS_KEY = Deno.env.get("UNSPLASH_ACCESS_KEY");
-    const unsplashPhotos: { keyword: string; url: string; alt: string; credit: string }[] = [];
-    if (usingStockPhotos && UNSPLASH_ACCESS_KEY) {
-      for (const kw of photoKeywords) {
-        try {
-          const r = await fetch(
-            `https://api.unsplash.com/search/photos?query=${encodeURIComponent(kw)}&per_page=4&orientation=landscape`,
-            { headers: { Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}` } }
-          );
-          if (r.ok) {
-            const j = await r.json();
-            for (const p of (j.results || []).slice(0, 4)) {
-              unsplashPhotos.push({
-                keyword: kw,
-                url: p.urls?.regular || p.urls?.full,
-                alt: p.alt_description || kw,
-                credit: `Photo by ${p.user?.name || "Unsplash"} on Unsplash`,
-              });
-            }
-          }
-        } catch (e) {
-          console.warn(`Unsplash fetch failed for "${kw}":`, e);
+      const context = `${industry} ${description} ${services} ${businessName}`.toLowerCase();
+
+      // Keyword → curated search-term lists. Order matters: longer/more specific keys first.
+      const photoTerms: Record<string, string[]> = {
+        // Agriculture / farm — placed FIRST so "fresh eggs" beats generic "business"
+        eggs: ["fresh eggs", "farm eggs", "chicken eggs", "egg farm", "free range eggs"],
+        chicken: ["chicken farm", "free range chickens", "backyard chickens", "hens farm"],
+        produce: ["fresh produce", "farmers market", "fresh vegetables", "organic produce"],
+        dairy: ["dairy farm", "fresh milk", "dairy products", "farm dairy"],
+        farm: ["farm fresh", "farming", "agricultural farm", "countryside farm"],
+        agriculture: ["agriculture field", "farm fresh", "farming countryside", "harvest"],
+
+        // Trades and contractors
+        plumbing: ["plumber working", "pipe repair", "bathroom plumbing", "kitchen sink repair"],
+        plumber: ["plumber working", "pipe repair", "bathroom plumbing", "kitchen sink repair"],
+        electrical: ["electrician working", "electrical panel", "wiring installation", "electrical contractor"],
+        electrician: ["electrician working", "electrical panel", "wiring installation", "electrical contractor"],
+        hvac: ["hvac technician", "air conditioning unit", "heating system", "hvac repair"],
+        roofing: ["roofer working", "roof repair", "roofing contractor", "roof installation"],
+        landscaping: ["landscaping garden", "lawn care", "garden maintenance", "landscaper working"],
+        cleaning: ["house cleaning", "professional cleaning", "cleaning service", "clean home"],
+        painting: ["house painter", "interior painting", "exterior painting", "painting contractor"],
+        construction: ["construction worker", "building construction", "contractor working", "renovation"],
+        carpentry: ["carpenter working", "woodworking", "custom carpentry", "wood furniture"],
+        flooring: ["flooring installation", "hardwood floors", "tile flooring", "floor installation"],
+
+        // Wellness and beauty
+        barbershop: ["barber shop", "barber cutting hair", "barbershop interior", "men haircut"],
+        barber: ["barber shop", "barber cutting hair", "barbershop interior", "men haircut"],
+        salon: ["hair salon", "hair styling", "hairdresser working", "salon interior"],
+        hair: ["hair salon", "hair styling", "hairdresser working", "salon interior"],
+        spa: ["spa treatment", "massage therapy", "relaxing spa", "spa interior"],
+        nails: ["nail salon", "nail art", "manicure", "nail technician"],
+        massage: ["massage therapy", "massage therapist", "relaxing massage", "spa massage"],
+        skincare: ["skincare treatment", "facial treatment", "skin care", "esthetician"],
+        tattoo: ["tattoo artist", "tattoo studio", "tattoo design", "tattooing"],
+        fitness: ["gym workout", "personal trainer", "fitness training", "exercise gym"],
+        yoga: ["yoga class", "yoga practice", "yoga studio", "meditation yoga"],
+
+        // Professional services
+        lawyer: ["law office", "attorney office", "legal consultation", "professional lawyer"],
+        attorney: ["law office", "attorney office", "legal consultation", "professional lawyer"],
+        accountant: ["accounting office", "financial planning", "business meeting", "accountant working"],
+        accounting: ["accounting office", "financial planning", "business meeting", "accountant working"],
+        insurance: ["insurance agent", "insurance office", "business consultation", "professional meeting"],
+        realtor: ["real estate agent", "house for sale", "real estate", "home buying"],
+        "real estate": ["real estate agent", "house for sale", "real estate", "home buying"],
+        consulting: ["business consulting", "professional meeting", "office consultation", "business strategy"],
+        marketing: ["digital marketing", "marketing team", "social media marketing", "advertising"],
+
+        // Food and hospitality
+        restaurant: ["restaurant interior", "food dining", "restaurant kitchen", "fine dining"],
+        cafe: ["coffee shop", "cafe interior", "barista coffee", "cozy cafe"],
+        coffee: ["coffee shop", "cafe interior", "barista coffee", "cozy cafe"],
+        bakery: ["bakery fresh bread", "pastry baking", "artisan bakery", "bread baking"],
+        catering: ["catering food", "catering service", "event catering", "food catering"],
+        "food truck": ["food truck", "street food", "mobile food", "food vendor"],
+
+        // Photography and creative
+        photography: ["professional photographer", "photography session", "camera photography", "photo studio"],
+        photographer: ["professional photographer", "photography session", "camera photography", "photo studio"],
+        videography: ["videographer filming", "video production", "filming crew", "video camera"],
+        design: ["graphic design", "creative studio", "design work", "creative agency"],
+
+        // Health
+        chiropractor: ["chiropractic adjustment", "chiropractor treatment", "back pain treatment", "chiropractic care"],
+        dentist: ["dental office", "dentist working", "dental care", "dental treatment"],
+        dental: ["dental office", "dentist working", "dental care", "dental treatment"],
+        therapy: ["therapy session", "counseling session", "mental health therapy", "therapist office"],
+        veterinary: ["veterinarian pet", "animal clinic", "vet working", "pet care"],
+        vet: ["veterinarian pet", "animal clinic", "vet working", "pet care"],
+        optometry: ["eye exam", "optometrist", "vision care", "eye care"],
+      };
+
+      // Find first matching keyword in the context
+      for (const [keyword, terms] of Object.entries(photoTerms)) {
+        if (context.includes(keyword)) {
+          console.log(`[photo-terms] Matched keyword "${keyword}" → ${terms.join(", ")}`);
+          return terms;
         }
       }
+
+      // Fallback: extract meaningful words from description
+      const words = context
+        .replace(/[^a-z\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 4 && !["business", "company", "service", "services", "professional", "quality", "local"].includes(w));
+      const seed = words.slice(0, 2).join(" ") || "small business professional";
+      const fallback = [seed, `${seed} service`, "professional service", "small business"];
+      console.log(`[photo-terms] No keyword match — falling back to: ${fallback.join(", ")}`);
+      return fallback;
     }
+
+    // Fetch a single Unsplash photo, trying each search term until one returns a result
+    async function fetchUnsplashPhoto(
+      searchTerms: string[],
+      width = 800,
+      height = 600
+    ): Promise<{ url: string; photographer: string; photographer_url: string; unsplash_url: string; alt: string } | null> {
+      const key = Deno.env.get("UNSPLASH_ACCESS_KEY");
+      if (!key) {
+        console.error("[unsplash] UNSPLASH_ACCESS_KEY not set");
+        return null;
+      }
+      for (const term of searchTerms) {
+        try {
+          const r = await fetch(
+            `https://api.unsplash.com/photos/random?query=${encodeURIComponent(term)}&orientation=landscape`,
+            { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } }
+          );
+          if (r.ok) {
+            const p = await r.json();
+            console.log(`[unsplash] ✓ "${term}" → ${p.id} by ${p.user?.name}`);
+            return {
+              url: `${p.urls.raw}&w=${width}&h=${height}&fit=crop&auto=format`,
+              photographer: p.user?.name || "Unsplash",
+              photographer_url: p.user?.links?.html || "https://unsplash.com",
+              unsplash_url: p.links?.html || "https://unsplash.com",
+              alt: p.alt_description || term,
+            };
+          } else {
+            console.warn(`[unsplash] ✗ "${term}" → HTTP ${r.status}`);
+          }
+        } catch (e) {
+          console.error(`[unsplash] error for "${term}":`, e);
+        }
+      }
+      return null;
+    }
+
+    const photoTerms = getPhotoSearchTerms(clientData, intakeData);
+    console.log(`[generate-website] Photo terms for ${clientData?.business_name}:`, photoTerms);
+
+    // Pre-fetch section-specific photos (only when using stock)
+    let heroPhoto: any = null;
+    let aboutPhoto: any = null;
+    let whyUsPhoto: any = null;
+    let emergencyBgPhoto: any = null;
+    if (usingStockPhotos) {
+      [heroPhoto, aboutPhoto, whyUsPhoto, emergencyBgPhoto] = await Promise.all([
+        fetchUnsplashPhoto(photoTerms.map((t) => `${t} hero wide`), 1920, 900),
+        fetchUnsplashPhoto(photoTerms.map((t) => `${t} team working`), 800, 600),
+        fetchUnsplashPhoto(photoTerms.map((t) => `${t} professional`), 600, 700),
+        fetchUnsplashPhoto(["dark background texture", "dark professional background", "dark city night"], 1920, 600),
+      ]);
+    }
+
+    const photoContext = usingStockPhotos
+      ? `
+STOCK PHOTOS TO USE (already fetched specifically for this business — use these EXACT URLs):
+- Hero background: ${heroPhoto?.url || "none — use CSS dark gradient only"}
+- About section image: ${aboutPhoto?.url || "none — use placeholder color"}
+- Why us section image: ${whyUsPhoto?.url || "none — use placeholder color"}
+- Emergency / dark section background: ${emergencyBgPhoto?.url || "none — use dark overlay only"}
+`
+      : "";
 
     const photoSection = usingStockPhotos
       ? `
 
 PHOTO HANDLING — STOCK PHOTOGRAPHY:
-No client photos were provided. Source all images from Unsplash.
-Use these industry-specific keywords for this client's business type (${clientData?.business_type || "general"}): ${photoKeywords.join(", ")}.
+No client photos were provided. The following stock photos have been pre-fetched from Unsplash specifically for this business — use ONLY these URLs for stock photos. Do not generate, guess, or invent other Unsplash URLs.
 
-${unsplashPhotos.length > 0 ? `
-Pre-curated Unsplash photos you may use directly (preferred — these are real, working URLs):
-${unsplashPhotos.map((p) => `- "${p.keyword}": ${p.url} (alt: ${p.alt}; ${p.credit})`).join("\n")}
-` : `
-Use the Unsplash source URL format as a fallback: https://source.unsplash.com/800x600/?[keyword]
-Examples:
-- Hero image: https://source.unsplash.com/1200x800/?${photoKeywords[0]}
-- Service image: https://source.unsplash.com/800x600/?${photoKeywords[1] || photoKeywords[0]}
-- Team placeholder: https://source.unsplash.com/400x400/?professional
-`}
-Every image in the site must have a relevant photo. The site must look completely professional. Choose keywords carefully to match the business type, tone, and vibe described in the intake form and call notes.`
+${photoContext}
+
+The photos above were searched using terms relevant to this business: ${photoTerms.join(", ")}.
+
+RULES:
+- If a photo URL is provided, use it exactly as given.
+- If a section says "none", use a CSS background color or gradient instead — never use a broken image URL or invent one.
+- For service section icons, use inline SVG icons appropriate to each service name — do not use image URLs for icons.
+- For any additional images you need (gallery, testimonial avatars, etc.), use https://source.unsplash.com/[WxH]/?${encodeURIComponent(photoTerms[0])} as a fallback.
+- Every image must have a meaningful alt attribute related to this business.`
       : `
 
 PHOTO HANDLING — CLIENT-PROVIDED PHOTOS:
@@ -146,7 +277,7 @@ ${clientPhotoUrls.map((u, i) => `- ${i + 1}. ${u}`).join("\n")}
 
 ${id.hero_photo_url ? `Hero image (use as the main hero): ${id.hero_photo_url}` : ""}
 Place portfolio photos in galleries/services, team photos in about/team sections, location photos in contact sections.
-Only use Unsplash stock photos for sections where no client photo was provided. If you need stock fallback use keywords: ${photoKeywords.join(", ")}.`;
+Only use Unsplash stock photos for sections where no client photo was provided. If you need a stock fallback use keywords: ${photoTerms.join(", ")}.`;
 
     // Fetch call notes via application_id from the client record
     const applicationId = clientData?.application_id;
@@ -389,6 +520,15 @@ Do not include any explanation, markdown formatting, or code blocks. Return raw 
       finalHTML = finalHTML.replace("</body>", `${trackingScript}\n</body>`);
     } else {
       finalHTML += trackingScript;
+    }
+
+    // Append Unsplash photo credit comment (license compliance)
+    if (usingStockPhotos && (heroPhoto || aboutPhoto || whyUsPhoto || emergencyBgPhoto)) {
+      const credits = `
+<!-- Photo credits (Unsplash):
+${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unsplash_url})\n` : ""}${aboutPhoto ? `  About: ${aboutPhoto.photographer} on Unsplash (${aboutPhoto.unsplash_url})\n` : ""}${whyUsPhoto ? `  Why us: ${whyUsPhoto.photographer} on Unsplash (${whyUsPhoto.unsplash_url})\n` : ""}${emergencyBgPhoto ? `  Emergency bg: ${emergencyBgPhoto.photographer} on Unsplash (${emergencyBgPhoto.unsplash_url})\n` : ""}  Search terms used: ${photoTerms.join(", ")}
+-->`;
+      finalHTML += credits;
     }
 
     // Store generated HTML in Supabase storage
