@@ -108,6 +108,27 @@ export type Database = {
           },
         ]
       }
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: string | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string | null
+        }
+        Relationships: []
+      }
       applications: {
         Row: {
           accepts_commitment: string | null
@@ -541,6 +562,7 @@ export type Database = {
           booking_addon_requested: boolean | null
           business_name: string
           business_type: string
+          calendly_revision_url: string | null
           call_notes_completed: boolean | null
           call_notes_completed_at: string | null
           created_at: string
@@ -589,6 +611,7 @@ export type Database = {
           booking_addon_requested?: boolean | null
           business_name: string
           business_type: string
+          calendly_revision_url?: string | null
           call_notes_completed?: boolean | null
           call_notes_completed_at?: string | null
           created_at?: string
@@ -637,6 +660,7 @@ export type Database = {
           booking_addon_requested?: boolean | null
           business_name?: string
           business_type?: string
+          calendly_revision_url?: string | null
           call_notes_completed?: boolean | null
           call_notes_completed_at?: string | null
           created_at?: string
@@ -893,6 +917,50 @@ export type Database = {
           },
         ]
       }
+      operator_edits: {
+        Row: {
+          client_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          instruction: string
+          model_used: string
+          operator_email: string | null
+          operator_id: string
+          status: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          instruction: string
+          model_used?: string
+          operator_email?: string | null
+          operator_id: string
+          status?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          instruction?: string
+          model_used?: string
+          operator_email?: string | null
+          operator_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_edits_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_events: {
         Row: {
           amount_cents: number | null
@@ -1057,6 +1125,8 @@ export type Database = {
         Row: {
           brand_vibe: string | null
           business_type: string | null
+          client_approval_notes: string | null
+          client_approved_at: string | null
           client_id: string
           created_at: string
           deploy_count: number | null
@@ -1067,12 +1137,15 @@ export type Database = {
           id: string
           intake_data: Json | null
           last_deployed_at: string | null
+          last_reshared_at: string | null
           last_updated: string | null
           logo_url: string | null
+          operator_edit_count: number | null
           photo_count: number | null
           photo_rights_confirmed: boolean | null
           photos_provided: boolean | null
           primary_color: string | null
+          reshared_count: number | null
           staging_url: string | null
           stock_photos_replaced: boolean | null
           template_used: string | null
@@ -1081,6 +1154,8 @@ export type Database = {
         Insert: {
           brand_vibe?: string | null
           business_type?: string | null
+          client_approval_notes?: string | null
+          client_approved_at?: string | null
           client_id: string
           created_at?: string
           deploy_count?: number | null
@@ -1091,12 +1166,15 @@ export type Database = {
           id?: string
           intake_data?: Json | null
           last_deployed_at?: string | null
+          last_reshared_at?: string | null
           last_updated?: string | null
           logo_url?: string | null
+          operator_edit_count?: number | null
           photo_count?: number | null
           photo_rights_confirmed?: boolean | null
           photos_provided?: boolean | null
           primary_color?: string | null
+          reshared_count?: number | null
           staging_url?: string | null
           stock_photos_replaced?: boolean | null
           template_used?: string | null
@@ -1105,6 +1183,8 @@ export type Database = {
         Update: {
           brand_vibe?: string | null
           business_type?: string | null
+          client_approval_notes?: string | null
+          client_approved_at?: string | null
           client_id?: string
           created_at?: string
           deploy_count?: number | null
@@ -1115,12 +1195,15 @@ export type Database = {
           id?: string
           intake_data?: Json | null
           last_deployed_at?: string | null
+          last_reshared_at?: string | null
           last_updated?: string | null
           logo_url?: string | null
+          operator_edit_count?: number | null
           photo_count?: number | null
           photo_rights_confirmed?: boolean | null
           photos_provided?: boolean | null
           primary_color?: string | null
+          reshared_count?: number | null
           staging_url?: string | null
           stock_photos_replaced?: boolean | null
           template_used?: string | null

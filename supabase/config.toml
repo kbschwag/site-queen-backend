@@ -1,1 +1,4 @@
 project_id = "onrvqbygwzhmhgkctcrm"
+
+[functions.quick-edit-html]
+verify_jwt = true

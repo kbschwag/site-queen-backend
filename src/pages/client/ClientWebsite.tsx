@@ -12,7 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   Crown, ArrowRight, Sparkles, Loader2, CheckCircle2, Send, ExternalLink, Share2, Copy, Eye, ImageIcon,
+  Pencil, Phone,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
 import { IntakeForm } from "@/components/intake/IntakeForm";
 import type { IntakeData } from "@/components/intake/types";
@@ -98,6 +102,24 @@ export default function ClientWebsite() {
     enabled: !!client,
   });
 
+  // Calendly revision URL — per-client override or global default
+  const { data: revisionUrl } = useQuery({
+    queryKey: ["calendly-revision-url", client?.id],
+    queryFn: async () => {
+      if ((client as any)?.calendly_revision_url) return (client as any).calendly_revision_url as string;
+      const { data } = await supabase
+        .from("app_settings" as any)
+        .select("value")
+        .eq("key", "calendly_revision_url")
+        .maybeSingle();
+      return ((data as any)?.value as string) || "https://calendly.com/sitequeenai/revision-call";
+    },
+    enabled: !!client,
+  });
+
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showChangesForm, setShowChangesForm] = useState(false);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !client) return;
@@ -165,15 +187,37 @@ export default function ClientWebsite() {
   const approveWebsite = useMutation({
     mutationFn: async () => {
       if (!client || !site) throw new Error("Missing data");
+      // CRITICAL: Set status to client_approved — DO NOT trigger deployment.
+      // Only an operator can deploy.
+      await supabase.from("sites").update({
+        generation_status: "client_approved",
+        client_approved_at: new Date().toISOString(),
+      } as any).eq("id", site.id);
+
       await supabase.from("notifications").insert({
         type: "client_approved_site",
         client_id: client.id,
-        message: `${client.business_name} approved their website for launch ♛`,
+        message: `${client.business_name} has approved their website and is ready to go live ♛ — deploy when ready`,
         target_role: "operator",
       } as any);
-      await supabase.from("sites").update({ generation_status: "approved" } as any).eq("id", site.id);
 
-      // Send approval confirmation
+      // Notify operator by email
+      await supabase.functions.invoke("send-email", {
+        body: {
+          to: "hello@sitequeen.ai",
+          template: "prelaunch_feedback_operator",
+          data: {
+            business_name: client.business_name,
+            client_name: profile?.full_name || client.business_name,
+            plan: client.plan,
+            feedback_text: "✅ Client approved — ready to go live ♛",
+            attachment_count: 0,
+          },
+          clientId: client.id,
+        },
+      }).catch(console.error);
+
+      // Send approval confirmation to client
       if (profile?.email) {
         await supabase.functions.invoke("send-email", {
           body: {
@@ -190,7 +234,28 @@ export default function ClientWebsite() {
       }
     },
     onSuccess: () => {
-      toast.success("Website approved! We'll make it live shortly ♛");
+      toast.success("Your approval has been received ♛");
+      setShowApproveModal(false);
+      queryClient.invalidateQueries({ queryKey: ["my-site"] });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const bookRevisionCall = useMutation({
+    mutationFn: async () => {
+      if (!client || !site) throw new Error("Missing data");
+      await supabase.from("sites").update({
+        generation_status: "revision_call_scheduled",
+      } as any).eq("id", site.id);
+      await supabase.from("notifications").insert({
+        type: "revision_call_scheduled",
+        client_id: client.id,
+        message: `${client.business_name} has booked a revision call — check your Calendly`,
+        target_role: "operator",
+      } as any);
+      window.open(revisionUrl || "https://calendly.com/sitequeenai/revision-call", "_blank");
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-site"] });
     },
     onError: (e) => toast.error(e.message),
@@ -299,129 +364,186 @@ export default function ClientWebsite() {
     );
   }
 
-  // STATE 4: Staging review
-  if ((generationStatus === "shared" && site?.staging_url) && !siteIsLive && generationStatus !== "approved") {
+  // STATE 4: Staging review — three options (approve / request changes / book call)
+  const inStagingReview = ["shared", "awaiting_client_review", "pre_launch_revision", "revision_call_scheduled"].includes(generationStatus);
+  if (inStagingReview && site?.staging_url && !siteIsLive) {
+    const allChecked = Object.values(checklist).every(Boolean);
+
     return (
-      <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
-        {/* Banner notification */}
-        {stagingNotification && (
-          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Eye className="h-5 w-5 text-primary" />
-              <div>
-                <p className="font-medium text-sm">Your website is ready to preview ♛</p>
-                <p className="text-xs text-muted-foreground">Take a look and let us know what you think</p>
-              </div>
-            </div>
-            <Button size="sm" variant="outline" onClick={() => {
-              window.open(site.staging_url || "#", "_blank");
-            }} className="gap-1.5">
-              <ExternalLink className="h-3.5 w-3.5" /> View preview
-            </Button>
+      <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
+        {/* Header banner — purple */}
+        <div className="bg-primary/10 border border-primary/20 rounded-xl p-5 text-center">
+          <h1 className="text-2xl font-bold mb-1">Your website is ready to preview ♛</h1>
+          <p className="text-sm text-muted-foreground">
+            Take your time reviewing it. When you're ready, choose one of the options below.
+          </p>
+        </div>
+
+        {/* Status-specific banners */}
+        {generationStatus === "pre_launch_revision" && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900">
+            ✏ Your change request is in — we'll update the site and reshare with you shortly.
+          </div>
+        )}
+        {generationStatus === "revision_call_scheduled" && (
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm">
+            📞 Your revision call is booked. We'll review the site together and update it after the call.
           </div>
         )}
 
-        <div className="text-center">
-          <h1 className="text-xl font-bold">Your website is ready to preview ♛</h1>
-          <p className="text-sm text-muted-foreground mt-1">This is pre-launch feedback — no credits will be used</p>
-        </div>
+        {/* Full width preview iframe */}
+        <Card>
+          <CardContent className="pt-6">
+            <SitePreviewFrame clientId={client.id} stagingUrl={site.staging_url} height={560} />
+          </CardContent>
+        </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Card>
-              <CardContent className="pt-6">
-                <SitePreviewFrame clientId={client.id} stagingUrl={site.staging_url} height={500} />
-              </CardContent>
-            </Card>
-          </div>
+        {/* Three option cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Option 1 — Approve */}
+          <Card className="border-l-4 border-l-emerald-500">
+            <CardHeader className="pb-3">
+              <div className="text-2xl mb-1">✓</div>
+              <CardTitle className="text-lg">Looks perfect ♛</CardTitle>
+              <CardDescription>Happy with everything? Let us know and we'll get it live.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={() => setShowApproveModal(true)}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+              >
+                <CheckCircle2 className="h-4 w-4" /> Approve my website
+              </Button>
+            </CardContent>
+          </Card>
 
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Looking good?</CardTitle>
-                <CardDescription>
-                  Review your site carefully. Check all your information is correct and everything reads well on mobile.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  { key: "business_info", label: "My business information is correct" },
-                  { key: "contact_info", label: "My phone number and email are right" },
-                  { key: "services", label: "My services are accurate" },
-                  { key: "photos", label: "Photos look great" },
-                  { key: "mobile", label: "Site looks good on mobile" },
-                ].map((item) => (
-                  <label key={item.key} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <Checkbox
-                      checked={(checklist as any)[item.key]}
-                      onCheckedChange={(v) => setChecklist((prev) => ({ ...prev, [item.key]: !!v }))}
-                    />
-                    {item.label}
-                  </label>
-                ))}
-              </CardContent>
-            </Card>
-
-            {showFeedback ? (
-              <Card>
-                <CardContent className="pt-5 space-y-3">
-                  <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-xs">Pre-launch feedback — no credits used</Badge>
+          {/* Option 2 — Request small changes */}
+          <Card className="border-l-4 border-l-amber-500">
+            <CardHeader className="pb-3">
+              <div className="text-2xl mb-1">✏</div>
+              <CardTitle className="text-lg">Small changes needed</CardTitle>
+              <CardDescription>Need a few tweaks? Tell us what to fix and we'll update it — no call needed.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!showChangesForm ? (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowChangesForm(true)}
+                  className="w-full border-amber-500 text-amber-700 hover:bg-amber-50 gap-2"
+                >
+                  <Pencil className="h-4 w-4" /> Request changes
+                </Button>
+              ) : (
+                <>
+                  <label className="text-xs font-medium">What would you like changed?</label>
                   <Textarea
-                    placeholder="Describe what needs changing..."
+                    placeholder="e.g. Can you update the phone number to 555-1234, change the hero headline to say 'Phoenix's Most Trusted Plumber', and swap the about section photo for the one I'm uploading below"
                     value={feedbackText}
                     onChange={(e) => setFeedbackText(e.target.value)}
-                    rows={4}
-                    className="resize-none"
+                    rows={5}
+                    className="resize-none text-sm"
                   />
                   <div>
-                    <label className="text-xs text-muted-foreground">Attach a file (optional)</label>
-                    <Input type="file" accept="image/*,.pdf" onChange={handleFileUpload} className="mt-1" />
+                    <label className="text-xs text-muted-foreground">Attach any reference files or new photos (optional)</label>
+                    <Input type="file" accept="image/*,.pdf" onChange={handleFileUpload} className="mt-1 text-xs" disabled={Object.values(uploading).some(Boolean)} />
                     {attachmentUrl && <p className="text-xs text-emerald-600 mt-1">✓ File attached</p>}
                   </div>
                   <div className="flex gap-2">
                     <Button
-                      onClick={() => submitFeedback.mutate()}
+                      onClick={async () => {
+                        await submitFeedback.mutateAsync();
+                        await supabase.from("sites").update({ generation_status: "pre_launch_revision" } as any).eq("id", site.id);
+                        queryClient.invalidateQueries({ queryKey: ["my-site"] });
+                      }}
                       disabled={!feedbackText.trim() || submitFeedback.isPending}
-                      className="gap-2 flex-1"
+                      className="bg-amber-600 hover:bg-amber-700 text-white gap-2 flex-1"
                       size="sm"
                     >
                       {submitFeedback.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                      Submit feedback
+                      Submit changes
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => setShowFeedback(false)}>Cancel</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setShowChangesForm(false)}>Cancel</Button>
                   </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Button variant="outline" className="w-full" onClick={() => setShowFeedback(true)}>
-                Request changes before approving
-              </Button>
-            )}
-
-            <Button
-              className="w-full gap-2"
-              disabled={!allChecked || approveWebsite.isPending}
-              onClick={() => {
-                if (confirm("Are you sure everything looks great?")) {
-                  approveWebsite.mutate();
-                }
-              }}
-            >
-              {approveWebsite.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" />
+                </>
               )}
-              Approve my website ♛
-            </Button>
-          </div>
+            </CardContent>
+          </Card>
+
+          {/* Option 3 — Book a revision call */}
+          <Card className="border-l-4 border-l-primary">
+            <CardHeader className="pb-3">
+              <div className="text-2xl mb-1">📞</div>
+              <CardTitle className="text-lg">Let's talk it through</CardTitle>
+              <CardDescription>
+                Want to walk through the site together and discuss bigger changes? Book a free 15 minute revision call.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button
+                onClick={() => bookRevisionCall.mutate()}
+                disabled={bookRevisionCall.isPending}
+                className="w-full gap-2"
+              >
+                {bookRevisionCall.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}
+                Book a revision call
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                After booking you'll receive a confirmation email. We'll review the site together on the call.
+              </p>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Important note */}
+        <p className="text-center text-xs text-muted-foreground italic">
+          Your website will be reviewed by our team before going live. We'll notify you the moment it's up. ♛
+        </p>
+
+        {/* Approve confirmation modal */}
+        <Dialog open={showApproveModal} onOpenChange={setShowApproveModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Are you sure everything looks great?</DialogTitle>
+              <DialogDescription>
+                Tick each item to confirm — once approved, we'll get your site queued up to go live.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              {[
+                { key: "business_info", label: "My business information is correct" },
+                { key: "contact_info", label: "My phone number and email are right" },
+                { key: "services", label: "My services are accurate" },
+                { key: "photos", label: "Photos look great" },
+                { key: "mobile", label: "Looks good on mobile" },
+              ].map((item) => (
+                <label key={item.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={(checklist as any)[item.key]}
+                    onCheckedChange={(v) => setChecklist((prev) => ({ ...prev, [item.key]: !!v }))}
+                  />
+                  {item.label}
+                </label>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowApproveModal(false)}>Cancel</Button>
+              <Button
+                onClick={() => approveWebsite.mutate()}
+                disabled={!allChecked || approveWebsite.isPending}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+              >
+                {approveWebsite.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Confirm approval ♛
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
 
   // STATE 4b: Approved, waiting to go live
-  if (generationStatus === "approved" && !siteIsLive) {
+  if ((generationStatus === "client_approved" || generationStatus === "approved") && !siteIsLive) {
     return (
       <div className="max-w-xl mx-auto text-center py-12 animate-in fade-in duration-300">
         <CheckCircle2 className="h-16 w-16 text-emerald-500 mx-auto mb-6" />
