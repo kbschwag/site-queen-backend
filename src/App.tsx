@@ -35,6 +35,7 @@ import OperatorDashboard from "./pages/operator/OperatorDashboard";
 import OperatorApplications from "./pages/operator/OperatorApplications";
 import OperatorClients from "./pages/operator/OperatorClients";
 import OperatorChangeRequests from "./pages/operator/OperatorChangeRequests";
+import OperatorSupportMessages from "./pages/operator/OperatorSupportMessages";
 import OperatorRevenue from "./pages/operator/OperatorRevenue";
 import OperatorTeam from "./pages/operator/OperatorTeam";
 import OperatorSettings from "./pages/operator/OperatorSettings";
@@ -89,6 +90,7 @@ const App = () => (
               <Route path="applications" element={<OperatorApplications />} />
               <Route path="clients" element={<OperatorClients />} />
               <Route path="change-requests" element={<OperatorChangeRequests />} />
+              <Route path="support-messages" element={<OperatorSupportMessages />} />
               <Route path="revenue" element={<OperatorRevenue />} />
               <Route path="team" element={<OperatorTeam />} />
               <Route path="settings" element={<OperatorSettings />} />
