@@ -12,7 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
-  Mic, MicOff, Plus, Trash2, CheckCircle2, Pencil, Loader2, Sparkles, Save
+  Mic, MicOff, Plus, Trash2, CheckCircle2, Pencil, Loader2, Sparkles, Save, AlertCircle
 } from "lucide-react";
 
 interface Props {
