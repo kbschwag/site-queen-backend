@@ -102,6 +102,24 @@ export default function ClientWebsite() {
     enabled: !!client,
   });
 
+  // Calendly revision URL — per-client override or global default
+  const { data: revisionUrl } = useQuery({
+    queryKey: ["calendly-revision-url", client?.id],
+    queryFn: async () => {
+      if ((client as any)?.calendly_revision_url) return (client as any).calendly_revision_url as string;
+      const { data } = await supabase
+        .from("app_settings" as any)
+        .select("value")
+        .eq("key", "calendly_revision_url")
+        .maybeSingle();
+      return ((data as any)?.value as string) || "https://calendly.com/sitequeenai/revision-call";
+    },
+    enabled: !!client,
+  });
+
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showChangesForm, setShowChangesForm] = useState(false);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !client) return;
