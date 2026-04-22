@@ -431,10 +431,15 @@ Your instructions:
 7. Make all social media links open in a new tab
 8. Make sure the site is fully responsive and mobile perfect
 9. Do not change any layout structure or design elements — only replace content and colors
-10. Return ONLY a valid JSON object with exactly two fields:
-    - "html": the complete finished HTML as a single string
-    - "css": the complete finished CSS as a single string
-Do not include any explanation, markdown formatting, or code blocks. Return raw JSON only.`;
+10. Output format — return EITHER:
+    (a) raw HTML starting with <!DOCTYPE html> with the CSS inlined in a <style> tag in the head, OR
+    (b) a single JSON object with exactly two fields "html" and "css"
+
+CRITICAL OUTPUT INSTRUCTIONS:
+- Return ONLY the response — no explanation, no commentary, no markdown code fences
+- Do NOT wrap the response in \`\`\`html or \`\`\`json fences
+- The very first character of your response must be either < (for HTML) or { (for JSON)
+- Never include any text before or after the HTML/JSON
     } else {
       prompt = `You are a professional web designer building a website for a small business client.
 
