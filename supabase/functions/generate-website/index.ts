@@ -624,7 +624,12 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("generate-website error:", error);
+    console.error("generate-website error:", {
+      error: error.message,
+      stack: error.stack,
+      client_id: clientId,
+      response_preview: rawText ? rawText.substring(0, 500) : null,
+    });
 
     if (clientId) {
       try {
