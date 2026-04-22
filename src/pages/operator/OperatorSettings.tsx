@@ -133,14 +133,47 @@ export default function OperatorSettings() {
             <Input defaultValue="hello@sitequeen.ai" className="mt-1" />
           </div>
           <div>
-            <Label>Cal.com Booking Link</Label>
-            <Input defaultValue="https://cal.com/sitequeen" placeholder="https://cal.com/..." className="mt-1" />
-          </div>
-          <div>
             <Label>Support Response SLA (hours)</Label>
             <Input type="number" defaultValue="24" className="mt-1 w-32" />
           </div>
           <Button size="sm">Save changes</Button>
+        </CardContent>
+      </Card>
+
+      {/* Cal.com booking links */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="h-4 w-4" /> Cal.com booking links
+          </CardTitle>
+          <CardDescription>Used in client and operator emails for scheduling</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label>Discovery call Calendly link</Label>
+            <Input
+              value={calendlyDiscovery}
+              onChange={(e) => setCalendlyDiscovery(e.target.value)}
+              placeholder="https://calendly.com/yourname/discovery-call"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label>Revision call Calendly link</Label>
+            <Input
+              value={calendlyRevision}
+              onChange={(e) => setCalendlyRevision(e.target.value)}
+              placeholder="https://calendly.com/yourname/revision-call"
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Shown to clients in the staging review screen as the "Book a revision call" option.
+            </p>
+          </div>
+          <Button size="sm" onClick={handleSaveCalendly} disabled={savingCalendly} className="gap-2">
+            {savingCalendly && <Loader2 className="h-3 w-3 animate-spin" />}
+            Save Cal.com links
+          </Button>
         </CardContent>
       </Card>
 
