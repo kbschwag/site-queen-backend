@@ -8,10 +8,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Lock, TrendingUp, TrendingDown, Phone, FileText, MousePointerClick, Eye, BarChart3, Crown } from "lucide-react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
-} from "recharts";
+import * as Recharts from "recharts";
+const BarChart = Recharts.BarChart as any;
+const Bar = Recharts.Bar as any;
+const XAxis = Recharts.XAxis as any;
+const YAxis = Recharts.YAxis as any;
+const CartesianGrid = Recharts.CartesianGrid as any;
+const Tooltip = Recharts.Tooltip as any;
+const ResponsiveContainer = Recharts.ResponsiveContainer as any;
+const PieChart = Recharts.PieChart as any;
+const Pie = Recharts.Pie as any;
+const Cell = Recharts.Cell as any;
+const Legend = Recharts.Legend as any;
 import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval, isWithinInterval } from "date-fns";
 
 type Period = "7" | "30" | "90";
