@@ -648,7 +648,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowShareModal(false)}>Cancel</Button>
-            <Button onClick={handleShareWithClient} disabled={sharing} className="gap-2">
+            <Button onClick={() => handleShareWithClient(false)} disabled={sharing} className="gap-2">
               {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Send for review
             </Button>
