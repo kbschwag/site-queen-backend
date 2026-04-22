@@ -92,6 +92,8 @@ export interface IntakeData {
   // Step 7 — Your Pages
   custom_pages?: { name: string; description: string; photos?: string[]; content_generated?: string }[];
   special_features?: string[];
+  blog_addon_requested?: boolean;
+  booking_addon_requested?: boolean;
 
   // Step 8 — Website Style
   template_selected?: string;
