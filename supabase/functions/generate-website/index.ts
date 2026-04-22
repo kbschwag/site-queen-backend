@@ -467,10 +467,15 @@ Your instructions:
 9. Use modern CSS (flexbox, grid, custom properties)
 10. Include smooth scroll behavior and clean typography
 11. Follow the MISSING DATA INSTRUCTIONS above — never show empty placeholders or broken sections
-12. Return ONLY a valid JSON object with exactly two fields:
-    - "html": the complete finished HTML as a single string (include CSS in a <style> tag in the head, or link to styles.css)
-    - "css": the complete finished CSS as a single string
-Do not include any explanation, markdown formatting, or code blocks. Return raw JSON only.`;
+12. Output format — return EITHER:
+    (a) raw HTML starting with <!DOCTYPE html> with all CSS inlined in a <style> tag in the head, OR
+    (b) a single JSON object with exactly two fields "html" and "css"
+
+CRITICAL OUTPUT INSTRUCTIONS:
+- Return ONLY the response — no explanation, no commentary, no markdown code fences
+- Do NOT wrap the response in \`\`\`html or \`\`\`json fences
+- The very first character of your response must be either < (for HTML) or { (for JSON)
+- Never include any text before or after the HTML/JSON`;
     }
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
