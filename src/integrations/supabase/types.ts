@@ -1249,6 +1249,65 @@ export type Database = {
         }
         Relationships: []
       }
+      support_messages: {
+        Row: {
+          business_name: string | null
+          client_email: string | null
+          client_id: string | null
+          client_name: string | null
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          message: string
+          replied_at: string | null
+          replied_by: string | null
+          reply_text: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          business_name?: string | null
+          client_email?: string | null
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          message: string
+          replied_at?: string | null
+          replied_by?: string | null
+          reply_text?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          business_name?: string | null
+          client_email?: string | null
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          message?: string
+          replied_at?: string | null
+          replied_by?: string | null
+          reply_text?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
