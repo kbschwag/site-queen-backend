@@ -22,6 +22,7 @@ import { FailureCard } from "./GenerationFailureCard";
 import { CodeEditorModal } from "./CodeEditorModal";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { Code2 } from "lucide-react";
+import { buildSitePreviewUrl } from "@/lib/site-preview";
 
 interface Props {
   clientId: string;
@@ -117,6 +118,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
 
   const generationStatus = (site as any)?.generation_status || "pending";
   const stagingUrl = site?.staging_url;
+  const sharePreviewUrl = buildSitePreviewUrl(clientId);
   const generationError = (site as any)?.generation_error;
 
   const statusConfig: Record<string, { label: string; color: string; icon: any; pulse?: boolean }> = {
@@ -157,7 +159,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               name: clientProfile.full_name || businessName,
               first_name: (clientProfile.full_name || "").split(" ")[0] || businessName,
               business_name: businessName,
-              staging_url: stagingUrl,
+              staging_url: sharePreviewUrl,
               operator_note: shareNote || null,
               using_stock_photos: !!(site as any)?.using_stock_photos,
             },
@@ -171,7 +173,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
         type: "staging_ready",
         client_id: clientId,
         message: `Your website is ready to preview ♛ — take a look and let us know what you think`,
-        staging_url: stagingUrl,
+        staging_url: sharePreviewUrl,
         target_role: "client",
       } as any);
 
@@ -245,8 +247,8 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               name: clientProfile.full_name || businessName,
               first_name: (clientProfile.full_name || "").split(" ")[0] || businessName,
               business_name: businessName,
-              site_url: stagingUrl,
-              domain: (clientData as any)?.domain_name || stagingUrl,
+                site_url: sharePreviewUrl,
+                domain: (clientData as any)?.domain_name || sharePreviewUrl,
             },
             clientId,
           },
@@ -724,8 +726,8 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           <div className="space-y-4">
             <div className="bg-muted/50 rounded-lg p-3 text-sm">
               <p className="text-muted-foreground text-xs mb-1">Staging URL</p>
-              <a href={stagingUrl || "#"} target="_blank" rel="noreferrer" className="text-primary hover:underline break-all">
-                {stagingUrl}
+              <a href={sharePreviewUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline break-all">
+                {sharePreviewUrl}
               </a>
             </div>
             <div>

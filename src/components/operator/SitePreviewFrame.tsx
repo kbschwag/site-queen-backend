@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Monitor, Smartphone, ExternalLink, RefreshCw, Loader2, FileText } from "lucide-react";
+import { buildSitePreviewUrlWithCacheBust } from "@/lib/site-preview";
 
 interface Props {
   clientId: string;
@@ -38,12 +39,7 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
   const refreshPreviewUrl = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = supabase.storage
-        .from("generated-sites")
-        .getPublicUrl(`${clientId}/${activePage}`);
-
-      const publicUrl = data.publicUrl;
-      setPageUrl(publicUrl ? `${publicUrl}?v=${cacheBuster}` : null);
+      setPageUrl(buildSitePreviewUrlWithCacheBust(clientId, activePage, cacheBuster));
     } catch (e) {
       console.error("Failed to load site preview:", e);
       setPageUrl(null);

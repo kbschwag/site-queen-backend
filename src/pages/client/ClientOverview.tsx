@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { buildSitePreviewUrl } from "@/lib/site-preview";
 
 const planLabels: Record<string, string> = {
   starter: "Starter",
@@ -101,6 +102,7 @@ export default function ClientOverview() {
   const intakeCompleted = client.intake_completed;
   const generationStatus = (site as any)?.generation_status || "pending";
   const siteIsLive = client.site_status === "live";
+  const previewUrl = buildSitePreviewUrl(client.id);
   const creditsBalance = client.credits_balance ?? 0;
   const monthlyAllowance = client.credits_monthly_allowance ?? 10;
   const creditsUsed = monthlyAllowance - Math.min(creditsBalance, monthlyAllowance);
@@ -115,7 +117,7 @@ export default function ClientOverview() {
     ctaText = "Preview your website →";
   } else if (siteIsLive) {
     ctaText = "Visit your website →";
-    ctaAction = () => window.open(site?.deploy_url || site?.staging_url || "#", "_blank");
+    ctaAction = () => window.open(site?.deploy_url || previewUrl || "#", "_blank");
   } else {
     ctaText = "Your site is being built — check status →";
   }

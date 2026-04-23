@@ -9,6 +9,13 @@ const corsHeaders = {
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
+function buildPreviewUrl(supabaseUrl: string, clientId: string, page = "index.html") {
+  const url = new URL(`${supabaseUrl}/functions/v1/serve-generated-site`);
+  url.searchParams.set("clientId", clientId);
+  url.searchParams.set("page", page);
+  return url.toString();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -142,8 +149,7 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       `${clientId}/part2-context.json`,
     ]).catch(() => {});
 
-    const { data: urlData } = supabase.storage.from("generated-sites").getPublicUrl(`${clientId}/index.html`);
-    const stagingURL = urlData.publicUrl;
+    const stagingURL = buildPreviewUrl(supabaseUrl, clientId, "index.html");
 
     await supabase.from("sites").update({
       generation_status: "complete",
