@@ -133,7 +133,7 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     await supabase.storage.from("generated-sites").upload(
       `${clientId}/index.html`,
       new Blob([finalHTML], { type: "text/html" }),
-      { upsert: true }
+      { upsert: true, contentType: "text/html; charset=utf-8" }
     );
 
     // Cleanup intermediate files (best-effort)
