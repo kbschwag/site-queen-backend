@@ -303,6 +303,111 @@ function buildRef(label: string, html: string, css: string): string {
   return `\n\n${label}:\n${trimmedHtml ? `HTML:\n${trimmedHtml}\n` : ""}${trimmedCss ? `CSS (excerpt):\n${trimmedCss}\n` : ""}`;
 }
 
+function extractBodyScripts(html: string): string {
+  const matches = html.match(/<script[\s\S]*?<\/script>/gi);
+  return matches ? matches.join("\n") : "";
+}
+
+function normalizeGeneratedBody(html: string): string {
+  if (!html) return "";
+
+  let normalized = html
+    .replace(/<link[^>]*href=["']styles?\.css["'][^>]*>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .trim();
+
+  const bodyMatch = normalized.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch) normalized = bodyMatch[1].trim();
+
+  return normalized
+    .replace(/<!DOCTYPE[\s\S]*?>/gi, "")
+    .replace(/<html[^>]*>/gi, "")
+    .replace(/<\/html>/gi, "")
+    .replace(/<head[\s\S]*?<\/head>/gi, "")
+    .replace(/<body[^>]*>/gi, "")
+    .replace(/<\/body>/gi, "")
+    .replace(/<header[\s\S]*?<\/header>/gi, "")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+    .trim();
+}
+
+function composePageHtml({
+  businessName,
+  headBlock,
+  headerBlock,
+  footerBlock,
+  sharedScripts,
+  pageSlug,
+  pageLabel,
+  pageBody,
+}: {
+  businessName: string;
+  headBlock: string;
+  headerBlock: string;
+  footerBlock: string;
+  sharedScripts: string;
+  pageSlug: string;
+  pageLabel: string;
+  pageBody: string;
+}): string {
+  const title = `${businessName} — ${pageLabel}`;
+  const description = `${pageLabel} page for ${businessName}. Learn more about the company, services, and how to get in touch.`;
+
+  return [
+    "<!DOCTYPE html>",
+    "<html lang=\"en\">",
+    injectPageMeta(headBlock || "<head></head>", title, description, pageSlug),
+    "<body>",
+    markActiveNav(headerBlock, pageSlug),
+    pageBody,
+    markActiveNav(footerBlock, pageSlug),
+    sharedScripts,
+    "</body>",
+    "</html>",
+  ].filter(Boolean).join("\n");
+}
+
+function injectPageMeta(headBlock: string, title: string, description: string, pageSlug: string): string {
+  let head = headBlock;
+  const pagePath = pageSlug === "index" ? "./index.html" : `./${pageSlug}.html`;
+
+  head = /<title>[\s\S]*?<\/title>/i.test(head)
+    ? head.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+    : head.replace(/<head>/i, `<head>\n<title>${escapeHtml(title)}</title>`);
+
+  head = /<meta\s+name=["']description["'][^>]*>/i.test(head)
+    ? head.replace(/<meta\s+name=["']description["'][^>]*>/i, `<meta name="description" content="${escapeHtml(description)}" />`)
+    : head.replace(/<\/head>/i, `  <meta name="description" content="${escapeHtml(description)}" />\n</head>`);
+
+  if (/<link\s+rel=["']canonical["'][^>]*>/i.test(head)) {
+    head = head.replace(/<link\s+rel=["']canonical["'][^>]*>/i, `<link rel="canonical" href="${pagePath}" />`);
+  }
+
+  return head;
+}
+
+function markActiveNav(markup: string, pageSlug: string): string {
+  if (!markup) return "";
+  const targetHref = pageSlug === "index" ? "./index.html" : `./${pageSlug}.html`;
+
+  return markup.replace(/<a\b([^>]*?)href=(['"])(.*?)\2([^>]*)>/gi, (full, before, quote, href, after) => {
+    const isActive = href === targetHref || (pageSlug === "index" && (href === "./index.html" || href === "#"));
+    let attrs = `${before}href=${quote}${href}${quote}${after}`;
+    attrs = attrs.replace(/\saria-current=(['"]).*?\1/gi, "");
+    attrs = attrs.replace(/\sclass=(['"])(.*?)\1/i, (_m, q, cls) => {
+      const tokens = String(cls).split(/\s+/).filter(Boolean).filter((token) => token !== "active");
+      if (isActive) tokens.push("active");
+      return ` class=${q}${tokens.join(" ")}${q}`;
+    });
+    if (isActive) attrs += ` aria-current="page"`;
+    return `<a${attrs}>`;
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
   let lastErr: Error | null = null;
