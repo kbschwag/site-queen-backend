@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Monitor, Smartphone, ExternalLink, RefreshCw, Loader2 } from "lucide-react";
+import { Monitor, Smartphone, ExternalLink, RefreshCw, Loader2, FileText } from "lucide-react";
 
 interface Props {
   clientId: string;
@@ -13,13 +13,33 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<"desktop" | "mobile">("desktop");
+  const [pages, setPages] = useState<string[]>(["index.html"]);
+  const [activePage, setActivePage] = useState<string>("index.html");
+
+  // List every .html file the generator produced for this client.
+  const refreshPages = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.storage.from("generated-sites").list(clientId, { limit: 100 });
+      if (error) throw error;
+      const html = (data || [])
+        .map((f) => f.name)
+        .filter((n) => n.toLowerCase().endsWith(".html"))
+        .sort((a, b) => (a === "index.html" ? -1 : b === "index.html" ? 1 : a.localeCompare(b)));
+      if (html.length) {
+        setPages(html);
+        setActivePage((curr) => (html.includes(curr) ? curr : html[0]));
+      }
+    } catch (e) {
+      console.error("Failed to list site pages:", e);
+    }
+  }, [clientId]);
 
   const fetchAndCreateBlob = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.storage
         .from("generated-sites")
-        .download(`${clientId}/index.html`);
+        .download(`${clientId}/${activePage}`);
       if (error) throw error;
       const html = await data.text();
       const blob = new Blob([html], { type: "text/html" });
@@ -32,7 +52,11 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
     } finally {
       setLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, activePage]);
+
+  useEffect(() => {
+    refreshPages();
+  }, [refreshPages]);
 
   useEffect(() => {
     fetchAndCreateBlob();
@@ -43,6 +67,11 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
       });
     };
   }, [fetchAndCreateBlob]);
+
+  const handleRefresh = () => {
+    refreshPages();
+    fetchAndCreateBlob();
+  };
 
   const handleOpenNewTab = () => {
     if (blobUrl) window.open(blobUrl, "_blank");
@@ -71,7 +100,7 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
           </Button>
         </div>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="outline" onClick={fetchAndCreateBlob} disabled={loading} className="gap-1.5 h-7 text-xs">
+          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={loading} className="gap-1.5 h-7 text-xs">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
           <Button size="sm" variant="outline" onClick={handleOpenNewTab} disabled={!blobUrl} className="gap-1.5 h-7 text-xs">
@@ -79,6 +108,28 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
           </Button>
         </div>
       </div>
+
+      {/* Page tabs — only when more than one page exists */}
+      {pages.length > 1 && (
+        <div className="flex items-center gap-1 flex-wrap bg-muted/50 rounded-lg p-1">
+          {pages.map((name) => {
+            const label = name === "index.html" ? "Home" : name.replace(/\.html$/i, "").replace(/-/g, " ");
+            const isActive = name === activePage;
+            return (
+              <Button
+                key={name}
+                size="sm"
+                variant={isActive ? "default" : "ghost"}
+                onClick={() => setActivePage(name)}
+                className="gap-1.5 h-7 text-xs capitalize"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                {label}
+              </Button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Preview */}
       <div
