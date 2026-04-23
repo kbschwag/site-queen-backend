@@ -54,6 +54,8 @@ INSTRUCTIONS — SECOND HALF:
 Generate the SECOND HALF continuing exactly where the first half left off.
 Start directly with the next section after services — do NOT repeat <!DOCTYPE html>, <head>, or any CSS.
 Include all remaining sections: emergency CTA (if applicable), why us, reviews/testimonials, financing (if applicable), service areas, FAQ, final CTA, footer.
+Reuse the design system and class naming already established in the first half so every later section is fully styled by the CSS that is already in the document.
+Do NOT invent a new naming scheme for second-half sections unless you use inline styles on those elements.
 Then include all JavaScript for mobile menu, FAQ accordion, form submit handler, scroll animations, sticky header.
 Then include this analytics script just before </body>:
 

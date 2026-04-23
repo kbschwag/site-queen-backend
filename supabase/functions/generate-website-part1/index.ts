@@ -158,6 +158,7 @@ ${sharedContext}
 INSTRUCTIONS — FIRST HALF:
 Generate the FIRST HALF of this website.
 Start with <!DOCTYPE html> and include the full <head> with ALL CSS inlined in a <style> tag.
+That CSS must cover the ENTIRE site, not just the first half — include styles for all sections that will appear later too, including emergency CTA, why us, reviews, financing, service areas, FAQ, final CTA, and footer.
 Include these sections in order: topbar, header, mobile nav, hero, trust bar, credentials, about, stats, services.
 Stop after the closing </section> tag of the services section.
 Do NOT close </body> or </html> yet — the second half continues from here.
