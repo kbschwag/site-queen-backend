@@ -362,7 +362,7 @@ Only use Unsplash stock photos for sections where no client photo was provided. 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    let prompt: string;
+    // (Two-call generation builds its own prompts inline below — no single shared prompt variable.)
 
     // Build call notes section for prompt
     const callNotesSection = callNotes ? `
@@ -433,177 +433,176 @@ If INSTAGRAM_URL or FACEBOOK_URL are missing: remove those social links rather t
 For any placeholder that has no data and no sensible default — remove that element entirely. Never show a visible placeholder, empty bracket, or broken section to the end user. The site must look complete and intentional even with minimal data.
 `;
 
-    if (templateHTML) {
-      prompt = `You are a professional web developer building a website for a small business client.
+    // (The shared context block — intake, call notes, photos, branding, template HTML/CSS —
+    // is assembled directly inside the two-call generation block below.)
 
-You have two sources of information:
+    // ====================================================================
+    // TWO-CALL GENERATION — splits the build in half so the HTML never
+    // gets cut off by the model's max output token limit. Call 1 produces
+    // the top half (DOCTYPE → end of services); Call 2 continues from
+    // reviews → </html>. Halves are then concatenated.
+    // ====================================================================
 
-SOURCE 1 — CLIENT INTAKE FORM (what the client told us directly):
-${JSON.stringify(intakeData, null, 2)}
-${callNotesSection}
-${photoSection}
+    const AI_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
+    const AI_MODEL = "google/gemini-2.5-pro";
 
-Here is the HTML template with placeholders in double curly braces:
-${templateHTML}
+    async function callAI(userContent: string, label: string): Promise<{ text: string; outputTokens: number }> {
+      const MAX_AI_ATTEMPTS = 2;
+      let attempt = 0;
+      let lastErr: Error | null = null;
 
-Here is the CSS template with color variables as placeholders:
-${templateCSS}
-${brandingInstructions}
-${missingDataInstructions}
+      while (attempt < MAX_AI_ATTEMPTS) {
+        attempt++;
+        try {
+          const r = await fetch(AI_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: AI_MODEL,
+              max_tokens: 16000,
+              messages: [{ role: "user", content: userContent }],
+            }),
+          });
 
-Your instructions:
-1. Replace every {{PLACEHOLDER}} with the corresponding client data
-2. For repeatable sections marked {{#SECTION}} and {{/SECTION}} generate one block per item in the data array
-3. If any placeholder has no data use a professional sensible default appropriate for their business type — follow the MISSING DATA INSTRUCTIONS above precisely
-4. Generate compelling professional copy for headlines and descriptions based on their business answers
-5. Make all phone numbers click-to-call links
-6. Make all email addresses mailto links
-7. Make all social media links open in a new tab
-8. Make sure the site is fully responsive and mobile perfect
-9. Do not change any layout structure or design elements — only replace content and colors
-10. Output format — return EITHER:
-    (a) raw HTML starting with <!DOCTYPE html> with the CSS inlined in a <style> tag in the head, OR
-    (b) a single JSON object with exactly two fields "html" and "css"
+          if (!r.ok) {
+            const errText = await r.text();
+            console.error(`[${label}] AI API error (attempt ${attempt}/${MAX_AI_ATTEMPTS}):`, r.status, errText);
+            if ((r.status === 429 || r.status === 529) && attempt < MAX_AI_ATTEMPTS) {
+              await new Promise((res) => setTimeout(res, 3000 * attempt));
+              continue;
+            }
+            throw new Error(`AI generation failed (${label}): ${r.status}`);
+          }
 
-CRITICAL OUTPUT INSTRUCTIONS:
-- Return ONLY the response — no explanation, no commentary, no markdown code fences
-- Do NOT wrap the response in \`\`\`html or \`\`\`json fences
-- The very first character of your response must be either < (for HTML) or { (for JSON)
-- Never include any text before or after the HTML/JSON`;
-    } else {
-      prompt = `You are a professional web designer building a website for a small business client.
-
-You have two sources of information:
-
-SOURCE 1 — CLIENT INTAKE FORM (what the client told us directly):
-${JSON.stringify(intakeData, null, 2)}
-
-Business name: ${clientData?.business_name || "Business"}
-Business type: ${clientData?.business_type || "Service Business"}
-${callNotesSection}
-${photoSection}
-${brandingInstructions}
-${missingDataInstructions}
-
-Your instructions:
-1. Create a complete, production-ready single-page website with HTML and CSS
-2. Include sections: Hero with CTA, About/Story, Services, Testimonials (if provided), Contact, Footer
-3. Use their brand colors, fonts, and style preferences from the intake data — apply the BRANDING INSTRUCTIONS above for any missing color or font choices
-4. Generate compelling professional copy for all sections based on their business answers
-5. Make all phone numbers click-to-call links
-6. Make all email addresses mailto links
-7. Make all social media links open in a new tab
-8. The site MUST be fully responsive and mobile-first
-9. Use modern CSS (flexbox, grid, custom properties)
-10. Include smooth scroll behavior and clean typography
-11. Follow the MISSING DATA INSTRUCTIONS above — never show empty placeholders or broken sections
-12. Output format — return EITHER:
-    (a) raw HTML starting with <!DOCTYPE html> with all CSS inlined in a <style> tag in the head, OR
-    (b) a single JSON object with exactly two fields "html" and "css"
-
-CRITICAL OUTPUT INSTRUCTIONS:
-- Return ONLY the response — no explanation, no commentary, no markdown code fences
-- Do NOT wrap the response in \`\`\`html or \`\`\`json fences
-- The very first character of your response must be either < (for HTML) or { (for JSON)
-- Never include any text before or after the HTML/JSON`;
-    }
-
-    // Retry loop — handles transient 429/529/network errors with exponential backoff
-    const MAX_AI_ATTEMPTS = 2;
-    let aiAttempt = 0;
-    let aiResponse: Response | null = null;
-    let aiData: any = null;
-    let lastAiError: Error | null = null;
-
-    while (aiAttempt < MAX_AI_ATTEMPTS) {
-      aiAttempt++;
-      try {
-        aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            max_tokens: 16000,
-            messages: [{ role: "user", content: prompt }],
-          }),
-        });
-
-        if (!aiResponse.ok) {
-          const errText = await aiResponse.text();
-          console.error(`AI API error (attempt ${aiAttempt}/${MAX_AI_ATTEMPTS}):`, aiResponse.status, errText);
-          if ((aiResponse.status === 429 || aiResponse.status === 529) && aiAttempt < MAX_AI_ATTEMPTS) {
-            await new Promise((r) => setTimeout(r, 3000 * aiAttempt));
+          const data = await r.json();
+          const text = data.choices?.[0]?.message?.content || "";
+          const outputTokens = data.usage?.completion_tokens || data.usage?.output_tokens || 0;
+          return { text, outputTokens };
+        } catch (err) {
+          lastErr = err as Error;
+          console.error(`[${label}] AI fetch error (attempt ${attempt}/${MAX_AI_ATTEMPTS}):`, err);
+          if (attempt < MAX_AI_ATTEMPTS) {
+            await new Promise((res) => setTimeout(res, 2000));
             continue;
           }
-          throw new Error(`AI generation failed: ${aiResponse.status}`);
-        }
-
-        aiData = await aiResponse.json();
-        rawText = aiData.choices?.[0]?.message?.content || "";
-        break; // success
-      } catch (err) {
-        lastAiError = err as Error;
-        console.error(`AI fetch error (attempt ${aiAttempt}/${MAX_AI_ATTEMPTS}):`, err);
-        if (aiAttempt < MAX_AI_ATTEMPTS) {
-          await new Promise((r) => setTimeout(r, 2000));
-          continue;
-        }
-        throw lastAiError;
-      }
-    }
-
-    // Defensive parsing — handle markdown wrappers, raw HTML, or JSON
-    let cleaned = rawText
-      .replace(/^```(?:html|json)?\s*\n?/i, "")
-      .replace(/\n?```\s*$/i, "")
-      .trim();
-
-    let htmlContent = "";
-    let cssContent = "";
-
-    if (cleaned.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(cleaned);
-        htmlContent = parsed.html || parsed.HTML || "";
-        cssContent = parsed.css || parsed.CSS || "";
-      } catch (parseError) {
-        // JSON parse failed — try to extract embedded HTML
-        const htmlMatch = cleaned.match(/<!DOCTYPE html>[\s\S]*/i);
-        if (htmlMatch) {
-          htmlContent = htmlMatch[0];
-        } else {
-          console.error("JSON parse failed, no HTML found:", cleaned.substring(0, 500));
-          throw new Error(`AI returned unparseable content: ${cleaned.substring(0, 200)}`);
+          throw lastErr;
         }
       }
-    } else {
-      // Treat as raw HTML
-      htmlContent = cleaned;
+      throw lastErr || new Error(`AI call failed: ${label}`);
     }
 
-    if (!htmlContent || (!htmlContent.includes("<!DOCTYPE html>") && !htmlContent.includes("<html"))) {
-      console.error("AI did not return valid HTML:", htmlContent.substring(0, 500));
-      throw new Error(`AI did not return valid HTML. Response started with: ${htmlContent.substring(0, 200)}`);
+    function stripMarkdown(s: string): string {
+      return s
+        .replace(/^```(?:html|json)?\s*\n?/i, "")
+        .replace(/\n?```\s*$/i, "")
+        .trim();
     }
 
-    const generatedSite = { html: htmlContent, css: cssContent };
+    // Shared context block reused in both calls
+    const sharedContext = `BUSINESS CONTEXT:
+Business name: ${clientData?.business_name || "Business"}
+Business type: ${clientData?.business_type || "Service Business"}
 
-    // Inline CSS into the HTML so the staging page is fully self-contained
-    let finalHTML = generatedSite.html;
-    if (generatedSite.css) {
-      if (finalHTML.includes("</head>")) {
-        finalHTML = finalHTML.replace("</head>", `<style>${generatedSite.css}</style>\n</head>`);
-      } else if (finalHTML.includes("<body")) {
-        finalHTML = finalHTML.replace("<body", `<style>${generatedSite.css}</style>\n<body`);
-      } else {
-        finalHTML = `<style>${generatedSite.css}</style>\n${finalHTML}`;
-      }
-      // Remove any external stylesheet link to styles.css
-      finalHTML = finalHTML.replace(/<link[^>]*href=["']styles\.css["'][^>]*>/gi, "");
+SOURCE 1 — CLIENT INTAKE FORM:
+${JSON.stringify(intakeData, null, 2)}
+${callNotesSection}
+${photoSection}
+${brandingInstructions}
+${missingDataInstructions}
+${templateHTML ? `\nHTML TEMPLATE (replace placeholders):\n${templateHTML}\n` : ""}${templateCSS ? `\nCSS TEMPLATE (inline this in <style>):\n${templateCSS}\n` : ""}`;
+
+    // ---------- CALL 1: top half ----------
+    const call1Prompt = `You are a professional web developer building a website for a small business client.
+
+${sharedContext}
+
+INSTRUCTIONS — FIRST HALF:
+Generate the FIRST HALF of this website.
+Start with <!DOCTYPE html> and include everything through the end of the services section.
+Stop at a clean closing </section> tag after services.
+Do NOT close </body> or </html> yet — the second half will continue from here.
+Replace all {{PLACEHOLDERS}} with real client data.
+ALL CSS must be inlined in a <style> tag in the <head>. Do not reference any external stylesheet files.
+Make all phone numbers click-to-call links and email addresses mailto links.
+The site must be fully responsive and mobile-perfect.
+
+CRITICAL OUTPUT INSTRUCTIONS:
+Return ONLY raw HTML — no markdown, no code blocks, no explanation.
+Do NOT wrap the response in \`\`\`html fences.
+The very first character of your response must be < and start with <!DOCTYPE html>.`;
+
+    console.log("[generate-website] Call 1 — generating top half…");
+    const call1 = await callAI(call1Prompt, "call-1-top");
+    let firstHalf = stripMarkdown(call1.text);
+
+    if (!firstHalf.includes("<!DOCTYPE html>")) {
+      throw new Error(`Call 1 did not return valid HTML. Response started with: ${firstHalf.substring(0, 200)}`);
     }
+
+    // ---------- CALL 2: bottom half ----------
+    const call2Prompt = `You are a professional web developer continuing to build a website for a small business client.
+
+${sharedContext}
+
+Here is the FIRST HALF of the site already generated (for context — do NOT repeat any of it):
+${firstHalf}
+
+INSTRUCTIONS — SECOND HALF:
+Generate the SECOND HALF of this website continuing exactly where the first half left off.
+Start directly with the reviews/testimonials section — do NOT repeat <!DOCTYPE html>, <head>, or any CSS.
+Include all remaining sections: reviews/testimonials, emergency CTA (if applicable), why us, financing (if applicable), service areas, FAQ, final CTA, footer.
+End with the closing </body> and </html> tags.
+Replace all {{PLACEHOLDERS}} with real client data.
+Make all phone numbers click-to-call links and email addresses mailto links.
+
+Include the SiteQueen analytics script just before </body>:
+
+<script>
+(function(){
+  var CID='${clientId}';
+  var EP='${supabaseUrl}/functions/v1/track-event';
+  function dt(){return /Mobile|Android|iPhone/i.test(navigator.userAgent)?'mobile':'desktop'}
+  function sid(){var s=sessionStorage.getItem('sq_sid');if(!s){s=Math.random().toString(36).substr(2,9);sessionStorage.setItem('sq_sid',s)}return s}
+  function t(e,m){fetch(EP,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:CID,event_type:e,page_path:location.pathname,page_title:document.title,referrer:document.referrer,device_type:dt(),session_id:sid(),metadata:m||{}})}).catch(function(){})}
+  t('page_view');
+  document.addEventListener('click',function(e){var a=e.target.closest('a');if(!a)return;if(a.href&&a.href.indexOf('tel:')===0)t('phone_click');if(a.href&&a.href.indexOf('mailto:')===0)t('email_click');if(a.classList.contains('cta-button'))t('cta_click',{text:a.textContent.trim().substring(0,50)})});
+  document.addEventListener('submit',function(){t('form_submission')});
+})();
+</script>
+
+CRITICAL OUTPUT INSTRUCTIONS:
+Return ONLY raw HTML — no markdown, no code blocks, no explanation.
+Do NOT wrap the response in \`\`\`html fences.
+The very first character must be a HTML tag continuing from the reviews section.
+End with </html> as the absolute last thing.`;
+
+    console.log("[generate-website] Call 2 — generating bottom half…");
+    const call2 = await callAI(call2Prompt, "call-2-bottom");
+    let secondHalf = stripMarkdown(call2.text);
+
+    // Join the two halves
+    let finalHTML = firstHalf + "\n" + secondHalf;
+
+    // Validate the complete site
+    if (!finalHTML.includes("</html>")) {
+      throw new Error("Site generation incomplete — second half did not close properly. Check token limits.");
+    }
+    if (!finalHTML.includes("</body>")) {
+      throw new Error("Site generation incomplete — missing closing body tag.");
+    }
+
+    // Track totals for logs
+    const totalOutputTokens = (call1.outputTokens || 0) + (call2.outputTokens || 0);
+    const generationNotes = `Call 1: ${call1.outputTokens} output tokens. Call 2: ${call2.outputTokens} output tokens. Model: ${AI_MODEL}.`;
+
+    // Set rawText for any downstream error context
+    rawText = finalHTML;
+
+    // Remove any external stylesheet link to styles.css (defensive — CSS must be inlined)
+    finalHTML = finalHTML.replace(/<link[^>]*href=["']styles\.css["'][^>]*>/gi, "");
 
     // Inject analytics tracking script before </body>
     const trackingScript = `
@@ -667,13 +666,14 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       target_role: "operator",
     });
 
-    // Log generation
+    // Log generation (two-call totals)
     await supabase.from("generation_logs").insert({
       client_id: clientId,
       template_id: templateId || "scratch",
       status: "complete",
-      tokens_used: aiData.usage?.total_tokens || null,
-    });
+      tokens_used: totalOutputTokens || null,
+      generation_notes: generationNotes,
+    } as any);
 
     return new Response(JSON.stringify({ success: true, staging_url: stagingURL }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
