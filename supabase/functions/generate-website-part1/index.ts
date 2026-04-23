@@ -159,6 +159,7 @@ INSTRUCTIONS — FIRST HALF:
 Generate the FIRST HALF of this website.
 Start with <!DOCTYPE html> and include the full <head> with ALL CSS inlined in a <style> tag.
 That CSS must cover the ENTIRE site, not just the first half — include styles for all sections that will appear later too, including emergency CTA, why us, reviews, financing, service areas, FAQ, final CTA, and footer.
+ALSO include CSS for shared layout elements that will be reused on inner pages (about, services, contact): .page-hero / breadcrumb, .content-section, .sidebar, .coupon-card, .feature-list, .service-card, .pricing-card, .accordion. Inner pages will reuse this exact CSS — design it generously so a separate About / Services / Contact page can render with no extra <style>.
 Include these sections in order: topbar, header, mobile nav, hero, trust bar, credentials, about, stats, services.
 Stop after the closing </section> tag of the services section.
 Do NOT close </body> or </html> yet — the second half continues from here.
@@ -166,6 +167,7 @@ Replace all {{PLACEHOLDERS}} with real client data.
 For any missing data use a professional relevant default — never leave a placeholder visible.
 All CSS must be inlined in a <style> tag in the <head> — do not reference any external stylesheet.
 Make all phone numbers click-to-call links and email addresses mailto links.
+IMPORTANT — multi-page navigation: this site will be multi-page. In the desktop nav AND the mobile nav, the links must point to real files: Home → "./index.html" (or "#"), About → "./about.html", Services → "./services.html", Contact → "./contact.html". If the call notes list additional pages, link those too (e.g. "./gallery.html"). Anchors like #about are fine ONLY for sections that exist on the homepage.
 The site must be fully responsive and mobile-perfect.
 
 CRITICAL OUTPUT INSTRUCTIONS:
