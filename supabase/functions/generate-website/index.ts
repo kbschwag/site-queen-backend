@@ -738,13 +738,14 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       target_role: "operator",
     });
 
-    // Log generation
+    // Log generation (two-call totals)
     await supabase.from("generation_logs").insert({
       client_id: clientId,
       template_id: templateId || "scratch",
       status: "complete",
-      tokens_used: aiData.usage?.total_tokens || null,
-    });
+      tokens_used: totalOutputTokens || null,
+      generation_notes: generationNotes,
+    } as any);
 
     return new Response(JSON.stringify({ success: true, staging_url: stagingURL }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
