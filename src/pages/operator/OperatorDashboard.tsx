@@ -224,6 +224,85 @@ export default function OperatorDashboard() {
         </CardContent>
       </Card>
 
+      {/* Sites needing attention — failed generations + high-attempt warnings */}
+      {failedSites.length > 0 && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              Sites needing attention ({failedSites.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {failedSites.map((s: any) => {
+                const isFailed = s.generation_status === "failed";
+                const highAttempts = (s.generation_attempts || 0) > 2;
+                return (
+                  <div
+                    key={s.client_id}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-background border hover:shadow-sm transition-shadow"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => navigate(`/operator/clients?id=${s.client_id}`)}
+                          className="font-medium text-sm hover:underline truncate"
+                        >
+                          {s.clients?.business_name || "Unknown business"}
+                        </button>
+                        {isFailed && (
+                          <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20">
+                            Failed
+                          </span>
+                        )}
+                        {highAttempts && !isFailed && (
+                          <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-200">
+                            {s.generation_attempts} attempts
+                          </span>
+                        )}
+                      </div>
+                      {s.generation_error && (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5 font-mono">
+                          {s.generation_error}
+                        </p>
+                      )}
+                      {s.last_generation_attempt_at && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Last attempt {formatDistanceToNow(new Date(s.last_generation_attempt_at), { addSuffix: true })}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/operator/clients?id=${s.client_id}`)}
+                      >
+                        View
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleRetry(s.client_id)}
+                        disabled={retryingId === s.client_id}
+                        className="gap-1.5"
+                      >
+                        {retryingId === s.client_id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                        Retry
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Activity feed */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
