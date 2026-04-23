@@ -694,9 +694,8 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       generation_notes: generationNotes,
     } as any);
 
-    return new Response(JSON.stringify({ success: true, staging_url: stagingURL }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.log(`[generate-website] ✓ Done for ${clientId} → ${stagingURL}`);
+    return;
   } catch (error) {
     console.error("generate-website error:", {
       error: error.message,
