@@ -97,7 +97,7 @@ export function FailureCard({ clientId, businessName, site, generationError, onR
             <Button variant="outline" onClick={() => setShowCallNotes(true)} className="gap-2">
               <Phone className="h-4 w-4" /> View call notes
             </Button>
-            <Button variant="outline" onClick={openCodeEditor} className="gap-2">
+            <Button variant="outline" onClick={() => setShowCodeEditor(true)} className="gap-2">
               <Code className="h-4 w-4" /> Edit code manually
             </Button>
           </div>
@@ -165,31 +165,16 @@ export function FailureCard({ clientId, businessName, site, generationError, onR
         </DialogContent>
       </Dialog>
 
-      {/* Manual code editor */}
-      <Dialog open={showCodeEditor} onOpenChange={setShowCodeEditor}>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>Edit HTML manually — {businessName}</DialogTitle>
-            <DialogDescription>
-              Paste or edit the full HTML for the site. Saving will publish it as the staging version and move the build to "Ready for operator review".
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={codeContent}
-            onChange={(e) => setCodeContent(e.target.value)}
-            placeholder="<!DOCTYPE html>..."
-            rows={20}
-            className="font-mono text-xs"
-          />
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowCodeEditor(false)}>Cancel</Button>
-            <Button onClick={saveCode} disabled={savingCode} className="gap-2">
-              {savingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : <Code className="h-4 w-4" />}
-              Save HTML
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Manual code editor — full screen CodeMirror */}
+      <CodeEditorModal
+        open={showCodeEditor}
+        onOpenChange={setShowCodeEditor}
+        clientId={clientId}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+          onRetry?.();
+        }}
+      />
     </>
   );
 }
