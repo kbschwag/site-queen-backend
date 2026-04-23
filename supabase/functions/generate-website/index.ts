@@ -362,7 +362,7 @@ Only use Unsplash stock photos for sections where no client photo was provided. 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    let prompt: string;
+    // (Two-call generation builds its own prompts inline below — no single shared prompt variable.)
 
     // Build call notes section for prompt
     const callNotesSection = callNotes ? `
