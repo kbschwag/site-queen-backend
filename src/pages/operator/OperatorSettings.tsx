@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOperatorRole } from "@/hooks/useOperatorRole";
@@ -11,19 +12,22 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Settings, Mail, Link2, Shield, AlertTriangle, CheckCircle2, XCircle, RotateCcw, Loader2, Calendar } from "lucide-react";
+import { Settings, Mail, Link2, Shield, AlertTriangle, CheckCircle2, XCircle, RotateCcw, Loader2, Calendar, FlaskConical, Sparkles } from "lucide-react";
 import { PasswordSection } from "@/components/PasswordSection";
 import { SecuritySection } from "@/components/operator/SecuritySection";
 import { format } from "date-fns";
+import { seedTestClient } from "@/lib/seed-test-client";
 
 export default function OperatorSettings() {
   const { user } = useAuth();
   const { isOwner } = useOperatorRole();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [restoring, setRestoring] = useState<string | null>(null);
   const [calendlyDiscovery, setCalendlyDiscovery] = useState("");
   const [calendlyRevision, setCalendlyRevision] = useState("");
   const [savingCalendly, setSavingCalendly] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   // Load Calendly URLs from app_settings
   const { data: appSettings } = useQuery({
@@ -296,6 +300,51 @@ export default function OperatorSettings() {
 
               <div className="flex gap-3">
                 <Button variant="outline" size="sm">Export all data as CSV</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Developer Tools — Owner only */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FlaskConical className="h-4 w-4" /> Developer Tools
+              </CardTitle>
+              <CardDescription>Internal utilities for testing the build pipeline</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-start gap-3">
+                <Button
+                  size="sm"
+                  disabled={seeding}
+                  onClick={async () => {
+                    setSeeding(true);
+                    try {
+                      const result = await seedTestClient();
+                      queryClient.invalidateQueries({ queryKey: ["operator-clients"] });
+                      toast.success(`Test client created ♛ — ${result.businessName}`, {
+                        description: `Client ID: ${result.clientId.slice(0, 8)}…`,
+                        duration: 10000,
+                        action: {
+                          label: "Go to client profile →",
+                          onClick: () => navigate("/operator/clients"),
+                        },
+                      });
+                    } catch (e: any) {
+                      console.error(e);
+                      toast.error(e?.message || "Failed to seed test client");
+                    } finally {
+                      setSeeding(false);
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  Seed test client ♛
+                </Button>
+                <p className="text-xs text-muted-foreground pt-1.5">
+                  Creates "Phoenix Pro Plumbing" with full intake data and call notes ready for generation.
+                </p>
               </div>
             </CardContent>
           </Card>

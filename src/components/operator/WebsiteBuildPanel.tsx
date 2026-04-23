@@ -40,13 +40,18 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const [requestingPhotos, setRequestingPhotos] = useState(false);
   const [togglingStockReplaced, setTogglingStockReplaced] = useState(false);
   const [showCodeEditor, setShowCodeEditor] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedClientId, setAdvancedClientId] = useState("");
+  const [advancedTriggering, setAdvancedTriggering] = useState(false);
 
   const { data: clientData } = useQuery({
     queryKey: ["operator-client-deploy-status", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("domain_name, domain_status, deployment_path_confirmed, user_id, intake_completed, call_notes_completed")
+        .select("domain_name, domain_status, deployment_path_confirmed, user_id, intake_completed, call_notes_completed, site_status")
         .eq("id", clientId)
         .single();
       if (error) throw error;
@@ -336,26 +341,94 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   return (
     <div className="space-y-4">
       {/* Status Badge + toolbar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Badge className={status.color}>
-          <StatusIcon className={`h-3 w-3 mr-1 ${generationStatus === "generating" ? "animate-spin" : ""}`} />
-          {status.label}
-        </Badge>
-        {(site as any)?.generated_at && (
-          <span className="text-xs text-muted-foreground">
-            Generated {new Date((site as any).generated_at).toLocaleDateString()}
-          </span>
-        )}
-        {hasGeneratedFile && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowCodeEditor(true)}
-            className="gap-1.5 ml-auto"
-          >
-            <Code2 className="h-3.5 w-3.5" />
-            {"< > View / edit code"}
-          </Button>
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Badge className={status.color}>
+            <StatusIcon className={`h-3 w-3 mr-1 ${generationStatus === "generating" ? "animate-spin" : ""}`} />
+            {status.label}
+          </Badge>
+          {(site as any)?.generated_at && (
+            <span className="text-xs text-muted-foreground">
+              Generated {new Date((site as any).generated_at).toLocaleDateString()}
+            </span>
+          )}
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            {hasGeneratedFile && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowCodeEditor(true)}
+                className="gap-1.5"
+              >
+                <Code2 className="h-3.5 w-3.5" />
+                {"< > View / edit code"}
+              </Button>
+            )}
+            {(clientData as any)?.site_status !== "live" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowRegenerateModal(true)}
+                disabled={regenerating}
+                className="gap-1.5"
+              >
+                {regenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Regenerate website ♛
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Advanced collapsible */}
+        {(clientData as any)?.site_status !== "live" && (
+          <div className="text-xs">
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Advanced {advancedOpen ? "▴" : "▾"}
+            </button>
+            {advancedOpen && (
+              <div className="mt-2 p-3 rounded-md border bg-muted/30 space-y-2">
+                <label className="text-xs font-medium">Trigger generation by Client ID</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={advancedClientId}
+                    onChange={(e) => setAdvancedClientId(e.target.value)}
+                    placeholder="client-uuid"
+                    className="text-xs h-8"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={advancedTriggering || !advancedClientId.trim()}
+                    onClick={async () => {
+                      setAdvancedTriggering(true);
+                      try {
+                        const { error } = await supabase.functions.invoke("generate-website", {
+                          body: { client_id: advancedClientId.trim() },
+                        });
+                        if (error) throw error;
+                        toast.success("Generation triggered ♛");
+                        setAdvancedClientId("");
+                      } catch (e: any) {
+                        toast.error(e?.message || "Failed to trigger generation");
+                      } finally {
+                        setAdvancedTriggering(false);
+                      }
+                    }}
+                    className="gap-1.5"
+                  >
+                    {advancedTriggering ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    Generate ♛
+                  </Button>
+                </div>
+                <p className="text-[11px] text-amber-600">
+                  ⚠ This will overwrite any existing generated site for this client.
+                </p>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -711,6 +784,55 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           queryClient.invalidateQueries({ queryKey: ["operator-site-html-exists", clientId] });
         }}
       />
+
+      {/* Regenerate website confirmation */}
+      <Dialog open={showRegenerateModal} onOpenChange={setShowRegenerateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Regenerate website for {businessName}?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <p>This will rebuild their entire site from scratch using their current intake form data and call notes. Any manual edits made in the code editor will be overwritten.</p>
+            <p className="text-amber-600">⚠ This uses current intake data — any edits the client made after original submission will be reflected.</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowRegenerateModal(false)}>Cancel</Button>
+            <Button
+              onClick={async () => {
+                setShowRegenerateModal(false);
+                setRegenerating(true);
+                try {
+                  await supabase
+                    .from("sites")
+                    .update({ generation_status: "pending", staging_url: null, generation_error: null } as any)
+                    .eq("client_id", clientId);
+                  await supabase
+                    .from("clients")
+                    .update({ site_status: "building" } as any)
+                    .eq("id", clientId);
+                  queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+                  toast.info("Rebuilding site... ♛");
+                  const { error } = await supabase.functions.invoke("generate-website", {
+                    body: { client_id: clientId },
+                  });
+                  if (error) throw error;
+                  queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+                  queryClient.invalidateQueries({ queryKey: ["operator-site-html-exists", clientId] });
+                  queryClient.invalidateQueries({ queryKey: ["operator-client-deploy-status", clientId] });
+                  toast.success("Site regenerated ♛ — preview updated");
+                } catch (e: any) {
+                  toast.error(e?.message || "Regeneration failed");
+                } finally {
+                  setRegenerating(false);
+                }
+              }}
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" /> Yes, regenerate ♛
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

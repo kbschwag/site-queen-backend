@@ -8,9 +8,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
 import { AlertTriangle, RefreshCw, FileText, Phone, Code, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { CodeEditorModal } from "./CodeEditorModal";
 
 interface Props {
   clientId: string;
@@ -27,8 +27,6 @@ export function FailureCard({ clientId, businessName, site, generationError, onR
   const [showIntake, setShowIntake] = useState(false);
   const [showCallNotes, setShowCallNotes] = useState(false);
   const [showCodeEditor, setShowCodeEditor] = useState(false);
-  const [codeContent, setCodeContent] = useState("");
-  const [savingCode, setSavingCode] = useState(false);
 
   const attempts = site?.generation_attempts ?? 0;
   const lastAttempt = site?.last_generation_attempt_at;
@@ -43,62 +41,13 @@ export function FailureCard({ clientId, businessName, site, generationError, onR
         body: { client_id: clientId },
       });
       if (error) throw error;
-      toast.success("Retry started ♛ — refresh in a moment to see progress");
+      toast.success("Rebuilding site... ♛ This takes about 30-60 seconds");
       onRetry?.();
       queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
     } catch (e: any) {
       toast.error(e?.message || "Retry failed to start");
     } finally {
       setRetrying(false);
-    }
-  };
-
-  const openCodeEditor = async () => {
-    setShowCodeEditor(true);
-    if (site?.staging_url) {
-      try {
-        const r = await fetch(site.staging_url);
-        if (r.ok) setCodeContent(await r.text());
-      } catch {
-        setCodeContent("");
-      }
-    }
-  };
-
-  const saveCode = async () => {
-    if (!codeContent.trim()) {
-      toast.error("Code cannot be empty");
-      return;
-    }
-    setSavingCode(true);
-    try {
-      const blob = new Blob([codeContent], { type: "text/html" });
-      const { error: upErr } = await supabase.storage
-        .from("generated-sites")
-        .upload(`${clientId}/index.html`, blob, { upsert: true });
-      if (upErr) throw upErr;
-
-      const { data: urlData } = supabase.storage
-        .from("generated-sites")
-        .getPublicUrl(`${clientId}/index.html`);
-
-      await supabase
-        .from("sites")
-        .update({
-          generation_status: "complete",
-          generation_error: null,
-          staging_url: urlData.publicUrl,
-          generated_at: new Date().toISOString(),
-        } as any)
-        .eq("client_id", clientId);
-
-      queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
-      toast.success("Site saved ♛ — moved to ready for review");
-      setShowCodeEditor(false);
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to save code");
-    } finally {
-      setSavingCode(false);
     }
   };
 
@@ -148,7 +97,7 @@ export function FailureCard({ clientId, businessName, site, generationError, onR
             <Button variant="outline" onClick={() => setShowCallNotes(true)} className="gap-2">
               <Phone className="h-4 w-4" /> View call notes
             </Button>
-            <Button variant="outline" onClick={openCodeEditor} className="gap-2">
+            <Button variant="outline" onClick={() => setShowCodeEditor(true)} className="gap-2">
               <Code className="h-4 w-4" /> Edit code manually
             </Button>
           </div>
@@ -216,31 +165,16 @@ export function FailureCard({ clientId, businessName, site, generationError, onR
         </DialogContent>
       </Dialog>
 
-      {/* Manual code editor */}
-      <Dialog open={showCodeEditor} onOpenChange={setShowCodeEditor}>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>Edit HTML manually — {businessName}</DialogTitle>
-            <DialogDescription>
-              Paste or edit the full HTML for the site. Saving will publish it as the staging version and move the build to "Ready for operator review".
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={codeContent}
-            onChange={(e) => setCodeContent(e.target.value)}
-            placeholder="<!DOCTYPE html>..."
-            rows={20}
-            className="font-mono text-xs"
-          />
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowCodeEditor(false)}>Cancel</Button>
-            <Button onClick={saveCode} disabled={savingCode} className="gap-2">
-              {savingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : <Code className="h-4 w-4" />}
-              Save HTML
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Manual code editor — full screen CodeMirror */}
+      <CodeEditorModal
+        open={showCodeEditor}
+        onOpenChange={setShowCodeEditor}
+        clientId={clientId}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+          onRetry?.();
+        }}
+      />
     </>
   );
 }
