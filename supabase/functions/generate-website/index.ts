@@ -713,6 +713,46 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
           status: "failed",
           error_message: error.message,
         });
+
+        // Send operator failure email
+        try {
+          const { data: failedSite } = await supabase
+            .from("sites")
+            .select("generation_attempts")
+            .eq("client_id", clientId)
+            .maybeSingle();
+          const { data: failedClient } = await supabase
+            .from("clients")
+            .select("business_name, user_id")
+            .eq("id", clientId)
+            .maybeSingle();
+          let clientName = "Unknown";
+          if ((failedClient as any)?.user_id) {
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("full_name, email")
+              .eq("user_id", (failedClient as any).user_id)
+              .maybeSingle();
+            clientName = (prof as any)?.full_name || (prof as any)?.email || "Unknown";
+          }
+
+          await supabase.functions.invoke("send-email", {
+            body: {
+              to: "hello@sitequeen.ai",
+              template: "operator_generation_failed",
+              data: {
+                business_name: (failedClient as any)?.business_name || "Unknown business",
+                client_name: clientName,
+                client_id: clientId,
+                attempts: (failedSite as any)?.generation_attempts || 1,
+                error_message: error.message,
+              },
+              clientId,
+            },
+          });
+        } catch (emailErr) {
+          console.error("Failed to send operator failure email:", emailErr);
+        }
       } catch (e) {
         console.error("Failed to update failure status:", e);
       }

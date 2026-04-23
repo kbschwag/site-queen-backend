@@ -1141,6 +1141,27 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
       <p style="margin-top:24px;">— The SiteQueen Team ♛</p>
     `),
   },
+
+  // Internal — site generation failed (sent to operator team)
+  operator_generation_failed: {
+    subject: (d) => `⚠ Site generation failed — ${d.business_name || "client"}`,
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">⚠ Site generation failed</h2>
+      <p>Site generation failed for <strong>${d.business_name || "Unknown"}</strong>.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">
+        <tr><td style="padding:6px 0;color:#666;width:120px;">Client:</td><td style="padding:6px 0;"><strong>${d.client_name || "Unknown"}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Business:</td><td style="padding:6px 0;"><strong>${d.business_name || "Unknown"}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Client ID:</td><td style="padding:6px 0;font-family:monospace;font-size:12px;">${d.client_id || ""}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Attempts:</td><td style="padding:6px 0;"><strong>${d.attempts || 1}</strong></td></tr>
+      </table>
+      <div style="background:#fff3f3;border:1px solid #fecaca;border-radius:8px;padding:12px;margin:16px 0;">
+        <p style="margin:0;color:#991b1b;font-family:monospace;font-size:12px;word-break:break-word;">${(d.error_message || "Unknown error").replace(/</g, "&lt;")}</p>
+      </div>
+      <p style="color:#666;font-size:14px;">All intake form data and call notes are safely saved and ready for retry.</p>
+      ${purpleButton("Retry now in operator portal", "https://sitequeen.ai/operator/clients")}
+      <p style="margin-top:24px;color:#666;font-size:12px;">— SiteQueen automated alert</p>
+    `),
+  },
 };
 
 serve(async (req) => {
