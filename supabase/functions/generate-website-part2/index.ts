@@ -39,8 +39,8 @@ serve(async (req) => {
     if (ctxErr || !ctxFile) throw new Error(`Could not load part2-context.json: ${ctxErr?.message}`);
     const ctx = JSON.parse(await ctxFile.text());
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
     // ── CALL 2: bottom half ──────────────────────────────────────────────
     const call2Prompt = `You are a professional web developer continuing to build a website for a small business client.
