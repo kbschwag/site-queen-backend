@@ -67,6 +67,18 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     },
   });
 
+  // Check whether an index.html exists in storage so we know to show the code editor button
+  const { data: hasGeneratedFile } = useQuery({
+    queryKey: ["operator-site-html-exists", clientId, (site as any)?.generated_at, (site as any)?.last_updated],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage
+        .from("generated-sites")
+        .list(clientId, { limit: 50 });
+      if (error) return false;
+      return (data || []).some((f: any) => f.name === "index.html");
+    },
+  });
+
   // Look up client email for sending emails
   const { data: clientProfile } = useQuery({
     queryKey: ["operator-client-profile", clientId],
