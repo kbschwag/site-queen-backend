@@ -170,6 +170,14 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     } as any);
 
     console.log(`[part2] ✓ Complete for ${clientId} → ${stagingURL}`);
+
+    // ── Fire extra-pages generator (about, services, contact, …) ────────
+    fetch(`${supabaseUrl}/functions/v1/generate-extra-pages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({ client_id: clientId }),
+    }).catch((e) => console.error("[part2] Failed to dispatch extra pages:", e));
+
     return new Response(JSON.stringify({ success: true, staging_url: stagingURL }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
