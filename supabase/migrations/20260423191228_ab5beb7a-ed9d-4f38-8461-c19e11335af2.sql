@@ -1,0 +1,1 @@
+alter table public.generation_logs add column if not exists generation_notes text;

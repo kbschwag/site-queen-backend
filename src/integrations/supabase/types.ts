@@ -840,6 +840,7 @@ export type Database = {
           client_id: string
           created_at: string
           error_message: string | null
+          generation_notes: string | null
           id: string
           status: string
           template_id: string | null
@@ -849,6 +850,7 @@ export type Database = {
           client_id: string
           created_at?: string
           error_message?: string | null
+          generation_notes?: string | null
           id?: string
           status?: string
           template_id?: string | null
@@ -858,6 +860,7 @@ export type Database = {
           client_id?: string
           created_at?: string
           error_message?: string | null
+          generation_notes?: string | null
           id?: string
           status?: string
           template_id?: string | null
