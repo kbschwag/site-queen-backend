@@ -40,13 +40,18 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const [requestingPhotos, setRequestingPhotos] = useState(false);
   const [togglingStockReplaced, setTogglingStockReplaced] = useState(false);
   const [showCodeEditor, setShowCodeEditor] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedClientId, setAdvancedClientId] = useState("");
+  const [advancedTriggering, setAdvancedTriggering] = useState(false);
 
   const { data: clientData } = useQuery({
     queryKey: ["operator-client-deploy-status", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("domain_name, domain_status, deployment_path_confirmed, user_id, intake_completed, call_notes_completed")
+        .select("domain_name, domain_status, deployment_path_confirmed, user_id, intake_completed, call_notes_completed, site_status")
         .eq("id", clientId)
         .single();
       if (error) throw error;
