@@ -71,13 +71,16 @@ serve(async (req) => {
     const domain = client.domain_name;
     const deployCount = client.deploy_count || 0;
 
-    // Fetch generated HTML from Supabase storage
-    const { data: htmlFile, error: htmlError } = await supabase.storage
+    // Fetch all generated HTML pages from Supabase storage
+    const { data: fileList, error: listError } = await supabase.storage
       .from("generated-sites")
-      .download(`${clientId}/index.html`);
+      .list(clientId, { limit: 100 });
+    if (listError) throw new Error(`Cannot list site files: ${listError.message}`);
 
-    if (htmlError || !htmlFile) throw new Error("Generated HTML not found in storage");
-    const htmlContent = await htmlFile.text();
+    const htmlFiles = (fileList || []).filter((f: any) => f.name.toLowerCase().endsWith(".html"));
+    if (!htmlFiles.find((f: any) => f.name.toLowerCase() === "index.html")) {
+      throw new Error("Generated HTML not found in storage (no index.html)");
+    }
 
     // Check for Hostinger API token
     const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
@@ -85,26 +88,37 @@ serve(async (req) => {
       throw new Error("HOSTINGER_API_TOKEN not configured");
     }
 
-    // Upload index.html to Hostinger
-    const uploadResponse = await fetch(
-      "https://api.hostinger.com/v1/hosting/files/upload",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${hostingerToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          path: `${folderPath}/index.html`,
-          content: btoa(htmlContent),
-        }),
+    // Upload every HTML page (index.html + about.html + services.html + …)
+    const uploaded: string[] = [];
+    for (const f of htmlFiles) {
+      const { data: pageFile, error: pageErr } = await supabase.storage
+        .from("generated-sites")
+        .download(`${clientId}/${f.name}`);
+      if (pageErr || !pageFile) {
+        throw new Error(`Could not download ${f.name}: ${pageErr?.message}`);
       }
-    );
-
-    if (!uploadResponse.ok) {
-      const errText = await uploadResponse.text();
-      throw new Error(`Hostinger API error: ${uploadResponse.status} - ${errText}`);
+      const pageContent = await pageFile.text();
+      const uploadResponse = await fetch(
+        "https://api.hostinger.com/v1/hosting/files/upload",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${hostingerToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            path: `${folderPath}/${f.name}`,
+            content: btoa(unescape(encodeURIComponent(pageContent))),
+          }),
+        }
+      );
+      if (!uploadResponse.ok) {
+        const errText = await uploadResponse.text();
+        throw new Error(`Hostinger upload failed for ${f.name}: ${uploadResponse.status} - ${errText}`);
+      }
+      uploaded.push(f.name);
     }
+    console.log(`[deploy] Uploaded ${uploaded.length} pages: ${uploaded.join(", ")}`);
 
     // Plant safety marker file on first deployment
     if (deployCount === 0) {
