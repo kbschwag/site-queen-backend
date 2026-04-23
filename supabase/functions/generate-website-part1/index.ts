@@ -148,8 +148,8 @@ ${templateHTML ? `\nHTML TEMPLATE (replace placeholders):\n${templateHTML}\n` : 
     // ── Update progress, then CALL 1 ────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "building_first_half" } as any).eq("client_id", clientId);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
     const call1Prompt = `You are a professional web developer building a website for a small business client.
 
