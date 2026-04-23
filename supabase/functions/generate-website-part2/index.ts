@@ -159,6 +159,7 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       generation_progress: "complete",
       generated_at: new Date().toISOString(),
       staging_url: stagingURL,
+      site_status: "review",
     } as any).eq("client_id", clientId);
 
     await supabase.from("notifications").insert({
