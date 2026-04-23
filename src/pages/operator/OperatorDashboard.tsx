@@ -12,6 +12,35 @@ import { toast } from "sonner";
 export default function OperatorDashboard() {
   const { role, isOwner } = useOperatorRole();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const { data: failedSites = [] } = useQuery({
+    queryKey: ["operator-failed-sites"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("sites")
+        .select("client_id, generation_status, generation_attempts, generation_error, last_generation_attempt_at, clients!inner(business_name, deleted_at)")
+        .or("generation_status.eq.failed,generation_attempts.gt.2")
+        .order("last_generation_attempt_at", { ascending: false, nullsFirst: false })
+        .limit(20);
+      return (data || []).filter((s: any) => !s.clients?.deleted_at);
+    },
+  });
+
+  const handleRetry = async (clientId: string) => {
+    setRetryingId(clientId);
+    try {
+      const { error } = await supabase.functions.invoke("generate-website", { body: { client_id: clientId } });
+      if (error) throw error;
+      toast.success("Retry started ♛");
+      queryClient.invalidateQueries({ queryKey: ["operator-failed-sites"] });
+    } catch (e: any) {
+      toast.error(e?.message || "Retry failed to start");
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   const { data: stats } = useQuery({
     queryKey: ["operator-dashboard-stats"],
