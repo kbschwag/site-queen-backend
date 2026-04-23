@@ -80,8 +80,8 @@ Do NOT wrap the response in \`\`\`html fences.
 Do NOT start with <!DOCTYPE html> — start directly with the first section after services.
 End with </html> as the very last character.`;
 
-    console.log("[part2] Calling AI for bottom half…");
-    const call2 = await callAI(LOVABLE_API_KEY, call2Prompt, "call-2-bottom");
+    console.log("[part2] Calling Claude for bottom half…");
+    const call2 = await callAI(ANTHROPIC_API_KEY, call2Prompt, "call-2-bottom");
     let secondHalf = stripMarkdown(call2.text);
 
     // ── Join + validate ──────────────────────────────────────────────────
