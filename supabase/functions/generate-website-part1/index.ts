@@ -183,11 +183,18 @@ The very first character must be < and start with <!DOCTYPE html>.`;
     }
 
     // ── Save first half + sidecar context for part2 ─────────────────────
-    await supabase.storage.from("generated-sites").upload(
-      `${clientId}/part1.html`,
-      new Blob([firstHalf], { type: "text/html" }),
-      { upsert: true, contentType: "text/html; charset=utf-8" }
-    );
+    const { data: part1Upload, error: part1UploadErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/part1.html`,
+        new Blob([firstHalf], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" }
+      );
+    if (part1UploadErr) {
+      console.error("[part1] Storage upload failed (part1.html):", part1UploadErr);
+      throw new Error(`Failed to save part1.html to storage: ${part1UploadErr.message}`);
+    }
+    console.log("[part1] Upload successful:", part1Upload);
 
     const part2Context = {
       sharedContext,
@@ -198,11 +205,18 @@ The very first character must be < and start with <!DOCTYPE html>.`;
       templateId: templateId || "scratch",
       call1OutputTokens: call1.outputTokens,
     };
-    await supabase.storage.from("generated-sites").upload(
-      `${clientId}/part2-context.json`,
-      new Blob([JSON.stringify(part2Context)], { type: "application/json" }),
-      { upsert: true, contentType: "application/json; charset=utf-8" }
-    );
+    const { data: ctxUpload, error: ctxUploadErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/part2-context.json`,
+        new Blob([JSON.stringify(part2Context)], { type: "application/json" }),
+        { upsert: true, contentType: "application/json; charset=utf-8" }
+      );
+    if (ctxUploadErr) {
+      console.error("[part1] Storage upload failed (part2-context.json):", ctxUploadErr);
+      throw new Error(`Failed to save part2-context.json to storage: ${ctxUploadErr.message}`);
+    }
+    console.log("[part1] Context upload successful:", ctxUpload);
 
     await supabase.from("sites").update({ generation_progress: "first_half_complete" } as any).eq("client_id", clientId);
 
