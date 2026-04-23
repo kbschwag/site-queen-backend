@@ -186,7 +186,7 @@ The very first character must be < and start with <!DOCTYPE html>.`;
     await supabase.storage.from("generated-sites").upload(
       `${clientId}/part1.html`,
       new Blob([firstHalf], { type: "text/html" }),
-      { upsert: true }
+      { upsert: true, contentType: "text/html; charset=utf-8" }
     );
 
     const part2Context = {
@@ -201,7 +201,7 @@ The very first character must be < and start with <!DOCTYPE html>.`;
     await supabase.storage.from("generated-sites").upload(
       `${clientId}/part2-context.json`,
       new Blob([JSON.stringify(part2Context)], { type: "application/json" }),
-      { upsert: true }
+      { upsert: true, contentType: "application/json; charset=utf-8" }
     );
 
     await supabase.from("sites").update({ generation_progress: "first_half_complete" } as any).eq("client_id", clientId);
