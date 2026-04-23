@@ -784,6 +784,55 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           queryClient.invalidateQueries({ queryKey: ["operator-site-html-exists", clientId] });
         }}
       />
+
+      {/* Regenerate website confirmation */}
+      <Dialog open={showRegenerateModal} onOpenChange={setShowRegenerateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Regenerate website for {businessName}?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <p>This will rebuild their entire site from scratch using their current intake form data and call notes. Any manual edits made in the code editor will be overwritten.</p>
+            <p className="text-amber-600">⚠ This uses current intake data — any edits the client made after original submission will be reflected.</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowRegenerateModal(false)}>Cancel</Button>
+            <Button
+              onClick={async () => {
+                setShowRegenerateModal(false);
+                setRegenerating(true);
+                try {
+                  await supabase
+                    .from("sites")
+                    .update({ generation_status: "pending", staging_url: null, generation_error: null } as any)
+                    .eq("client_id", clientId);
+                  await supabase
+                    .from("clients")
+                    .update({ site_status: "building" } as any)
+                    .eq("id", clientId);
+                  queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+                  toast.info("Rebuilding site... ♛");
+                  const { error } = await supabase.functions.invoke("generate-website", {
+                    body: { client_id: clientId },
+                  });
+                  if (error) throw error;
+                  queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+                  queryClient.invalidateQueries({ queryKey: ["operator-site-html-exists", clientId] });
+                  queryClient.invalidateQueries({ queryKey: ["operator-client-deploy-status", clientId] });
+                  toast.success("Site regenerated ♛ — preview updated");
+                } catch (e: any) {
+                  toast.error(e?.message || "Regeneration failed");
+                } finally {
+                  setRegenerating(false);
+                }
+              }}
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" /> Yes, regenerate ♛
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
