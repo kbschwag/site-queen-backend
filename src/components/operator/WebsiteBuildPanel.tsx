@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import { QuickEditPanel } from "./QuickEditPanel";
 import { FailureCard } from "./GenerationFailureCard";
+import { CodeEditorModal } from "./CodeEditorModal";
 import { useFileUpload } from "@/hooks/useFileUpload";
+import { Code2 } from "lucide-react";
 
 interface Props {
   clientId: string;
@@ -37,6 +39,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const [goLiveChecked, setGoLiveChecked] = useState(false);
   const [requestingPhotos, setRequestingPhotos] = useState(false);
   const [togglingStockReplaced, setTogglingStockReplaced] = useState(false);
+  const [showCodeEditor, setShowCodeEditor] = useState(false);
 
   const { data: clientData } = useQuery({
     queryKey: ["operator-client-deploy-status", clientId],
@@ -61,6 +64,18 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
         .maybeSingle();
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Check whether an index.html exists in storage so we know to show the code editor button
+  const { data: hasGeneratedFile } = useQuery({
+    queryKey: ["operator-site-html-exists", clientId, (site as any)?.generated_at, (site as any)?.last_updated],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage
+        .from("generated-sites")
+        .list(clientId, { limit: 50 });
+      if (error) return false;
+      return (data || []).some((f: any) => f.name === "index.html");
     },
   });
 
@@ -320,7 +335,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Status Badge */}
+      {/* Status Badge + toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
         <Badge className={status.color}>
           <StatusIcon className={`h-3 w-3 mr-1 ${generationStatus === "generating" ? "animate-spin" : ""}`} />
@@ -330,6 +345,17 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           <span className="text-xs text-muted-foreground">
             Generated {new Date((site as any).generated_at).toLocaleDateString()}
           </span>
+        )}
+        {hasGeneratedFile && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowCodeEditor(true)}
+            className="gap-1.5 ml-auto"
+          >
+            <Code2 className="h-3.5 w-3.5" />
+            {"< > View / edit code"}
+          </Button>
         )}
       </div>
 
@@ -674,6 +700,17 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Full screen code editor */}
+      <CodeEditorModal
+        open={showCodeEditor}
+        onOpenChange={setShowCodeEditor}
+        clientId={clientId}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+          queryClient.invalidateQueries({ queryKey: ["operator-site-html-exists", clientId] });
+        }}
+      />
     </div>
   );
 }
