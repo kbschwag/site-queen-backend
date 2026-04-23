@@ -10,11 +10,12 @@ interface Props {
 }
 
 export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [pageUrl, setPageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<"desktop" | "mobile">("desktop");
   const [pages, setPages] = useState<string[]>(["index.html"]);
   const [activePage, setActivePage] = useState<string>("index.html");
+  const [cacheBuster, setCacheBuster] = useState(() => Date.now());
 
   // List every .html file the generator produced for this client.
   const refreshPages = useCallback(async () => {
@@ -34,47 +35,38 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
     }
   }, [clientId]);
 
-  const fetchAndCreateBlob = useCallback(async () => {
+  const refreshPreviewUrl = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.storage
+      const { data } = supabase.storage
         .from("generated-sites")
-        .download(`${clientId}/${activePage}`);
-      if (error) throw error;
-      const html = await data.text();
-      const blob = new Blob([html], { type: "text/html" });
-      setBlobUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(blob);
-      });
+        .getPublicUrl(`${clientId}/${activePage}`);
+
+      const publicUrl = data.publicUrl;
+      setPageUrl(publicUrl ? `${publicUrl}?v=${cacheBuster}` : null);
     } catch (e) {
       console.error("Failed to load site preview:", e);
+      setPageUrl(null);
     } finally {
       setLoading(false);
     }
-  }, [clientId, activePage]);
+  }, [clientId, activePage, cacheBuster]);
 
   useEffect(() => {
     refreshPages();
   }, [refreshPages]);
 
   useEffect(() => {
-    fetchAndCreateBlob();
-    return () => {
-      setBlobUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-    };
-  }, [fetchAndCreateBlob]);
+    refreshPreviewUrl();
+  }, [refreshPreviewUrl]);
 
   const handleRefresh = () => {
+    setCacheBuster(Date.now());
     refreshPages();
-    fetchAndCreateBlob();
   };
 
   const handleOpenNewTab = () => {
-    if (blobUrl) window.open(blobUrl, "_blank");
+    if (pageUrl) window.open(pageUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -103,7 +95,7 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
           <Button size="sm" variant="outline" onClick={handleRefresh} disabled={loading} className="gap-1.5 h-7 text-xs">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
-          <Button size="sm" variant="outline" onClick={handleOpenNewTab} disabled={!blobUrl} className="gap-1.5 h-7 text-xs">
+          <Button size="sm" variant="outline" onClick={handleOpenNewTab} disabled={!pageUrl} className="gap-1.5 h-7 text-xs">
             <ExternalLink className="h-3.5 w-3.5" /> Open in new tab
           </Button>
         </div>
@@ -136,13 +128,14 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
         className="border rounded-lg overflow-hidden bg-muted/30 flex justify-center"
         style={{ height }}
       >
-        {loading && !blobUrl ? (
+        {loading && !pageUrl ? (
           <div className="flex items-center justify-center w-full">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : blobUrl ? (
+        ) : pageUrl ? (
           <iframe
-            src={blobUrl}
+            key={pageUrl}
+            src={pageUrl}
             title="Site preview"
             className="bg-white transition-all duration-300"
             style={{
