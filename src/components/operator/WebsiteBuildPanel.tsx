@@ -39,6 +39,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const [goLiveChecked, setGoLiveChecked] = useState(false);
   const [requestingPhotos, setRequestingPhotos] = useState(false);
   const [togglingStockReplaced, setTogglingStockReplaced] = useState(false);
+  const [showCodeEditor, setShowCodeEditor] = useState(false);
 
   const { data: clientData } = useQuery({
     queryKey: ["operator-client-deploy-status", clientId],
