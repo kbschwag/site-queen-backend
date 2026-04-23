@@ -186,13 +186,19 @@ Do not include closing </body> or </html> tags.`;
           pageBody,
         });
 
-        await supabase.storage.from("generated-sites").upload(
-          `${clientId}/${page.slug}.html`,
-          new Blob([html], { type: "text/html" }),
-          { upsert: true, contentType: "text/html; charset=utf-8" }
-        );
+        const { data: pageUpload, error: pageUploadErr } = await supabase.storage
+          .from("generated-sites")
+          .upload(
+            `${clientId}/${page.slug}.html`,
+            new Blob([html], { type: "text/html" }),
+            { upsert: true, contentType: "text/html; charset=utf-8" }
+          );
+        if (pageUploadErr) {
+          console.error(`[extra-pages] Storage upload failed for ${page.slug}:`, pageUploadErr);
+          throw new Error(`Failed to save ${page.slug}.html to storage: ${pageUploadErr.message}`);
+        }
         generated.push(page.slug);
-        console.log(`[extra-pages] ✓ ${page.slug}.html saved (${res.outputTokens} tokens)`);
+        console.log(`[extra-pages] ✓ ${page.slug}.html saved (${res.outputTokens} tokens)`, pageUpload);
       } catch (e: any) {
         console.error(`[extra-pages] ✗ ${page.slug} failed:`, e.message);
         failed.push(`${page.slug}: ${e.message}`);
