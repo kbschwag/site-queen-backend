@@ -92,25 +92,27 @@ End with </html> as the very last character.`;
     // Strip any stray external stylesheet link
     finalHTML = finalHTML.replace(/<link[^>]*href=["']styles\.css["'][^>]*>/gi, "");
 
-    // Safety net: ensure animate-on-scroll elements always become visible.
-    // Prevents blank sections in iframe previews or when IntersectionObserver
-    // misses elements below the initial viewport.
+    // Safety net: ensure animate-on-scroll elements are ALWAYS visible.
+    // Claude often generates `.animate-on-scroll { opacity: 0 }` with an
+    // IntersectionObserver to fade in. In iframe previews, mobile, or when
+    // the observer misses below-fold elements, sections stay invisible —
+    // making the page look completely blank. We force visibility from the
+    // start; the fade-in is purely cosmetic and not worth the risk.
     const animateSafetyNet = `
 <style>
-  /* Fallback if JS is disabled or observer fails */
-  .no-js .animate-on-scroll { opacity: 1 !important; transform: none !important; }
+  /* Force all scroll-animated elements visible (fade-in disabled for reliability) */
+  .animate-on-scroll { opacity: 1 !important; transform: none !important; }
 </style>
 <script>
-  // Force-reveal any animate-on-scroll element that hasn't become visible
-  // within 1.5s of load — protects against iframe/scroll-container edge cases.
+  // Belt-and-suspenders: also add the .visible class so any code reading it works.
   (function(){
     function reveal(){
-      document.querySelectorAll('.animate-on-scroll:not(.visible)').forEach(function(el){
+      document.querySelectorAll('.animate-on-scroll').forEach(function(el){
         el.classList.add('visible');
       });
     }
-    if (document.readyState === 'complete') setTimeout(reveal, 1500);
-    else window.addEventListener('load', function(){ setTimeout(reveal, 1500); });
+    reveal();
+    if (document.readyState !== 'complete') window.addEventListener('load', reveal);
   })();
 </script>`;
     finalHTML = finalHTML.replace("</body>", animateSafetyNet + "\n</body>");
