@@ -3,10 +3,11 @@ import { useOperatorRole } from "@/hooks/useOperatorRole";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Crown, Users, FileText, MessageSquare, AlertTriangle, TrendingUp, Zap, Eye, Clock } from "lucide-react";
+import { Crown, Users, FileText, MessageSquare, AlertTriangle, TrendingUp, Zap, Eye, Clock, RefreshCw, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
 
 export default function OperatorDashboard() {
   const { role, isOwner } = useOperatorRole();
