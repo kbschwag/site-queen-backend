@@ -700,6 +700,17 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Full screen code editor */}
+      <CodeEditorModal
+        open={showCodeEditor}
+        onOpenChange={setShowCodeEditor}
+        clientId={clientId}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+          queryClient.invalidateQueries({ queryKey: ["operator-site-html-exists", clientId] });
+        }}
+      />
     </div>
   );
 }
