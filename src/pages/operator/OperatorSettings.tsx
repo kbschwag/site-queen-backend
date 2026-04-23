@@ -303,6 +303,51 @@ export default function OperatorSettings() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Developer Tools — Owner only */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FlaskConical className="h-4 w-4" /> Developer Tools
+              </CardTitle>
+              <CardDescription>Internal utilities for testing the build pipeline</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-start gap-3">
+                <Button
+                  size="sm"
+                  disabled={seeding}
+                  onClick={async () => {
+                    setSeeding(true);
+                    try {
+                      const result = await seedTestClient();
+                      queryClient.invalidateQueries({ queryKey: ["operator-clients"] });
+                      toast.success(`Test client created ♛ — ${result.businessName}`, {
+                        description: `Client ID: ${result.clientId.slice(0, 8)}…`,
+                        duration: 10000,
+                        action: {
+                          label: "Go to client profile →",
+                          onClick: () => navigate("/operator/clients"),
+                        },
+                      });
+                    } catch (e: any) {
+                      console.error(e);
+                      toast.error(e?.message || "Failed to seed test client");
+                    } finally {
+                      setSeeding(false);
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  Seed test client ♛
+                </Button>
+                <p className="text-xs text-muted-foreground pt-1.5">
+                  Creates "Phoenix Pro Plumbing" with full intake data and call notes ready for generation.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
