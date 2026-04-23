@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import { QuickEditPanel } from "./QuickEditPanel";
 import { FailureCard } from "./GenerationFailureCard";
+import { CodeEditorModal } from "./CodeEditorModal";
 import { useFileUpload } from "@/hooks/useFileUpload";
+import { Code2 } from "lucide-react";
 
 interface Props {
   clientId: string;
