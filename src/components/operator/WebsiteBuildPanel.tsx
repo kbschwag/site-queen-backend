@@ -341,26 +341,94 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   return (
     <div className="space-y-4">
       {/* Status Badge + toolbar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Badge className={status.color}>
-          <StatusIcon className={`h-3 w-3 mr-1 ${generationStatus === "generating" ? "animate-spin" : ""}`} />
-          {status.label}
-        </Badge>
-        {(site as any)?.generated_at && (
-          <span className="text-xs text-muted-foreground">
-            Generated {new Date((site as any).generated_at).toLocaleDateString()}
-          </span>
-        )}
-        {hasGeneratedFile && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowCodeEditor(true)}
-            className="gap-1.5 ml-auto"
-          >
-            <Code2 className="h-3.5 w-3.5" />
-            {"< > View / edit code"}
-          </Button>
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Badge className={status.color}>
+            <StatusIcon className={`h-3 w-3 mr-1 ${generationStatus === "generating" ? "animate-spin" : ""}`} />
+            {status.label}
+          </Badge>
+          {(site as any)?.generated_at && (
+            <span className="text-xs text-muted-foreground">
+              Generated {new Date((site as any).generated_at).toLocaleDateString()}
+            </span>
+          )}
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            {hasGeneratedFile && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowCodeEditor(true)}
+                className="gap-1.5"
+              >
+                <Code2 className="h-3.5 w-3.5" />
+                {"< > View / edit code"}
+              </Button>
+            )}
+            {(clientData as any)?.site_status !== "live" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowRegenerateModal(true)}
+                disabled={regenerating}
+                className="gap-1.5"
+              >
+                {regenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Regenerate website ♛
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Advanced collapsible */}
+        {(clientData as any)?.site_status !== "live" && (
+          <div className="text-xs">
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Advanced {advancedOpen ? "▴" : "▾"}
+            </button>
+            {advancedOpen && (
+              <div className="mt-2 p-3 rounded-md border bg-muted/30 space-y-2">
+                <label className="text-xs font-medium">Trigger generation by Client ID</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={advancedClientId}
+                    onChange={(e) => setAdvancedClientId(e.target.value)}
+                    placeholder="client-uuid"
+                    className="text-xs h-8"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={advancedTriggering || !advancedClientId.trim()}
+                    onClick={async () => {
+                      setAdvancedTriggering(true);
+                      try {
+                        const { error } = await supabase.functions.invoke("generate-website", {
+                          body: { client_id: advancedClientId.trim() },
+                        });
+                        if (error) throw error;
+                        toast.success("Generation triggered ♛");
+                        setAdvancedClientId("");
+                      } catch (e: any) {
+                        toast.error(e?.message || "Failed to trigger generation");
+                      } finally {
+                        setAdvancedTriggering(false);
+                      }
+                    }}
+                    className="gap-1.5"
+                  >
+                    {advancedTriggering ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    Generate ♛
+                  </Button>
+                </div>
+                <p className="text-[11px] text-amber-600">
+                  ⚠ This will overwrite any existing generated site for this client.
+                </p>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
