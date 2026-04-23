@@ -6,8 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const AI_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const AI_MODEL = "google/gemini-2.5-pro";
+const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
+const AI_MODEL = "claude-sonnet-4-20250514";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -39,8 +39,8 @@ serve(async (req) => {
     if (ctxErr || !ctxFile) throw new Error(`Could not load part2-context.json: ${ctxErr?.message}`);
     const ctx = JSON.parse(await ctxFile.text());
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
     // ── CALL 2: bottom half ──────────────────────────────────────────────
     const call2Prompt = `You are a professional web developer continuing to build a website for a small business client.
@@ -80,8 +80,8 @@ Do NOT wrap the response in \`\`\`html fences.
 Do NOT start with <!DOCTYPE html> — start directly with the first section after services.
 End with </html> as the very last character.`;
 
-    console.log("[part2] Calling AI for bottom half…");
-    const call2 = await callAI(LOVABLE_API_KEY, call2Prompt, "call-2-bottom");
+    console.log("[part2] Calling Claude for bottom half…");
+    const call2 = await callAI(ANTHROPIC_API_KEY, call2Prompt, "call-2-bottom");
     let secondHalf = stripMarkdown(call2.text);
 
     // ── Join + validate ──────────────────────────────────────────────────
@@ -162,7 +162,11 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
     try {
       const r = await fetch(AI_ENDPOINT, {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           model: AI_MODEL,
           max_tokens: 16000,
@@ -171,24 +175,27 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
       });
       if (!r.ok) {
         const errText = await r.text();
-        console.error(`[${label}] AI error ${r.status}:`, errText);
+        console.error(`[${label}] Claude error ${r.status}:`, errText);
         if ((r.status === 429 || r.status === 529) && attempt < MAX_ATTEMPTS) {
           await new Promise((res) => setTimeout(res, 3000 * attempt));
           continue;
         }
-        throw new Error(`AI ${label} failed: ${r.status}`);
+        throw new Error(`Claude ${label} failed: ${r.status} — ${errText.substring(0, 300)}`);
       }
       const data = await r.json();
+      const text = Array.isArray(data.content)
+        ? data.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
+        : "";
       return {
-        text: data.choices?.[0]?.message?.content || "",
-        outputTokens: data.usage?.completion_tokens || data.usage?.output_tokens || 0,
+        text,
+        outputTokens: data.usage?.output_tokens || 0,
       };
     } catch (err) {
       lastErr = err as Error;
       if (attempt < MAX_ATTEMPTS) await new Promise((res) => setTimeout(res, 2000));
     }
   }
-  throw lastErr || new Error(`AI failed: ${label}`);
+  throw lastErr || new Error(`Claude failed: ${label}`);
 }
 
 function stripMarkdown(s: string): string {
