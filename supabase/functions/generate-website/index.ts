@@ -433,80 +433,8 @@ If INSTAGRAM_URL or FACEBOOK_URL are missing: remove those social links rather t
 For any placeholder that has no data and no sensible default — remove that element entirely. Never show a visible placeholder, empty bracket, or broken section to the end user. The site must look complete and intentional even with minimal data.
 `;
 
-    if (templateHTML) {
-      prompt = `You are a professional web developer building a website for a small business client.
-
-You have two sources of information:
-
-SOURCE 1 — CLIENT INTAKE FORM (what the client told us directly):
-${JSON.stringify(intakeData, null, 2)}
-${callNotesSection}
-${photoSection}
-
-Here is the HTML template with placeholders in double curly braces:
-${templateHTML}
-
-Here is the CSS template with color variables as placeholders:
-${templateCSS}
-${brandingInstructions}
-${missingDataInstructions}
-
-Your instructions:
-1. Replace every {{PLACEHOLDER}} with the corresponding client data
-2. For repeatable sections marked {{#SECTION}} and {{/SECTION}} generate one block per item in the data array
-3. If any placeholder has no data use a professional sensible default appropriate for their business type — follow the MISSING DATA INSTRUCTIONS above precisely
-4. Generate compelling professional copy for headlines and descriptions based on their business answers
-5. Make all phone numbers click-to-call links
-6. Make all email addresses mailto links
-7. Make all social media links open in a new tab
-8. Make sure the site is fully responsive and mobile perfect
-9. Do not change any layout structure or design elements — only replace content and colors
-10. Output format — return EITHER:
-    (a) raw HTML starting with <!DOCTYPE html> with the CSS inlined in a <style> tag in the head, OR
-    (b) a single JSON object with exactly two fields "html" and "css"
-
-CRITICAL OUTPUT INSTRUCTIONS:
-- Return ONLY the response — no explanation, no commentary, no markdown code fences
-- Do NOT wrap the response in \`\`\`html or \`\`\`json fences
-- The very first character of your response must be either < (for HTML) or { (for JSON)
-- Never include any text before or after the HTML/JSON`;
-    } else {
-      prompt = `You are a professional web designer building a website for a small business client.
-
-You have two sources of information:
-
-SOURCE 1 — CLIENT INTAKE FORM (what the client told us directly):
-${JSON.stringify(intakeData, null, 2)}
-
-Business name: ${clientData?.business_name || "Business"}
-Business type: ${clientData?.business_type || "Service Business"}
-${callNotesSection}
-${photoSection}
-${brandingInstructions}
-${missingDataInstructions}
-
-Your instructions:
-1. Create a complete, production-ready single-page website with HTML and CSS
-2. Include sections: Hero with CTA, About/Story, Services, Testimonials (if provided), Contact, Footer
-3. Use their brand colors, fonts, and style preferences from the intake data — apply the BRANDING INSTRUCTIONS above for any missing color or font choices
-4. Generate compelling professional copy for all sections based on their business answers
-5. Make all phone numbers click-to-call links
-6. Make all email addresses mailto links
-7. Make all social media links open in a new tab
-8. The site MUST be fully responsive and mobile-first
-9. Use modern CSS (flexbox, grid, custom properties)
-10. Include smooth scroll behavior and clean typography
-11. Follow the MISSING DATA INSTRUCTIONS above — never show empty placeholders or broken sections
-12. Output format — return EITHER:
-    (a) raw HTML starting with <!DOCTYPE html> with all CSS inlined in a <style> tag in the head, OR
-    (b) a single JSON object with exactly two fields "html" and "css"
-
-CRITICAL OUTPUT INSTRUCTIONS:
-- Return ONLY the response — no explanation, no commentary, no markdown code fences
-- Do NOT wrap the response in \`\`\`html or \`\`\`json fences
-- The very first character of your response must be either < (for HTML) or { (for JSON)
-- Never include any text before or after the HTML/JSON`;
-    }
+    // (The shared context block — intake, call notes, photos, branding, template HTML/CSS —
+    // is assembled directly inside the two-call generation block below.)
 
     // ====================================================================
     // TWO-CALL GENERATION — splits the build in half so the HTML never
