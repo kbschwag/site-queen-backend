@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOperatorRole } from "@/hooks/useOperatorRole";
@@ -11,19 +12,22 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Settings, Mail, Link2, Shield, AlertTriangle, CheckCircle2, XCircle, RotateCcw, Loader2, Calendar } from "lucide-react";
+import { Settings, Mail, Link2, Shield, AlertTriangle, CheckCircle2, XCircle, RotateCcw, Loader2, Calendar, FlaskConical, Sparkles } from "lucide-react";
 import { PasswordSection } from "@/components/PasswordSection";
 import { SecuritySection } from "@/components/operator/SecuritySection";
 import { format } from "date-fns";
+import { seedTestClient } from "@/lib/seed-test-client";
 
 export default function OperatorSettings() {
   const { user } = useAuth();
   const { isOwner } = useOperatorRole();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [restoring, setRestoring] = useState<string | null>(null);
   const [calendlyDiscovery, setCalendlyDiscovery] = useState("");
   const [calendlyRevision, setCalendlyRevision] = useState("");
   const [savingCalendly, setSavingCalendly] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   // Load Calendly URLs from app_settings
   const { data: appSettings } = useQuery({
