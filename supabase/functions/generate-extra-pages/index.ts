@@ -108,8 +108,9 @@ serve(async (req) => {
 
     // Trim homepage to the parts useful as style/structure reference
     const headBlock = extractHead(homepageHTML);
-    const navBlock = extractFirstMatch(homepageHTML, /<header[\s\S]*?<\/header>/i) || "";
+    const headerBlock = extractFirstMatch(homepageHTML, /<header[\s\S]*?<\/header>/i) || "";
     const footerBlock = extractFirstMatch(homepageHTML, /<footer[\s\S]*?<\/footer>/i) || "";
+    const sharedScripts = extractBodyScripts(homepageHTML);
 
     const sharedContext = `BUSINESS CONTEXT:
 Business name: ${clientData?.business_name || "Business"}
@@ -132,17 +133,18 @@ ${callNotes ? `CALL NOTES:\n${JSON.stringify(callNotes, null, 2)}\n` : ""}`;
           : "";
 
         const prompt = `You are building the ${page.label.toUpperCase()} page of a multi-page website for a small business.
-The homepage already exists. You must produce a standalone HTML page that visually matches the homepage exactly — same fonts, colors, header, footer, button styles, section spacing.
+The homepage already exists. You must produce ONLY the INNER PAGE CONTENT that belongs between the shared header and shared footer.
+Your output must visually match the homepage exactly — same fonts, colors, spacing, buttons, cards, and section rhythm.
 
 ${sharedContext}
 
-HOMEPAGE <head> (contains the full inlined CSS that styles the entire site — REUSE this <head> verbatim in your output):
+HOMEPAGE <head> (contains the full inlined CSS that styles the entire site):
 ${headBlock}
 
-HOMEPAGE HEADER (reuse this exact markup so the nav matches):
-${navBlock}
+HOMEPAGE HEADER (already handled separately — use it as visual reference only):
+${headerBlock}
 
-HOMEPAGE FOOTER (reuse this exact markup):
+HOMEPAGE FOOTER (already handled separately):
 ${footerBlock}
 ${ref}
 
@@ -150,34 +152,39 @@ PAGE BRIEF — ${page.label.toUpperCase()}:
 ${page.brief}
 
 REQUIREMENTS:
-- Output a COMPLETE standalone HTML document starting with <!DOCTYPE html> and ending with </html>.
-- Reuse the <head> from the homepage as-is (same <style> block, fonts, meta) so styling is identical.
-- Reuse the homepage <header> and <footer> as-is.
-- Update the <title> and <meta name="description"> for this page.
-- Update breadcrumbs / active nav link to reflect the current page.
-- Build the page body using the SAME class names the homepage uses (e.g. .hero, .about, .services, .btn, .section-heading, .section-eyebrow). Do NOT invent a new design system. If you need a new section, write minimal additional inline <style> AT THE TOP of <body> — but prefer reusing existing classes.
+- Return ONLY the markup that goes BETWEEN the shared header and footer.
+- Do NOT return <!DOCTYPE html>, <html>, <head>, <body>, <header>, or <footer>.
+- Build the page body using the SAME class names the homepage uses (e.g. .hero, .about, .services, .btn, .section-heading, .section-eyebrow). Do NOT invent a new design system. If you need a new section, you may include one small <style> block before the first section — but prefer reusing existing classes.
 - Add a small "page hero" / breadcrumb area at the top (dark background, page title, optional breadcrumb). The homepage CSS already has helpers — reuse them.
 - All internal links: Home → "./index.html", About → "./about.html", Services → "./services.html", Contact → "./contact.html", and any other pages should follow the same "./<slug>.html" pattern.
 - All phone numbers must be tel: links, emails must be mailto: links.
 - Replace any nav link to a page that does not exist with "#".
-- Just before </body> include the SAME analytics tracking script the homepage uses (find it in the homepage and replicate exactly).
+- Do NOT include any <script> tags. Shared scripts are already handled globally.
 - Inline-only CSS. No external stylesheets.
 - Mobile-perfect responsive.
 
 CRITICAL OUTPUT INSTRUCTIONS:
-Return ONLY raw HTML — no markdown, no code blocks, no explanation.
+Return ONLY raw HTML for the inner page content — no markdown, no code blocks, no explanation.
 Do NOT wrap in \`\`\`.
-First character must be <, starting with <!DOCTYPE html>.
-Last character must be > closing </html>.`;
+First character must be < and should usually begin with <section or <style>.
+Do not include closing </body> or </html> tags.`;
 
         console.log(`[extra-pages] Generating ${page.slug} (${prompt.length} chars prompt)…`);
         const res = await callAI(ANTHROPIC_API_KEY, prompt, `page-${page.slug}`);
-        let html = stripMarkdown(res.text);
-        if (!html.includes("<!DOCTYPE") || !html.includes("</html>")) {
+        const pageBody = normalizeGeneratedBody(stripMarkdown(res.text));
+        if (!pageBody) {
           throw new Error(`Page ${page.slug} returned malformed HTML`);
         }
-        // Strip any external stylesheet that might have slipped in
-        html = html.replace(/<link[^>]*href=["']styles?\.css["'][^>]*>/gi, "");
+        const html = composePageHtml({
+          businessName: clientData?.business_name || "Business",
+          headBlock,
+          headerBlock,
+          footerBlock,
+          sharedScripts,
+          pageSlug: page.slug,
+          pageLabel: page.label,
+          pageBody,
+        });
 
         await supabase.storage.from("generated-sites").upload(
           `${clientId}/${page.slug}.html`,
