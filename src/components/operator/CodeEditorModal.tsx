@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Code2, X, Loader2, Save } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface Props {
   open: boolean;
@@ -19,15 +18,11 @@ const STARTER_HTML = `<!-- No site generated yet — paste or write your HTML he
 <head>
   <meta charset="utf-8" />
   <title>Client Site</title>
-  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <!-- Build your site here -->
 </body>
 </html>
-`;
-
-const STARTER_CSS = `/* No CSS generated yet — paste or write your CSS here */
 `;
 
 const CDN_LINKS = [
@@ -88,16 +83,13 @@ function loadCodeMirror(): Promise<void> {
 
 export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props) {
   const { user } = useAuth();
-  const [tab, setTab] = useState<"html" | "css">("html");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const htmlHostRef = useRef<HTMLDivElement | null>(null);
-  const cssHostRef = useRef<HTMLDivElement | null>(null);
   const htmlEditorRef = useRef<any>(null);
-  const cssEditorRef = useRef<any>(null);
 
-  // Init CodeMirror + load files
+  // Init CodeMirror + load file
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -109,18 +101,14 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
         const CM = (window as any).CodeMirror;
         if (!CM) throw new Error("CodeMirror failed to load");
 
-        // Fetch files in parallel
-        const [htmlRes, cssRes] = await Promise.all([
-          supabase.storage.from("generated-sites").download(`${clientId}/index.html`),
-          supabase.storage.from("generated-sites").download(`${clientId}/styles.css`),
-        ]);
+        const htmlRes = await supabase.storage
+          .from("generated-sites")
+          .download(`${clientId}/index.html`);
 
         if (cancelled) return;
 
         const htmlContent = htmlRes.data ? await htmlRes.data.text() : STARTER_HTML;
-        const cssContent = cssRes.data ? await cssRes.data.text() : STARTER_CSS;
 
-        // Wait one tick so refs are mounted
         await new Promise((r) => setTimeout(r, 0));
         if (cancelled) return;
 
@@ -138,25 +126,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
           htmlEditorRef.current.setValue(htmlContent);
         }
 
-        if (cssHostRef.current && !cssEditorRef.current) {
-          cssEditorRef.current = CM(cssHostRef.current, {
-            value: cssContent,
-            mode: "css",
-            theme: "dracula",
-            lineNumbers: true,
-            lineWrapping: true,
-            indentUnit: 2,
-            tabSize: 2,
-          });
-        } else if (cssEditorRef.current) {
-          cssEditorRef.current.setValue(cssContent);
-        }
-
-        // Refresh after small delay to size correctly
-        setTimeout(() => {
-          htmlEditorRef.current?.refresh();
-          cssEditorRef.current?.refresh();
-        }, 50);
+        setTimeout(() => htmlEditorRef.current?.refresh(), 50);
       } catch (e) {
         console.error(e);
         toast.error("Failed to load code editor");
@@ -170,58 +140,45 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
     };
   }, [open, clientId]);
 
-  // Cleanup editors when modal closes
   useEffect(() => {
     if (open) return;
     htmlEditorRef.current = null;
-    cssEditorRef.current = null;
   }, [open]);
 
-  // Refresh visible editor when switching tabs
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(() => {
-      if (tab === "html") htmlEditorRef.current?.refresh();
-      else cssEditorRef.current?.refresh();
-    }, 30);
-    return () => clearTimeout(t);
-  }, [tab, open]);
-
   const handleSave = async () => {
-    if (!htmlEditorRef.current || !cssEditorRef.current) return;
+    if (!htmlEditorRef.current) return;
     setSaving(true);
     try {
       const htmlContent = htmlEditorRef.current.getValue();
-      const cssContent = cssEditorRef.current.getValue();
-
       const htmlBlob = new Blob([htmlContent], { type: "text/html" });
-      const cssBlob = new Blob([cssContent], { type: "text/css" });
 
-      const [htmlUp, cssUp] = await Promise.all([
-        supabase.storage
-          .from("generated-sites")
-          .upload(`${clientId}/index.html`, htmlBlob, { upsert: true, contentType: "text/html" }),
-        supabase.storage
-          .from("generated-sites")
-          .upload(`${clientId}/styles.css`, cssBlob, { upsert: true, contentType: "text/css" }),
-      ]);
+      const { error: upErr } = await supabase.storage
+        .from("generated-sites")
+        .upload(`${clientId}/index.html`, htmlBlob, { upsert: true, contentType: "text/html" });
 
-      if (htmlUp.error) throw htmlUp.error;
-      if (cssUp.error) throw cssUp.error;
+      if (upErr) throw upErr;
 
-      // Clear failed status if applicable
+      // Get public URL & update site if previously failed
+      const { data: urlData } = supabase.storage
+        .from("generated-sites")
+        .getPublicUrl(`${clientId}/index.html`);
+
       const { data: site } = await supabase
         .from("sites")
         .select("generation_status")
         .eq("client_id", clientId)
         .maybeSingle();
 
+      const updates: any = {
+        staging_url: urlData.publicUrl,
+        last_updated: new Date().toISOString(),
+      };
       if ((site as any)?.generation_status === "failed") {
-        await supabase
-          .from("sites")
-          .update({ generation_status: "complete", generation_error: null } as any)
-          .eq("client_id", clientId);
+        updates.generation_status = "complete";
+        updates.generation_error = null;
       }
+
+      await supabase.from("sites").update(updates as any).eq("client_id", clientId);
 
       // Log the edit
       if (user) {
@@ -265,26 +222,9 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
             Code editor ♛
           </div>
 
-          {/* Tabs */}
+          {/* Single HTML tab */}
           <div className="flex items-center gap-1 bg-zinc-800 rounded-md p-1">
-            <button
-              onClick={() => setTab("html")}
-              className={cn(
-                "px-3 py-1 text-xs font-medium rounded transition-colors",
-                tab === "html" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white"
-              )}
-            >
-              HTML
-            </button>
-            <button
-              onClick={() => setTab("css")}
-              className={cn(
-                "px-3 py-1 text-xs font-medium rounded transition-colors",
-                tab === "css" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white"
-              )}
-            >
-              CSS
-            </button>
+            <span className="px-3 py-1 text-xs font-medium rounded bg-zinc-700 text-white">HTML</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -295,7 +235,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
               className="gap-1.5 bg-purple-600 hover:bg-purple-700 text-white"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-              {saving ? "Saving..." : "Save and preview"}
+              {saving ? "Saving..." : "Save and preview ♛"}
             </Button>
             <Button
               size="sm"
@@ -315,16 +255,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
               <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
             </div>
           )}
-          <div
-            ref={htmlHostRef}
-            className="absolute inset-0"
-            style={{ display: tab === "html" ? "block" : "none", fontSize: 14 }}
-          />
-          <div
-            ref={cssHostRef}
-            className="absolute inset-0"
-            style={{ display: tab === "css" ? "block" : "none", fontSize: 14 }}
-          />
+          <div ref={htmlHostRef} className="absolute inset-0" style={{ fontSize: 14 }} />
         </div>
 
         {/* Footer note */}
@@ -333,7 +264,6 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
         </div>
       </div>
 
-      {/* CodeMirror sizing override so editor fills its container */}
       <style>{`
         .CodeMirror { height: 100% !important; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 14px; }
       `}</style>
