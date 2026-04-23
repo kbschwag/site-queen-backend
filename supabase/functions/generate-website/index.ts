@@ -22,19 +22,38 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  let clientId: string | null = null;
-  let rawText = "";
-
+  // Parse body up-front so we can validate before dispatching to background
+  let bodyClientId: string | null = null;
   try {
     const body = await req.json();
-    clientId = body.client_id;
-    if (!clientId) {
-      return new Response(JSON.stringify({ error: "client_id required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    bodyClientId = body.client_id;
+  } catch (_e) {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  if (!bodyClientId) {
+    return new Response(JSON.stringify({ error: "client_id required" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
+  // Run the (long) generation in the background so we don't hit the 150s idle timeout.
+  // The client should poll `sites.generation_status` for progress.
+  // @ts-ignore — EdgeRuntime is provided by Supabase Edge Runtime
+  EdgeRuntime.waitUntil(runGeneration(bodyClientId));
+
+  return new Response(
+    JSON.stringify({ success: true, status: "generating", client_id: bodyClientId }),
+    { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+});
+
+async function runGeneration(clientId: string) {
+  let rawText = "";
+  try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
