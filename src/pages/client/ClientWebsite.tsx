@@ -23,6 +23,7 @@ import type { IntakeData } from "@/components/intake/types";
 import { SitePreviewFrame } from "@/components/operator/SitePreviewFrame";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import confetti from "canvas-confetti";
+import { buildSitePreviewUrl } from "@/lib/site-preview";
 
 export default function ClientWebsite() {
   const { user } = useAuth();
@@ -557,7 +558,7 @@ export default function ClientWebsite() {
 
   // STATE 5: Live
   if (siteIsLive) {
-    const siteUrl = site?.deploy_url || site?.staging_url || client.domain_name;
+    const siteUrl = site?.deploy_url || buildSitePreviewUrl(client.id);
     const domainDisplay = client.domain_name || siteUrl;
 
     if (!hasSeenConfetti && siteUrl) {
