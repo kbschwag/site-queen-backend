@@ -92,6 +92,29 @@ End with </html> as the very last character.`;
     // Strip any stray external stylesheet link
     finalHTML = finalHTML.replace(/<link[^>]*href=["']styles\.css["'][^>]*>/gi, "");
 
+    // Safety net: ensure animate-on-scroll elements always become visible.
+    // Prevents blank sections in iframe previews or when IntersectionObserver
+    // misses elements below the initial viewport.
+    const animateSafetyNet = `
+<style>
+  /* Fallback if JS is disabled or observer fails */
+  .no-js .animate-on-scroll { opacity: 1 !important; transform: none !important; }
+</style>
+<script>
+  // Force-reveal any animate-on-scroll element that hasn't become visible
+  // within 1.5s of load — protects against iframe/scroll-container edge cases.
+  (function(){
+    function reveal(){
+      document.querySelectorAll('.animate-on-scroll:not(.visible)').forEach(function(el){
+        el.classList.add('visible');
+      });
+    }
+    if (document.readyState === 'complete') setTimeout(reveal, 1500);
+    else window.addEventListener('load', function(){ setTimeout(reveal, 1500); });
+  })();
+</script>`;
+    finalHTML = finalHTML.replace("</body>", animateSafetyNet + "\n</body>");
+
     // Append Unsplash photo credits comment
     const { heroPhoto, aboutPhoto, whyUsPhoto, emergencyBgPhoto } = ctx.photos || {};
     if (ctx.usingStockPhotos && (heroPhoto || aboutPhoto || whyUsPhoto || emergencyBgPhoto)) {
