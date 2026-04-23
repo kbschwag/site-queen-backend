@@ -735,31 +735,19 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
               .maybeSingle();
             clientName = (prof as any)?.full_name || (prof as any)?.email || "Unknown";
           }
-          const businessName = (failedClient as any)?.business_name || "Unknown business";
-          const attempts = (failedSite as any)?.generation_attempts || 1;
-          const portalUrl = `${Deno.env.get("SUPABASE_URL")?.replace("https://", "https://app.").replace(".supabase.co", "")}/operator/clients?id=${clientId}`;
 
           await supabase.functions.invoke("send-email", {
             body: {
               to: "hello@sitequeen.ai",
-              subject: `⚠ Site generation failed — ${businessName}`,
-              html: `
-                <div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#ffffff;color:#1a1a1a;">
-                  <h2 style="color:#534AB7;margin:0 0 16px;">⚠ Site generation failed</h2>
-                  <p>Site generation failed for <strong>${businessName}</strong>.</p>
-                  <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-                    <tr><td style="padding:6px 0;color:#666;">Client:</td><td style="padding:6px 0;"><strong>${clientName}</strong></td></tr>
-                    <tr><td style="padding:6px 0;color:#666;">Business:</td><td style="padding:6px 0;"><strong>${businessName}</strong></td></tr>
-                    <tr><td style="padding:6px 0;color:#666;">Client ID:</td><td style="padding:6px 0;font-family:monospace;font-size:12px;">${clientId}</td></tr>
-                    <tr><td style="padding:6px 0;color:#666;">Attempts:</td><td style="padding:6px 0;"><strong>${attempts}</strong></td></tr>
-                  </table>
-                  <div style="background:#fff3f3;border:1px solid #fecaca;border-radius:8px;padding:12px;margin:16px 0;">
-                    <p style="margin:0;color:#991b1b;font-family:monospace;font-size:12px;word-break:break-word;">${error.message}</p>
-                  </div>
-                  <p style="color:#666;font-size:14px;">All intake and call notes data is safely saved and ready for retry.</p>
-                  <a href="https://sitequeen.ai/operator/clients" style="display:inline-block;background:#534AB7;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:8px;">Retry now in operator portal</a>
-                </div>
-              `,
+              template: "operator_generation_failed",
+              data: {
+                business_name: (failedClient as any)?.business_name || "Unknown business",
+                client_name: clientName,
+                client_id: clientId,
+                attempts: (failedSite as any)?.generation_attempts || 1,
+                error_message: error.message,
+              },
+              clientId,
             },
           });
         } catch (emailErr) {
