@@ -140,11 +140,18 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     }
 
     // ── Save final ───────────────────────────────────────────────────────
-    await supabase.storage.from("generated-sites").upload(
-      `${clientId}/index.html`,
-      new Blob([finalHTML], { type: "text/html" }),
-      { upsert: true, contentType: "text/html; charset=utf-8" }
-    );
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/index.html`,
+        new Blob([finalHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" }
+      );
+    if (uploadError) {
+      console.error("[part2] Storage upload failed:", uploadError);
+      throw new Error(`Failed to save site to storage: ${uploadError.message}`);
+    }
+    console.log("[part2] Upload successful:", uploadData);
 
     // Cleanup intermediate files (best-effort)
     await supabase.storage.from("generated-sites").remove([
