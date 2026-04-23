@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Code2, X, Loader2, Save } from "lucide-react";
+import { buildSitePreviewUrl } from "@/lib/site-preview";
 
 interface Props {
   open: boolean;
@@ -158,11 +159,6 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
 
       if (upErr) throw upErr;
 
-      // Get public URL & update site if previously failed
-      const { data: urlData } = supabase.storage
-        .from("generated-sites")
-        .getPublicUrl(`${clientId}/index.html`);
-
       const { data: site } = await supabase
         .from("sites")
         .select("generation_status")
@@ -170,7 +166,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
         .maybeSingle();
 
       const updates: any = {
-        staging_url: urlData.publicUrl,
+        staging_url: buildSitePreviewUrl(clientId),
         last_updated: new Date().toISOString(),
       };
       if ((site as any)?.generation_status === "failed") {
