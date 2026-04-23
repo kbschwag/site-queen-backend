@@ -1138,6 +1138,7 @@ export type Database = {
           generated_at: string | null
           generation_attempts: number
           generation_error: string | null
+          generation_progress: string | null
           generation_status: string | null
           id: string
           intake_data: Json | null
@@ -1172,6 +1173,7 @@ export type Database = {
           generated_at?: string | null
           generation_attempts?: number
           generation_error?: string | null
+          generation_progress?: string | null
           generation_status?: string | null
           id?: string
           intake_data?: Json | null
@@ -1206,6 +1208,7 @@ export type Database = {
           generated_at?: string | null
           generation_attempts?: number
           generation_error?: string | null
+          generation_progress?: string | null
           generation_status?: string | null
           id?: string
           intake_data?: Json | null
