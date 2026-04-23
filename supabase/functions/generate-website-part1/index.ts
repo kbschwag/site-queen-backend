@@ -172,8 +172,8 @@ Return ONLY raw HTML — no markdown, no code blocks, no explanation.
 Do NOT wrap the response in \`\`\`html fences.
 The very first character must be < and start with <!DOCTYPE html>.`;
 
-    console.log("[part1] Calling AI for top half…");
-    const call1 = await callAI(LOVABLE_API_KEY, call1Prompt, "call-1-top");
+    console.log("[part1] Calling Claude for top half…");
+    const call1 = await callAI(ANTHROPIC_API_KEY, call1Prompt, "call-1-top");
     let firstHalf = stripMarkdown(call1.text);
     if (!firstHalf.includes("<!DOCTYPE html>")) {
       throw new Error(`Call 1 did not return valid HTML. Started with: ${firstHalf.substring(0, 200)}`);
