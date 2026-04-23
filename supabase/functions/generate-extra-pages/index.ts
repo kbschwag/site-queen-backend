@@ -108,8 +108,9 @@ serve(async (req) => {
 
     // Trim homepage to the parts useful as style/structure reference
     const headBlock = extractHead(homepageHTML);
-    const navBlock = extractFirstMatch(homepageHTML, /<header[\s\S]*?<\/header>/i) || "";
+    const headerBlock = extractFirstMatch(homepageHTML, /<header[\s\S]*?<\/header>/i) || "";
     const footerBlock = extractFirstMatch(homepageHTML, /<footer[\s\S]*?<\/footer>/i) || "";
+    const sharedScripts = extractBodyScripts(homepageHTML);
 
     const sharedContext = `BUSINESS CONTEXT:
 Business name: ${clientData?.business_name || "Business"}
@@ -132,17 +133,18 @@ ${callNotes ? `CALL NOTES:\n${JSON.stringify(callNotes, null, 2)}\n` : ""}`;
           : "";
 
         const prompt = `You are building the ${page.label.toUpperCase()} page of a multi-page website for a small business.
-The homepage already exists. You must produce a standalone HTML page that visually matches the homepage exactly — same fonts, colors, header, footer, button styles, section spacing.
+The homepage already exists. You must produce ONLY the INNER PAGE CONTENT that belongs between the shared header and shared footer.
+Your output must visually match the homepage exactly — same fonts, colors, spacing, buttons, cards, and section rhythm.
 
 ${sharedContext}
 
-HOMEPAGE <head> (contains the full inlined CSS that styles the entire site — REUSE this <head> verbatim in your output):
+HOMEPAGE <head> (contains the full inlined CSS that styles the entire site):
 ${headBlock}
 
-HOMEPAGE HEADER (reuse this exact markup so the nav matches):
-${navBlock}
+HOMEPAGE HEADER (already handled separately — use it as visual reference only):
+${headerBlock}
 
-HOMEPAGE FOOTER (reuse this exact markup):
+HOMEPAGE FOOTER (already handled separately):
 ${footerBlock}
 ${ref}
 
@@ -150,34 +152,39 @@ PAGE BRIEF — ${page.label.toUpperCase()}:
 ${page.brief}
 
 REQUIREMENTS:
-- Output a COMPLETE standalone HTML document starting with <!DOCTYPE html> and ending with </html>.
-- Reuse the <head> from the homepage as-is (same <style> block, fonts, meta) so styling is identical.
-- Reuse the homepage <header> and <footer> as-is.
-- Update the <title> and <meta name="description"> for this page.
-- Update breadcrumbs / active nav link to reflect the current page.
-- Build the page body using the SAME class names the homepage uses (e.g. .hero, .about, .services, .btn, .section-heading, .section-eyebrow). Do NOT invent a new design system. If you need a new section, write minimal additional inline <style> AT THE TOP of <body> — but prefer reusing existing classes.
+- Return ONLY the markup that goes BETWEEN the shared header and footer.
+- Do NOT return <!DOCTYPE html>, <html>, <head>, <body>, <header>, or <footer>.
+- Build the page body using the SAME class names the homepage uses (e.g. .hero, .about, .services, .btn, .section-heading, .section-eyebrow). Do NOT invent a new design system. If you need a new section, you may include one small <style> block before the first section — but prefer reusing existing classes.
 - Add a small "page hero" / breadcrumb area at the top (dark background, page title, optional breadcrumb). The homepage CSS already has helpers — reuse them.
 - All internal links: Home → "./index.html", About → "./about.html", Services → "./services.html", Contact → "./contact.html", and any other pages should follow the same "./<slug>.html" pattern.
 - All phone numbers must be tel: links, emails must be mailto: links.
 - Replace any nav link to a page that does not exist with "#".
-- Just before </body> include the SAME analytics tracking script the homepage uses (find it in the homepage and replicate exactly).
+- Do NOT include any <script> tags. Shared scripts are already handled globally.
 - Inline-only CSS. No external stylesheets.
 - Mobile-perfect responsive.
 
 CRITICAL OUTPUT INSTRUCTIONS:
-Return ONLY raw HTML — no markdown, no code blocks, no explanation.
+Return ONLY raw HTML for the inner page content — no markdown, no code blocks, no explanation.
 Do NOT wrap in \`\`\`.
-First character must be <, starting with <!DOCTYPE html>.
-Last character must be > closing </html>.`;
+First character must be < and should usually begin with <section or <style>.
+Do not include closing </body> or </html> tags.`;
 
         console.log(`[extra-pages] Generating ${page.slug} (${prompt.length} chars prompt)…`);
         const res = await callAI(ANTHROPIC_API_KEY, prompt, `page-${page.slug}`);
-        let html = stripMarkdown(res.text);
-        if (!html.includes("<!DOCTYPE") || !html.includes("</html>")) {
+        const pageBody = normalizeGeneratedBody(stripMarkdown(res.text));
+        if (!pageBody) {
           throw new Error(`Page ${page.slug} returned malformed HTML`);
         }
-        // Strip any external stylesheet that might have slipped in
-        html = html.replace(/<link[^>]*href=["']styles?\.css["'][^>]*>/gi, "");
+        const html = composePageHtml({
+          businessName: clientData?.business_name || "Business",
+          headBlock,
+          headerBlock,
+          footerBlock,
+          sharedScripts,
+          pageSlug: page.slug,
+          pageLabel: page.label,
+          pageBody,
+        });
 
         await supabase.storage.from("generated-sites").upload(
           `${clientId}/${page.slug}.html`,
@@ -294,6 +301,111 @@ function buildRef(label: string, html: string, css: string): string {
   const trimmedHtml = html ? html.slice(0, 6000) : "";
   const trimmedCss = css ? css.slice(0, 4000) : "";
   return `\n\n${label}:\n${trimmedHtml ? `HTML:\n${trimmedHtml}\n` : ""}${trimmedCss ? `CSS (excerpt):\n${trimmedCss}\n` : ""}`;
+}
+
+function extractBodyScripts(html: string): string {
+  const matches = html.match(/<script[\s\S]*?<\/script>/gi);
+  return matches ? matches.join("\n") : "";
+}
+
+function normalizeGeneratedBody(html: string): string {
+  if (!html) return "";
+
+  let normalized = html
+    .replace(/<link[^>]*href=["']styles?\.css["'][^>]*>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .trim();
+
+  const bodyMatch = normalized.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch) normalized = bodyMatch[1].trim();
+
+  return normalized
+    .replace(/<!DOCTYPE[\s\S]*?>/gi, "")
+    .replace(/<html[^>]*>/gi, "")
+    .replace(/<\/html>/gi, "")
+    .replace(/<head[\s\S]*?<\/head>/gi, "")
+    .replace(/<body[^>]*>/gi, "")
+    .replace(/<\/body>/gi, "")
+    .replace(/<header[\s\S]*?<\/header>/gi, "")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+    .trim();
+}
+
+function composePageHtml({
+  businessName,
+  headBlock,
+  headerBlock,
+  footerBlock,
+  sharedScripts,
+  pageSlug,
+  pageLabel,
+  pageBody,
+}: {
+  businessName: string;
+  headBlock: string;
+  headerBlock: string;
+  footerBlock: string;
+  sharedScripts: string;
+  pageSlug: string;
+  pageLabel: string;
+  pageBody: string;
+}): string {
+  const title = `${businessName} — ${pageLabel}`;
+  const description = `${pageLabel} page for ${businessName}. Learn more about the company, services, and how to get in touch.`;
+
+  return [
+    "<!DOCTYPE html>",
+    "<html lang=\"en\">",
+    injectPageMeta(headBlock || "<head></head>", title, description, pageSlug),
+    "<body>",
+    markActiveNav(headerBlock, pageSlug),
+    pageBody,
+    markActiveNav(footerBlock, pageSlug),
+    sharedScripts,
+    "</body>",
+    "</html>",
+  ].filter(Boolean).join("\n");
+}
+
+function injectPageMeta(headBlock: string, title: string, description: string, pageSlug: string): string {
+  let head = headBlock;
+  const pagePath = pageSlug === "index" ? "./index.html" : `./${pageSlug}.html`;
+
+  head = /<title>[\s\S]*?<\/title>/i.test(head)
+    ? head.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+    : head.replace(/<head>/i, `<head>\n<title>${escapeHtml(title)}</title>`);
+
+  head = /<meta\s+name=["']description["'][^>]*>/i.test(head)
+    ? head.replace(/<meta\s+name=["']description["'][^>]*>/i, `<meta name="description" content="${escapeHtml(description)}" />`)
+    : head.replace(/<\/head>/i, `  <meta name="description" content="${escapeHtml(description)}" />\n</head>`);
+
+  if (/<link\s+rel=["']canonical["'][^>]*>/i.test(head)) {
+    head = head.replace(/<link\s+rel=["']canonical["'][^>]*>/i, `<link rel="canonical" href="${pagePath}" />`);
+  }
+
+  return head;
+}
+
+function markActiveNav(markup: string, pageSlug: string): string {
+  if (!markup) return "";
+  const targetHref = pageSlug === "index" ? "./index.html" : `./${pageSlug}.html`;
+
+  return markup.replace(/<a\b([^>]*?)href=(['"])(.*?)\2([^>]*)>/gi, (full, before, quote, href, after) => {
+    const isActive = href === targetHref || (pageSlug === "index" && (href === "./index.html" || href === "#"));
+    let attrs = `${before}href=${quote}${href}${quote}${after}`;
+    attrs = attrs.replace(/\saria-current=(['"]).*?\1/gi, "");
+    attrs = attrs.replace(/\sclass=(['"])(.*?)\1/i, (_m, q, cls) => {
+      const tokens = String(cls).split(/\s+/).filter(Boolean).filter((token) => token !== "active");
+      if (isActive) tokens.push("active");
+      return ` class=${q}${tokens.join(" ")}${q}`;
+    });
+    if (isActive) attrs += ` aria-current="page"`;
+    return `<a${attrs}>`;
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
