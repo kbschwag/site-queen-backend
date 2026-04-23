@@ -230,7 +230,11 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
     try {
       const r = await fetch(AI_ENDPOINT, {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           model: AI_MODEL,
           max_tokens: 16000,
@@ -239,24 +243,27 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
       });
       if (!r.ok) {
         const errText = await r.text();
-        console.error(`[${label}] AI error ${r.status}:`, errText);
-        if ((r.status === 429 || r.status === 529) && attempt < MAX_ATTEMPTS) {
+        console.error(`[${label}] Claude error ${r.status}:`, errText);
+        if ((r.status === 429 || r.status === 529 || r.status === 529) && attempt < MAX_ATTEMPTS) {
           await new Promise((res) => setTimeout(res, 3000 * attempt));
           continue;
         }
-        throw new Error(`AI ${label} failed: ${r.status}`);
+        throw new Error(`Claude ${label} failed: ${r.status} — ${errText.substring(0, 300)}`);
       }
       const data = await r.json();
+      const text = Array.isArray(data.content)
+        ? data.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
+        : "";
       return {
-        text: data.choices?.[0]?.message?.content || "",
-        outputTokens: data.usage?.completion_tokens || data.usage?.output_tokens || 0,
+        text,
+        outputTokens: data.usage?.output_tokens || 0,
       };
     } catch (err) {
       lastErr = err as Error;
       if (attempt < MAX_ATTEMPTS) await new Promise((res) => setTimeout(res, 2000));
     }
   }
-  throw lastErr || new Error(`AI failed: ${label}`);
+  throw lastErr || new Error(`Claude failed: ${label}`);
 }
 
 function stripMarkdown(s: string): string {
