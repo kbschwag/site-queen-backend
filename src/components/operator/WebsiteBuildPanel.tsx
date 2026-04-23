@@ -335,7 +335,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Status Badge */}
+      {/* Status Badge + toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
         <Badge className={status.color}>
           <StatusIcon className={`h-3 w-3 mr-1 ${generationStatus === "generating" ? "animate-spin" : ""}`} />
@@ -345,6 +345,17 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           <span className="text-xs text-muted-foreground">
             Generated {new Date((site as any).generated_at).toLocaleDateString()}
           </span>
+        )}
+        {hasGeneratedFile && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowCodeEditor(true)}
+            className="gap-1.5 ml-auto"
+          >
+            <Code2 className="h-3.5 w-3.5" />
+            {"< > View / edit code"}
+          </Button>
         )}
       </div>
 
