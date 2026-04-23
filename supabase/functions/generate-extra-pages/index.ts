@@ -189,7 +189,7 @@ Do not include closing </body> or </html> tags.`;
         await supabase.storage.from("generated-sites").upload(
           `${clientId}/${page.slug}.html`,
           new Blob([html], { type: "text/html" }),
-          { upsert: true }
+          { upsert: true, contentType: "text/html; charset=utf-8" }
         );
         generated.push(page.slug);
         console.log(`[extra-pages] ✓ ${page.slug}.html saved (${res.outputTokens} tokens)`);
