@@ -57,8 +57,12 @@ export async function uploadToHostingerFtp(uploads: FtpUpload[]): Promise<void> 
       host,
       user,
       password,
-      secure: true, // FTPS (explicit TLS)
-      secureOptions: { rejectUnauthorized: false }, // Hostinger certs sometimes mismatch
+      // FTPS via explicit TLS (`secure: true`) is preferred but Hostinger's
+      // shared-hosting endpoint sometimes rejects the TLS upgrade from edge
+      // network ranges. Allow opting out via env var. Default = plain FTP
+      // because that's what consistently works from Supabase Edge Runtime.
+      secure: Deno.env.get("HOSTINGER_FTP_SECURE") === "true",
+      secureOptions: { rejectUnauthorized: false },
     });
 
     for (const u of uploads) {
