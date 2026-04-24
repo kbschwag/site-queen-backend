@@ -40,15 +40,17 @@ serve(async (req) => {
 
     const html = await file.text();
 
-    const headers = new Headers();
-    headers.set("Content-Type", "text/html; charset=utf-8");
-    headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
-    headers.set("X-Content-Type-Options", "nosniff");
-    headers.set("X-Frame-Options", "ALLOWALL");
+    const encoder = new TextEncoder();
+    const encoded = encoder.encode(html);
 
-    return new Response(html, {
+    return new Response(encoded, {
       status: 200,
-      headers: headers,
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-cache, no-store, must-revalidate',
+        'x-content-type-options': 'nosniff',
+        'x-frame-options': 'ALLOWALL',
+      },
     });
   } catch (e) {
     console.error("[serve-site] error:", e);
