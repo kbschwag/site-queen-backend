@@ -9,6 +9,31 @@ const corsHeaders = {
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
+// Rewrite ./pagename.html and pagename.html links to route through serve-site,
+// and inject a noindex meta tag. Used only for staging copies.
+function rewriteForStaging(html: string, clientId: string, supabaseUrl: string): string {
+  const baseUrl = `${supabaseUrl}/functions/v1/serve-site?client=${clientId}&page=`;
+
+  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g,
+    (_m, q, slug) => `href=${q}${baseUrl}${slug}${q}`);
+
+  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g, (match, q, slug) => {
+    if (slug.startsWith("http")) return match;
+    return `href=${q}${baseUrl}${slug}${q}`;
+  });
+
+  if (!/name=["']robots["']/i.test(out)) {
+    const tag = `\n  <meta name="robots" content="noindex, nofollow" />`;
+    if (/<meta\s+charset=["'][^"']+["']\s*\/?>/i.test(out)) {
+      out = out.replace(/(<meta\s+charset=["'][^"']+["']\s*\/?>)/i, `$1${tag}`);
+    } else if (/<head[^>]*>/i.test(out)) {
+      out = out.replace(/(<head[^>]*>)/i, `$1${tag}`);
+    }
+  }
+
+  return out;
+}
+
 // Page slug → human label + brief
 const PAGE_BRIEFS: Record<string, { label: string; brief: string; templateRef?: "about" | "services" }> = {
   about: {
