@@ -173,7 +173,7 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     //   - clean copy at `[clientId]/deploy/index.html` — original relative
     //     links, no noindex. This is what we ship to Hostinger.
     const cleanHTML = finalHTML;
-    const stagingHTML = rewriteForStaging(finalHTML, clientId, supabaseUrl);
+    const stagingHTML = rewriteLinksForStaging(finalHTML, clientId, supabaseUrl);
 
     const { error: stagingErr } = await supabase.storage
       .from("generated-sites")
