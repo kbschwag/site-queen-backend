@@ -233,20 +233,21 @@ Do not include closing </body> or </html> tags.`;
         });
 
         const cleanHTML = html;
-        const stagingHTML = rewriteLinksForStaging(html, clientId, supabaseUrl);
+        const stagingHTML = rewriteLinksForStaging(html);
 
-        const { error: stagingErr } = await supabase.storage
-          .from("generated-sites")
-          .upload(
-            `${clientId}/${page.slug}.html`,
-            new Blob([stagingHTML], { type: "text/html" }),
-            { upsert: true, contentType: "text/html; charset=utf-8" },
+        // 1) Push staging copy to Hostinger
+        try {
+          await uploadToHostinger(
+            hostingerToken,
+            `${STAGING_FOLDER_ROOT}/${clientId}/${page.slug}.html`,
+            stagingHTML,
           );
-        if (stagingErr) {
-          console.error(`[extra-pages] Staging upload failed for ${page.slug}:`, stagingErr);
-          throw new Error(`Failed to save staging ${page.slug}.html: ${stagingErr.message}`);
+        } catch (e: any) {
+          console.error(`[extra-pages] Hostinger staging upload failed for ${page.slug}:`, e.message);
+          throw new Error(`Hostinger staging upload failed for ${page.slug}: ${e.message}`);
         }
 
+        // 2) Backup clean copy to Supabase storage (deploy folder)
         const { error: cleanErr } = await supabase.storage
           .from("generated-sites")
           .upload(
@@ -255,11 +256,11 @@ Do not include closing </body> or </html> tags.`;
             { upsert: true, contentType: "text/html; charset=utf-8" },
           );
         if (cleanErr) {
-          console.error(`[extra-pages] Deploy copy upload failed for ${page.slug}:`, cleanErr);
-          throw new Error(`Failed to save deploy/${page.slug}.html: ${cleanErr.message}`);
+          console.error(`[extra-pages] Deploy backup upload failed for ${page.slug}:`, cleanErr);
+          throw new Error(`Failed to save deploy/${page.slug}.html backup: ${cleanErr.message}`);
         }
         generated.push(page.slug);
-        console.log(`[extra-pages] ✓ ${page.slug}.html saved (staging + deploy, ${res.outputTokens} tokens)`);
+        console.log(`[extra-pages] ✓ ${page.slug}.html (staging→Hostinger + deploy backup, ${res.outputTokens} tokens)`);
       } catch (e: any) {
         console.error(`[extra-pages] ✗ ${page.slug} failed:`, e.message);
         failed.push(`${page.slug}: ${e.message}`);
