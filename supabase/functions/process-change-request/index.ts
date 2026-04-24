@@ -185,7 +185,7 @@ Return ONLY a valid JSON object with these four fields. No explanation or markdo
         try {
           const stagingHtml = injectNoindex(result.html);
           await uploadFileToHostingerFtp(
-            `/public_html/staging/${clientId}/index.html`,
+            `/public_html/${clientId}/index.html`,
             stagingHtml,
           );
         } catch (e) {
