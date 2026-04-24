@@ -189,6 +189,9 @@ export default function OperatorClients() {
                         {siteStatusMap[c.id] === "complete" && (
                           <Badge className="bg-blue-500/10 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Review</Badge>
                         )}
+                        {siteStatusMap[c.id] === "failed" && (
+                          <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-[10px] px-1.5 py-0">Generation Failed</Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">{planLabel(c.plan)}</TableCell>
