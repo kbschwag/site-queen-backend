@@ -186,19 +186,34 @@ Do not include closing </body> or </html> tags.`;
           pageBody,
         });
 
-        const { data: pageUpload, error: pageUploadErr } = await supabase.storage
+        const cleanHTML = html;
+        const stagingHTML = rewriteForStaging(html, clientId, supabaseUrl);
+
+        const { error: stagingErr } = await supabase.storage
           .from("generated-sites")
           .upload(
             `${clientId}/${page.slug}.html`,
-            new Blob([html], { type: "text/html" }),
-            { upsert: true, contentType: "text/html; charset=utf-8" }
+            new Blob([stagingHTML], { type: "text/html" }),
+            { upsert: true, contentType: "text/html; charset=utf-8" },
           );
-        if (pageUploadErr) {
-          console.error(`[extra-pages] Storage upload failed for ${page.slug}:`, pageUploadErr);
-          throw new Error(`Failed to save ${page.slug}.html to storage: ${pageUploadErr.message}`);
+        if (stagingErr) {
+          console.error(`[extra-pages] Staging upload failed for ${page.slug}:`, stagingErr);
+          throw new Error(`Failed to save staging ${page.slug}.html: ${stagingErr.message}`);
+        }
+
+        const { error: cleanErr } = await supabase.storage
+          .from("generated-sites")
+          .upload(
+            `${clientId}/deploy/${page.slug}.html`,
+            new Blob([cleanHTML], { type: "text/html" }),
+            { upsert: true, contentType: "text/html; charset=utf-8" },
+          );
+        if (cleanErr) {
+          console.error(`[extra-pages] Deploy copy upload failed for ${page.slug}:`, cleanErr);
+          throw new Error(`Failed to save deploy/${page.slug}.html: ${cleanErr.message}`);
         }
         generated.push(page.slug);
-        console.log(`[extra-pages] ✓ ${page.slug}.html saved (${res.outputTokens} tokens)`, pageUpload);
+        console.log(`[extra-pages] ✓ ${page.slug}.html saved (staging + deploy, ${res.outputTokens} tokens)`);
       } catch (e: any) {
         console.error(`[extra-pages] ✗ ${page.slug} failed:`, e.message);
         failed.push(`${page.slug}: ${e.message}`);
