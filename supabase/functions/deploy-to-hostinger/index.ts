@@ -90,14 +90,11 @@ serve(async (req) => {
       throw new Error("Clean deploy/index.html not found in storage — re-generate the site first");
     }
 
-    // Check for Hostinger API token
-    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
-    if (!hostingerToken) {
-      throw new Error("HOSTINGER_API_TOKEN not configured");
-    }
+    // FTP credentials are checked lazily inside the shared helper.
 
-    // Upload every clean HTML page (index.html + about.html + services.html + …)
-    const uploaded: string[] = [];
+    // Download every clean HTML page first, then upload them all in a single
+    // FTPS session for efficiency.
+    const ftpUploads: { remotePath: string; content: string }[] = [];
     for (const f of htmlFiles) {
       const { data: pageFile, error: pageErr } = await supabase.storage
         .from("generated-sites")
@@ -105,43 +102,29 @@ serve(async (req) => {
       if (pageErr || !pageFile) {
         throw new Error(`Could not download deploy/${f.name}: ${pageErr?.message}`);
       }
-      const pageContent = await pageFile.text();
-      const uploadResponse = await fetch(
-        "https://api.hostinger.com/v1/hosting/files/upload",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${hostingerToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            path: `${folderPath}/${f.name}`,
-            content: btoa(unescape(encodeURIComponent(pageContent))),
-          }),
-        }
-      );
-      if (!uploadResponse.ok) {
-        const errText = await uploadResponse.text();
-        throw new Error(`Hostinger upload failed for ${f.name}: ${uploadResponse.status} - ${errText}`);
-      }
-      uploaded.push(f.name);
+      ftpUploads.push({
+        remotePath: `${folderPath}/${f.name}`,
+        content: await pageFile.text(),
+      });
     }
-    console.log(`[deploy] Uploaded ${uploaded.length} pages from deploy/: ${uploaded.join(", ")}`);
 
     // Plant safety marker file on first deployment
     if (deployCount === 0) {
-      await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${hostingerToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          path: `${folderPath}/.sitequeen-${clientId}`,
-          content: btoa(clientId),
-        }),
+      ftpUploads.push({
+        remotePath: `${folderPath}/.sitequeen-${clientId}`,
+        content: clientId,
       });
     }
+
+    try {
+      await uploadToHostingerFtp(ftpUploads);
+    } catch (e: any) {
+      throw new Error(`Hostinger FTPS upload failed: ${e.message}`);
+    }
+
+    const uploaded = htmlFiles.map((f: any) => f.name);
+    console.log(`[deploy] Uploaded ${uploaded.length} pages from deploy/: ${uploaded.join(", ")}`);
+
 
     // Update client to live
     await supabase
