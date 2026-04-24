@@ -42,9 +42,8 @@ serve(async (req) => {
 
     return new Response(html, {
       headers: {
-        ...corsHeaders,
         "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Cache-Control": "no-cache",
         "X-Frame-Options": "ALLOWALL",
         "Content-Security-Policy": "frame-ancestors *",
       },
