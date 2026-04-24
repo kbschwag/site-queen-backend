@@ -307,7 +307,7 @@ Do not include </body> or </html>.`;
         staging_url: stagingURL,
         site_status: "review",
       } as any)
-      .eq("client_id", clientId);
+      .or(`client_id.eq.${clientId},id.eq.${clientId}`);
     if (siteUpdateErr) {
       console.error("[extra-pages] Failed to mark site complete:", siteUpdateErr);
     } else {
