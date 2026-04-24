@@ -67,7 +67,10 @@ serve(async (req) => {
       throw new Error("No Hostinger folder path set — aborting");
     }
 
-    const folderPath = client.hostinger_folder_path;
+    // Live sites are served straight out of /public_html on Hostinger.
+    // The per-client `hostinger_folder_path` is retained on the record for
+    // historical/auditing purposes but is no longer used for the upload path.
+    const folderPath = "/public_html";
     const domain = client.domain_name;
     const deployCount = client.deploy_count || 0;
 
