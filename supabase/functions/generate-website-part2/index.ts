@@ -247,6 +247,61 @@ End with </html> as the very last character.`;
     }
     console.log("[part2] ✓ Clean deploy backup saved to storage");
 
+    // ── Upload site.css ──────────────────────────────────────────────────
+    try {
+      await uploadFileToHostingerFtp(
+        `${STAGING_FOLDER_ROOT}/${clientId}/site.css`,
+        extractedCSS,
+      );
+      console.log("[part2] ✓ site.css pushed to Hostinger staging");
+    } catch (e: any) {
+      console.error("[part2] site.css Hostinger upload failed:", e.message);
+      throw new Error(`Hostinger site.css upload failed: ${e.message}`);
+    }
+
+    const { error: cssErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/deploy/site.css`,
+        new Blob([extractedCSS], { type: "text/css" }),
+        { upsert: true, contentType: "text/css; charset=utf-8" },
+      );
+    if (cssErr) throw new Error(`Failed to save deploy/site.css: ${cssErr.message}`);
+    console.log("[part2] ✓ site.css deploy backup saved");
+
+    // ── Upload site.js ───────────────────────────────────────────────────
+    try {
+      await uploadFileToHostingerFtp(
+        `${STAGING_FOLDER_ROOT}/${clientId}/site.js`,
+        finalJS,
+      );
+      console.log("[part2] ✓ site.js pushed to Hostinger staging");
+    } catch (e: any) {
+      console.error("[part2] site.js Hostinger upload failed:", e.message);
+      throw new Error(`Hostinger site.js upload failed: ${e.message}`);
+    }
+
+    const { error: jsErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/deploy/site.js`,
+        new Blob([finalJS], { type: "application/javascript" }),
+        { upsert: true, contentType: "application/javascript; charset=utf-8" },
+      );
+    if (jsErr) throw new Error(`Failed to save deploy/site.js: ${jsErr.message}`);
+    console.log("[part2] ✓ site.js deploy backup saved");
+
+    // ── Upload site-meta.json ────────────────────────────────────────────
+    const { error: metaErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/deploy/site-meta.json`,
+        new Blob([JSON.stringify(siteMeta, null, 2)], { type: "application/json" }),
+        { upsert: true, contentType: "application/json; charset=utf-8" },
+      );
+    if (metaErr) console.error("[part2] site-meta.json upload failed (non-fatal):", metaErr);
+    else console.log("[part2] ✓ site-meta.json saved");
+
     // Cleanup intermediate files (best-effort)
     await supabase.storage.from("generated-sites").remove([
       `${clientId}/part1.html`,
