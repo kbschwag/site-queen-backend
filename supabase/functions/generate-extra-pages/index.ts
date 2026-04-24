@@ -108,6 +108,10 @@ serve(async (req) => {
     if (homeErr || !homeFile) throw new Error(`Cannot load homepage: ${homeErr?.message}`);
     const homepageHTML = await homeFile.text();
 
+    // Load site-meta (class inventory + brand tokens) — tiny, replaces sending full CSS to Claude
+    const { data: metaFile } = await supabase.storage.from("generated-sites").download(`${clientId}/deploy/site-meta.json`);
+    const siteMeta = metaFile ? JSON.parse(await metaFile.text()) : { classes: [], primaryColor: "", accentColor: "", fontHeading: "", fontBody: "" };
+
     const { data: siteData } = await supabase.from("sites").select("*").eq("client_id", clientId).single();
     const { data: clientData } = await supabase.from("clients").select("*").eq("id", clientId).single();
     const intake = (siteData as any)?.intake_data || {};
@@ -115,6 +119,16 @@ serve(async (req) => {
     const { data: callNotes } = applicationId
       ? await supabase.from("call_notes").select("*").eq("application_id", applicationId).maybeSingle()
       : { data: null };
+
+    // Extract only the <head> tag (for meta/title injection) and header/footer blocks
+    // Strip the <style> block entirely — styles now live in site.css
+    const rawHeadBlock = extractHead(homepageHTML);
+    const headBlock = rawHeadBlock.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,
+      `<link rel="stylesheet" href="./site.css" />`
+    );
+    const headerBlock = extractFirstMatch(homepageHTML, /<header[\s\S]*?<\/header>/i) || "";
+    const footerBlock = extractFirstMatch(homepageHTML, /<footer[\s\S]*?<\/footer>/i) || "";
+    // No shared scripts needed — site.js handles everything
 
     // ── Decide which pages to build ─────────────────────────────────────
     const pages = resolveRequestedPages(intake, callNotes);
