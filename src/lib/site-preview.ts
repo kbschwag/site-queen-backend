@@ -1,16 +1,17 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+
 /**
- * Returns the direct Supabase Storage public URL for a generated site page.
- * Bucket `generated-sites` is public, so files are served with their stored
- * MIME type (text/html) — no edge function needed.
+ * Returns the staging preview URL for a generated site page.
+ * The URL routes through the `serve-site` edge function so multi-page
+ * navigation (about, services, contact …) works inside the iframe and
+ * external link previews. The router serves the rewritten staging copy
+ * with a noindex meta tag and frame-allow headers.
  */
 export function buildSitePreviewUrl(clientId: string, page = "index.html") {
-  const normalizedPage = page.endsWith(".html") ? page : `${page}.html`;
-  const { data } = supabase.storage
-    .from("generated-sites")
-    .getPublicUrl(`${clientId}/${normalizedPage}`);
-  return data.publicUrl;
+  const slug = page.replace(/\.html$/i, "") || "index";
+  return `${SUPABASE_URL}/functions/v1/serve-site?client=${clientId}&page=${slug}`;
 }
 
 export function buildSitePreviewUrlWithCacheBust(
@@ -24,3 +25,7 @@ export function buildSitePreviewUrlWithCacheBust(
   url.searchParams.set("v", String(cacheBust));
   return url.toString();
 }
+
+// Re-export for legacy imports — `supabase` no longer needed here but kept
+// to avoid breaking any consumer that imports from this module.
+export { supabase };
