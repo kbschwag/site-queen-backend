@@ -9,17 +9,18 @@ const corsHeaders = {
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
-// Rewrite ./pagename.html and pagename.html links to route through serve-site,
-// and inject a noindex meta tag. Used only for staging copies.
-function rewriteForStaging(html: string, clientId: string, supabaseUrl: string): string {
-  const baseUrl = `${supabaseUrl}/functions/v1/serve-site?client=${clientId}&page=`;
+// Rewrite internal page links (./about.html, about.html) to use full
+// Supabase storage URLs so multi-page navigation works in the staging
+// preview without any router. Also injects a noindex meta tag.
+function rewriteLinksForStaging(html: string, clientId: string, supabaseUrl: string): string {
+  const baseStorageUrl = `${supabaseUrl}/storage/v1/object/public/generated-sites/${clientId}`;
 
-  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g,
-    (_m, q, slug) => `href=${q}${baseUrl}${slug}${q}`);
+  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g,
+    (_m, q, slug, hash) => `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`);
 
-  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g, (match, q, slug) => {
+  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g, (match, q, slug, hash) => {
     if (slug.startsWith("http")) return match;
-    return `href=${q}${baseUrl}${slug}${q}`;
+    return `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`;
   });
 
   if (!/name=["']robots["']/i.test(out)) {
@@ -212,7 +213,7 @@ Do not include closing </body> or </html> tags.`;
         });
 
         const cleanHTML = html;
-        const stagingHTML = rewriteForStaging(html, clientId, supabaseUrl);
+        const stagingHTML = rewriteLinksForStaging(html, clientId, supabaseUrl);
 
         const { error: stagingErr } = await supabase.storage
           .from("generated-sites")

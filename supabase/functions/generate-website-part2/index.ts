@@ -9,25 +9,27 @@ const corsHeaders = {
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
-// Staging URL — routes through serve-site edge function so internal links
-// (./about.html, ./services.html) can be rewritten to navigate inside the
-// preview. Also injects noindex so the staging copy is never indexed.
+// Staging URL — direct Supabase storage public URL. The bucket is public
+// so the browser can load the HTML directly. No edge function in front.
 function buildStagingUrl(supabaseUrl: string, clientId: string, page = "index"): string {
   const slug = page.replace(/\.html$/i, "");
-  return `${supabaseUrl}/functions/v1/serve-site?client=${clientId}&page=${slug}`;
+  return `${supabaseUrl}/storage/v1/object/public/generated-sites/${clientId}/${slug}.html`;
 }
 
-// Rewrite ./pagename.html and pagename.html links to route through serve-site.
-// Skip external links (http*) and anchors (#…). Also injects a noindex meta tag.
-function rewriteForStaging(html: string, clientId: string, supabaseUrl: string): string {
-  const baseUrl = `${supabaseUrl}/functions/v1/serve-site?client=${clientId}&page=`;
+// Rewrite internal page links (./about.html, about.html) to use full
+// Supabase storage URLs so multi-page navigation works in the staging
+// preview without any router. Also injects a noindex meta tag.
+function rewriteLinksForStaging(html: string, clientId: string, supabaseUrl: string): string {
+  const baseStorageUrl = `${supabaseUrl}/storage/v1/object/public/generated-sites/${clientId}`;
 
-  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g,
-    (_m, q, slug) => `href=${q}${baseUrl}${slug}${q}`);
+  // Rewrite ./pagename.html links (preserve hash if present)
+  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g,
+    (_m, q, slug, hash) => `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`);
 
-  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g, (match, q, slug) => {
+  // Rewrite pagename.html links without ./ (skip external)
+  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g, (match, q, slug, hash) => {
     if (slug.startsWith("http")) return match;
-    return `href=${q}${baseUrl}${slug}${q}`;
+    return `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`;
   });
 
   // Inject noindex once
@@ -171,7 +173,7 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     //   - clean copy at `[clientId]/deploy/index.html` — original relative
     //     links, no noindex. This is what we ship to Hostinger.
     const cleanHTML = finalHTML;
-    const stagingHTML = rewriteForStaging(finalHTML, clientId, supabaseUrl);
+    const stagingHTML = rewriteLinksForStaging(finalHTML, clientId, supabaseUrl);
 
     const { error: stagingErr } = await supabase.storage
       .from("generated-sites")
