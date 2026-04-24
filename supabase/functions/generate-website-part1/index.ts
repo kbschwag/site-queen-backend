@@ -177,17 +177,49 @@ ${sharedContext}
 
 INSTRUCTIONS — FIRST HALF:
 Generate the FIRST HALF of this website.
+
+STRUCTURE RULES:
+- Use semantic HTML5 elements throughout: <section>, <article>, <nav>, <main>, <aside>, <header>, <footer>. No div soup.
+- All class names must follow BEM-lite convention: block, block-title, block-body, block-cta, block-item, block-icon. Never use arbitrary names like wrapper-19 or container-58.
+- Zero inline styles. Everything goes in the <style> block. No style="" attributes anywhere.
+- Define ALL colors, fonts, and spacing as CSS custom properties at the very top of the <style> block:
+  :root {
+    --color-primary: [client primary or industry default];
+    --color-accent: [client accent or industry default];
+    --color-dark: #0d1d3b;
+    --color-text: #333333;
+    --color-bg: #ffffff;
+    --font-heading: '[chosen heading font]', sans-serif;
+    --font-body: '[chosen body font]', sans-serif;
+    --spacing-section: 80px;
+    --border-radius: 8px;
+  }
+- One Google Fonts <link> tag only. Combine all fonts into a single URL request.
+- All CSS goes in ONE <style> block in the <head>. That CSS must cover the ENTIRE site — all sections from both halves, plus shared inner-page classes: .page-hero, .breadcrumb, .content-section, .sidebar, .service-card, .pricing-card, .accordion, .accordion-item, .accordion-trigger, .accordion-body, .feature-list, .coupon-card.
+- The output will be post-processed: the <style> block will be extracted into site.css and the <script> block will be extracted into site.js. Write CSS and JS with this in mind — no duplicate rules, no conflicts.
+
+HTML STRUCTURE:
 Start with <!DOCTYPE html> and include the full <head> with ALL CSS inlined in a <style> tag.
-That CSS must cover the ENTIRE site, not just the first half — include styles for all sections that will appear later too, including emergency CTA, why us, reviews, financing, service areas, FAQ, final CTA, and footer.
-ALSO include CSS for shared layout elements that will be reused on inner pages (about, services, contact): .page-hero / breadcrumb, .content-section, .sidebar, .coupon-card, .feature-list, .service-card, .pricing-card, .accordion. Inner pages will reuse this exact CSS — design it generously so a separate About / Services / Contact page can render with no extra <style>.
 Include these sections in order: topbar, header, mobile nav, hero, trust bar, credentials, about, stats, services.
 Stop after the closing </section> tag of the services section.
-Do NOT close </body> or </html> yet — the second half continues from here.
+Do NOT close </body> or </html> yet.
+
+IMAGES:
+- Hero background image: CSS background-image only, never an <img> tag.
+- All <img> tags must have loading="lazy" except the first visible image which gets loading="eager" fetchpriority="high".
+- Every image must have a meaningful alt attribute.
+
+NAVIGATION:
+Multi-page site. Desktop AND mobile nav links must point to real files:
+Home → "./index.html", About → "./about.html", Services → "./services.html", Contact → "./contact.html".
+If call notes list additional pages, link those too (e.g. "./gallery.html").
+Anchors like #about are fine ONLY for sections on the homepage itself.
+
+CONTENT:
 Replace all {{PLACEHOLDERS}} with real client data.
 For any missing data use a professional relevant default — never leave a placeholder visible.
-All CSS must be inlined in a <style> tag in the <head> — do not reference any external stylesheet.
-Make all phone numbers click-to-call links and email addresses mailto links.
-IMPORTANT — multi-page navigation: this site will be multi-page. In the desktop nav AND the mobile nav, the links must point to real files: Home → "./index.html" (or "#"), About → "./about.html", Services → "./services.html", Contact → "./contact.html". If the call notes list additional pages, link those too (e.g. "./gallery.html"). Anchors like #about are fine ONLY for sections that exist on the homepage.
+If a section has no real data to fill it, remove it entirely. Never render an empty or skeleton section.
+Make all phone numbers click-to-call tel: links and email addresses mailto: links.
 The site must be fully responsive and mobile-perfect.
 
 CRITICAL OUTPUT INSTRUCTIONS:
@@ -262,11 +294,16 @@ The very first character must be < and start with <!DOCTYPE html>.`;
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
+  const TIMEOUT_MS = 90_000; // 90 seconds — clean error instead of silent hang
   let lastErr: Error | null = null;
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const r = await fetch(AI_ENDPOINT, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
@@ -274,14 +311,15 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
         },
         body: JSON.stringify({
           model: AI_MODEL,
-          max_tokens: 6000,
+          max_tokens: 12000,
           messages: [{ role: "user", content }],
         }),
       });
+      clearTimeout(timeout);
       if (!r.ok) {
         const errText = await r.text();
         console.error(`[${label}] Claude error ${r.status}:`, errText);
-        if ((r.status === 429 || r.status === 529 || r.status === 529) && attempt < MAX_ATTEMPTS) {
+        if ((r.status === 429 || r.status === 529) && attempt < MAX_ATTEMPTS) {
           await new Promise((res) => setTimeout(res, 3000 * attempt));
           continue;
         }
@@ -291,12 +329,15 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
       const text = Array.isArray(data.content)
         ? data.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
         : "";
-      return {
-        text,
-        outputTokens: data.usage?.output_tokens || 0,
-      };
-    } catch (err) {
-      lastErr = err as Error;
+      return { text, outputTokens: data.usage?.output_tokens || 0 };
+    } catch (err: any) {
+      clearTimeout(timeout);
+      if (err.name === "AbortError") {
+        lastErr = new Error(`Claude ${label} timed out after ${TIMEOUT_MS / 1000}s`);
+      } else {
+        lastErr = err as Error;
+      }
+      console.error(`[${label}] attempt ${attempt} failed:`, lastErr.message);
       if (attempt < MAX_ATTEMPTS) await new Promise((res) => setTimeout(res, 2000));
     }
   }
@@ -411,7 +452,7 @@ async function fetchUnsplashPhoto(searchTerms: string[], width = 800, height = 6
       if (r.ok) {
         const p = await r.json();
         return {
-          url: `${p.urls.raw}&w=${width}&h=${height}&fit=crop&auto=format`,
+          url: `${p.urls.raw}&w=${width}&h=${height}&fit=crop&auto=format&q=80`,
           photographer: p.user?.name || "Unsplash",
           photographer_url: p.user?.links?.html || "https://unsplash.com",
           unsplash_url: p.links?.html || "https://unsplash.com",
