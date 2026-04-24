@@ -422,8 +422,8 @@ function extractFirstMatch(html: string, re: RegExp): string | null {
 
 function buildRef(label: string, html: string, css: string): string {
   if (!html && !css) return "";
-  const trimmedHtml = html ? html.slice(0, 6000) : "";
-  const trimmedCss = css ? css.slice(0, 4000) : "";
+  const trimmedHtml = html ? html.slice(0, 2000) : "";
+  const trimmedCss = css ? css.slice(0, 1000) : "";
   return `\n\n${label}:\n${trimmedHtml ? `HTML:\n${trimmedHtml}\n` : ""}${trimmedCss ? `CSS (excerpt):\n${trimmedCss}\n` : ""}`;
 }
 
