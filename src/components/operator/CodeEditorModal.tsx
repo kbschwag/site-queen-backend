@@ -104,7 +104,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
 
         const htmlRes = await supabase.storage
           .from("generated-sites")
-          .download(`${clientId}/index.html`);
+          .download(`${clientId}/deploy/index.html`);
 
         if (cancelled) return;
 
