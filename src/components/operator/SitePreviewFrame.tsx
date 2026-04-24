@@ -18,10 +18,12 @@ export function SitePreviewFrame({ clientId, stagingUrl, height = 600 }: Props) 
   const [activePage, setActivePage] = useState<string>("index.html");
   const [cacheBuster, setCacheBuster] = useState(() => Date.now());
 
-  // List every .html file the generator produced for this client.
+  // List every .html file in the deploy/ backup folder. Staging copies
+  // now live on Hostinger; deploy/ is the source of truth for which
+  // pages exist for this client.
   const refreshPages = useCallback(async () => {
     try {
-      const { data, error } = await supabase.storage.from("generated-sites").list(clientId, { limit: 100 });
+      const { data, error } = await supabase.storage.from("generated-sites").list(`${clientId}/deploy`, { limit: 100 });
       if (error) throw error;
       const html = (data || [])
         .map((f) => f.name)

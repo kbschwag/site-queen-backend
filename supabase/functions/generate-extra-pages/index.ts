@@ -9,20 +9,14 @@ const corsHeaders = {
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
-// Rewrite internal page links (./about.html, about.html) to use full
-// Supabase storage URLs so multi-page navigation works in the staging
-// preview without any router. Also injects a noindex meta tag.
-function rewriteLinksForStaging(html: string, clientId: string, supabaseUrl: string): string {
-  const baseStorageUrl = `${supabaseUrl}/storage/v1/object/public/generated-sites/${clientId}`;
+// Staging is hosted on Hostinger at staging.sitequeen.ai → /public_html/staging
+const STAGING_FOLDER_ROOT = "/public_html/staging";
 
-  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g,
-    (_m, q, slug, hash) => `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`);
-
-  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g, (match, q, slug, hash) => {
-    if (slug.startsWith("http")) return match;
-    return `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`;
-  });
-
+// Inject noindex meta tag for staging copies. Internal page links use plain
+// relative paths (./about.html etc.) which work natively on the Hostinger
+// staging subdomain — no rewriting needed.
+function rewriteLinksForStaging(html: string): string {
+  let out = html;
   if (!/name=["']robots["']/i.test(out)) {
     const tag = `\n  <meta name="robots" content="noindex, nofollow" />`;
     if (/<meta\s+charset=["'][^"']+["']\s*\/?>/i.test(out)) {
@@ -31,8 +25,30 @@ function rewriteLinksForStaging(html: string, clientId: string, supabaseUrl: str
       out = out.replace(/(<head[^>]*>)/i, `$1${tag}`);
     }
   }
-
   return out;
+}
+
+// Upload one HTML page to Hostinger via REST API.
+async function uploadToHostinger(
+  hostingerToken: string,
+  remotePath: string,
+  content: string,
+): Promise<void> {
+  const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${hostingerToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      path: remotePath,
+      content: btoa(unescape(encodeURIComponent(content))),
+    }),
+  });
+  if (!r.ok) {
+    const errText = await r.text();
+    throw new Error(`Hostinger upload failed (${r.status}) for ${remotePath}: ${errText.substring(0, 300)}`);
+  }
 }
 
 // Page slug → human label + brief
@@ -101,9 +117,13 @@ serve(async (req) => {
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
+    if (!hostingerToken) throw new Error("HOSTINGER_API_TOKEN not configured");
 
-    // ── Load homepage + supporting context ──────────────────────────────
-    const { data: homeFile, error: homeErr } = await supabase.storage.from("generated-sites").download(`${clientId}/index.html`);
+    // ── Load homepage (clean copy) + supporting context ─────────────────
+    // Homepage now lives only in the deploy/ backup folder — staging is
+    // pushed straight to Hostinger.
+    const { data: homeFile, error: homeErr } = await supabase.storage.from("generated-sites").download(`${clientId}/deploy/index.html`);
     if (homeErr || !homeFile) throw new Error(`Cannot load homepage: ${homeErr?.message}`);
     const homepageHTML = await homeFile.text();
 
@@ -213,20 +233,21 @@ Do not include closing </body> or </html> tags.`;
         });
 
         const cleanHTML = html;
-        const stagingHTML = rewriteLinksForStaging(html, clientId, supabaseUrl);
+        const stagingHTML = rewriteLinksForStaging(html);
 
-        const { error: stagingErr } = await supabase.storage
-          .from("generated-sites")
-          .upload(
-            `${clientId}/${page.slug}.html`,
-            new Blob([stagingHTML], { type: "text/html" }),
-            { upsert: true, contentType: "text/html; charset=utf-8" },
+        // 1) Push staging copy to Hostinger
+        try {
+          await uploadToHostinger(
+            hostingerToken,
+            `${STAGING_FOLDER_ROOT}/${clientId}/${page.slug}.html`,
+            stagingHTML,
           );
-        if (stagingErr) {
-          console.error(`[extra-pages] Staging upload failed for ${page.slug}:`, stagingErr);
-          throw new Error(`Failed to save staging ${page.slug}.html: ${stagingErr.message}`);
+        } catch (e: any) {
+          console.error(`[extra-pages] Hostinger staging upload failed for ${page.slug}:`, e.message);
+          throw new Error(`Hostinger staging upload failed for ${page.slug}: ${e.message}`);
         }
 
+        // 2) Backup clean copy to Supabase storage (deploy folder)
         const { error: cleanErr } = await supabase.storage
           .from("generated-sites")
           .upload(
@@ -235,11 +256,11 @@ Do not include closing </body> or </html> tags.`;
             { upsert: true, contentType: "text/html; charset=utf-8" },
           );
         if (cleanErr) {
-          console.error(`[extra-pages] Deploy copy upload failed for ${page.slug}:`, cleanErr);
-          throw new Error(`Failed to save deploy/${page.slug}.html: ${cleanErr.message}`);
+          console.error(`[extra-pages] Deploy backup upload failed for ${page.slug}:`, cleanErr);
+          throw new Error(`Failed to save deploy/${page.slug}.html backup: ${cleanErr.message}`);
         }
         generated.push(page.slug);
-        console.log(`[extra-pages] ✓ ${page.slug}.html saved (staging + deploy, ${res.outputTokens} tokens)`);
+        console.log(`[extra-pages] ✓ ${page.slug}.html (staging→Hostinger + deploy backup, ${res.outputTokens} tokens)`);
       } catch (e: any) {
         console.error(`[extra-pages] ✗ ${page.slug} failed:`, e.message);
         failed.push(`${page.slug}: ${e.message}`);

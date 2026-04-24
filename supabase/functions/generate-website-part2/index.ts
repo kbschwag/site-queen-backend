@@ -9,28 +9,26 @@ const corsHeaders = {
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
-// Staging URL — direct Supabase storage public URL. The bucket is public
-// so the browser can load the HTML directly. No edge function in front.
-function buildStagingUrl(supabaseUrl: string, clientId: string, page = "index"): string {
+// Staging is hosted on Hostinger at staging.sitequeen.ai → /public_html/staging
+const STAGING_BASE_URL = "https://staging.sitequeen.ai";
+const STAGING_FOLDER_ROOT = "/public_html/staging";
+
+// Staging URL — points at the Hostinger staging subdomain. Real web server,
+// real relative links, no router needed.
+function buildStagingUrl(clientId: string, page = "index"): string {
   const slug = page.replace(/\.html$/i, "");
-  return `${supabaseUrl}/storage/v1/object/public/generated-sites/${clientId}/${slug}.html`;
+  return `${STAGING_BASE_URL}/${clientId}/${slug}.html`;
 }
 
-// Rewrite internal page links (./about.html, about.html) to use full
-// Supabase storage URLs so multi-page navigation works in the staging
-// preview without any router. Also injects a noindex meta tag.
-function rewriteLinksForStaging(html: string, clientId: string, supabaseUrl: string): string {
-  const baseStorageUrl = `${supabaseUrl}/storage/v1/object/public/generated-sites/${clientId}`;
-
-  // Rewrite ./pagename.html links (preserve hash if present)
-  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g,
-    (_m, q, slug, hash) => `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`);
-
-  // Rewrite pagename.html links without ./ (skip external)
-  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g, (match, q, slug, hash) => {
-    if (slug.startsWith("http")) return match;
-    return `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`;
-  });
+// Rewrite internal page links (./about.html, about.html) so they navigate
+// within the same Hostinger staging folder. Because Hostinger serves these
+// files at /staging/{clientId}/, plain relative links like "./about.html"
+// already work — but we still inject noindex so search engines don't index
+// the staging copy. Link rewriting is a no-op here for sibling pages; we
+// keep the function so we can still strip stray absolute URLs later if
+// needed.
+function rewriteLinksForStaging(html: string): string {
+  let out = html;
 
   // Inject noindex once
   if (!/name=["']robots["']/i.test(out)) {
@@ -43,6 +41,29 @@ function rewriteLinksForStaging(html: string, clientId: string, supabaseUrl: str
   }
 
   return out;
+}
+
+// Upload one HTML page to Hostinger via REST API. Used for staging deploys.
+async function uploadToHostinger(
+  hostingerToken: string,
+  remotePath: string,
+  content: string,
+): Promise<void> {
+  const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${hostingerToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      path: remotePath,
+      content: btoa(unescape(encodeURIComponent(content))),
+    }),
+  });
+  if (!r.ok) {
+    const errText = await r.text();
+    throw new Error(`Hostinger upload failed (${r.status}) for ${remotePath}: ${errText.substring(0, 300)}`);
+  }
 }
 
 serve(async (req) => {
@@ -166,27 +187,32 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     }
 
     // ── Save final ───────────────────────────────────────────────────────
-    // Two copies of every page:
-    //   - staging copy at `[clientId]/index.html` — links rewritten to route
-    //     through serve-site so multi-page nav works inside the preview;
-    //     also has noindex meta so search engines never see it.
-    //   - clean copy at `[clientId]/deploy/index.html` — original relative
-    //     links, no noindex. This is what we ship to Hostinger.
+    // ── Save final ───────────────────────────────────────────────────────
+    // Two destinations:
+    //   - Hostinger /public_html/staging/{clientId}/index.html — the LIVE
+    //     staging copy operators preview at https://staging.sitequeen.ai/...
+    //     (links rewritten as no-op, noindex meta injected).
+    //   - Supabase storage [clientId]/deploy/index.html — backup + source
+    //     of truth for the go-live deploy-to-hostinger step.
     const cleanHTML = finalHTML;
-    const stagingHTML = rewriteLinksForStaging(finalHTML, clientId, supabaseUrl);
+    const stagingHTML = rewriteLinksForStaging(finalHTML);
 
-    const { error: stagingErr } = await supabase.storage
-      .from("generated-sites")
-      .upload(
-        `${clientId}/index.html`,
-        new Blob([stagingHTML], { type: "text/html" }),
-        { upsert: true, contentType: "text/html; charset=utf-8" },
+    // 1) Push staging copy to Hostinger via REST API
+    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
+    if (!hostingerToken) throw new Error("HOSTINGER_API_TOKEN not configured");
+    try {
+      await uploadToHostinger(
+        hostingerToken,
+        `${STAGING_FOLDER_ROOT}/${clientId}/index.html`,
+        stagingHTML,
       );
-    if (stagingErr) {
-      console.error("[part2] Staging upload failed:", stagingErr);
-      throw new Error(`Failed to save staging index.html: ${stagingErr.message}`);
+      console.log("[part2] ✓ Staging index.html pushed to Hostinger");
+    } catch (e: any) {
+      console.error("[part2] Hostinger staging upload failed:", e.message);
+      throw new Error(`Hostinger staging upload failed: ${e.message}`);
     }
 
+    // 2) Backup clean copy to Supabase storage (deploy folder)
     const { error: cleanErr } = await supabase.storage
       .from("generated-sites")
       .upload(
@@ -195,10 +221,10 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
         { upsert: true, contentType: "text/html; charset=utf-8" },
       );
     if (cleanErr) {
-      console.error("[part2] Deploy copy upload failed:", cleanErr);
-      throw new Error(`Failed to save deploy/index.html: ${cleanErr.message}`);
+      console.error("[part2] Deploy backup upload failed:", cleanErr);
+      throw new Error(`Failed to save deploy/index.html backup: ${cleanErr.message}`);
     }
-    console.log("[part2] Upload successful (staging + deploy copies)");
+    console.log("[part2] ✓ Clean deploy backup saved to storage");
 
     // Cleanup intermediate files (best-effort)
     await supabase.storage.from("generated-sites").remove([
@@ -206,7 +232,7 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       `${clientId}/part2-context.json`,
     ]).catch(() => {});
 
-    const stagingURL = buildStagingUrl(supabaseUrl, clientId, "index");
+    const stagingURL = buildStagingUrl(clientId, "index");
 
     await supabase.from("sites").update({
       generation_status: "complete",
