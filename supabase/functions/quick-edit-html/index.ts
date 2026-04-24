@@ -71,11 +71,12 @@ serve(async (req) => {
       });
     }
 
-    // Download current staging HTML
+    // Download current clean HTML from the deploy backup folder.
+    // (Staging copies live on Hostinger; deploy/ is the source of truth.)
     const { data: file, error: dlErr } = await supabase.storage
       .from("generated-sites")
-      .download(`${clientId}/index.html`);
-    if (dlErr || !file) throw new Error("Could not load staging HTML — has the site been generated?");
+      .download(`${clientId}/deploy/index.html`);
+    if (dlErr || !file) throw new Error("Could not load site HTML — has the site been generated?");
 
     const currentHtml = await file.text();
 
@@ -140,14 +141,42 @@ Rules:
       throw new Error("AI output does not look like a complete HTML document");
     }
 
-    // Upload to staging
+    // 1) Save clean copy back to the deploy backup folder
     const { error: upErr } = await supabase.storage
       .from("generated-sites")
-      .upload(`${clientId}/index.html`, new Blob([updatedHtml], { type: "text/html" }), {
+      .upload(`${clientId}/deploy/index.html`, new Blob([updatedHtml], { type: "text/html" }), {
         upsert: true,
         contentType: "text/html",
       });
     if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+
+    // 2) Push staging copy (with noindex) straight to Hostinger so the
+    //    operator + client preview iframes show the change immediately.
+    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
+    if (hostingerToken) {
+      try {
+        const stagingHtml = injectNoindex(updatedHtml);
+        const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${hostingerToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            path: `/public_html/staging/${clientId}/index.html`,
+            content: btoa(unescape(encodeURIComponent(stagingHtml))),
+          }),
+        });
+        if (!r.ok) {
+          const errText = await r.text();
+          console.error(`[quick-edit] Hostinger staging push failed ${r.status}:`, errText.substring(0, 300));
+        }
+      } catch (e: any) {
+        console.error("[quick-edit] Hostinger staging push error:", e);
+      }
+    } else {
+      console.warn("[quick-edit] HOSTINGER_API_TOKEN missing — skipping staging push");
+    }
 
     // Update sites metadata
     await supabase
@@ -157,6 +186,7 @@ Rules:
         operator_edit_count: ((await supabase.from("sites").select("operator_edit_count").eq("client_id", clientId!).maybeSingle()).data?.operator_edit_count ?? 0) + 1,
       } as any)
       .eq("client_id", clientId!);
+
 
     // Log edit
     await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null, instruction, "completed", null);
