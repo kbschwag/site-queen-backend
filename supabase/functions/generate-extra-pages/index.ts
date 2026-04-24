@@ -9,20 +9,14 @@ const corsHeaders = {
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
-// Rewrite internal page links (./about.html, about.html) to use full
-// Supabase storage URLs so multi-page navigation works in the staging
-// preview without any router. Also injects a noindex meta tag.
-function rewriteLinksForStaging(html: string, clientId: string, supabaseUrl: string): string {
-  const baseStorageUrl = `${supabaseUrl}/storage/v1/object/public/generated-sites/${clientId}`;
+// Staging is hosted on Hostinger at staging.sitequeen.ai → /public_html/staging
+const STAGING_FOLDER_ROOT = "/public_html/staging";
 
-  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g,
-    (_m, q, slug, hash) => `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`);
-
-  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(#[^'"]*)?\1/g, (match, q, slug, hash) => {
-    if (slug.startsWith("http")) return match;
-    return `href=${q}${baseStorageUrl}/${slug}.html${hash || ""}${q}`;
-  });
-
+// Inject noindex meta tag for staging copies. Internal page links use plain
+// relative paths (./about.html etc.) which work natively on the Hostinger
+// staging subdomain — no rewriting needed.
+function rewriteLinksForStaging(html: string): string {
+  let out = html;
   if (!/name=["']robots["']/i.test(out)) {
     const tag = `\n  <meta name="robots" content="noindex, nofollow" />`;
     if (/<meta\s+charset=["'][^"']+["']\s*\/?>/i.test(out)) {
@@ -31,8 +25,30 @@ function rewriteLinksForStaging(html: string, clientId: string, supabaseUrl: str
       out = out.replace(/(<head[^>]*>)/i, `$1${tag}`);
     }
   }
-
   return out;
+}
+
+// Upload one HTML page to Hostinger via REST API.
+async function uploadToHostinger(
+  hostingerToken: string,
+  remotePath: string,
+  content: string,
+): Promise<void> {
+  const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${hostingerToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      path: remotePath,
+      content: btoa(unescape(encodeURIComponent(content))),
+    }),
+  });
+  if (!r.ok) {
+    const errText = await r.text();
+    throw new Error(`Hostinger upload failed (${r.status}) for ${remotePath}: ${errText.substring(0, 300)}`);
+  }
 }
 
 // Page slug → human label + brief
