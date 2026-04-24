@@ -50,6 +50,13 @@ function rewriteLinksForStaging(html: string): string {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Homepage generation now happens in a single pass in generate-website.
+  // This function is kept for backwards compatibility but exits immediately.
+  console.log("[part2] Skipping — homepage now generated in single pass");
+  return new Response(JSON.stringify({ success: true, status: "skipped" }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
