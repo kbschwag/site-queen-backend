@@ -358,11 +358,16 @@ End with </html> as the very last character.`;
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
+  const TIMEOUT_MS = 90_000; // 90 seconds — clean error instead of silent hang
   let lastErr: Error | null = null;
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const r = await fetch(AI_ENDPOINT, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
@@ -370,10 +375,11 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
         },
         body: JSON.stringify({
           model: AI_MODEL,
-          max_tokens: 16000,
+          max_tokens: 12000,
           messages: [{ role: "user", content }],
         }),
       });
+      clearTimeout(timeout);
       if (!r.ok) {
         const errText = await r.text();
         console.error(`[${label}] Claude error ${r.status}:`, errText);
@@ -387,12 +393,15 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
       const text = Array.isArray(data.content)
         ? data.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
         : "";
-      return {
-        text,
-        outputTokens: data.usage?.output_tokens || 0,
-      };
-    } catch (err) {
-      lastErr = err as Error;
+      return { text, outputTokens: data.usage?.output_tokens || 0 };
+    } catch (err: any) {
+      clearTimeout(timeout);
+      if (err.name === "AbortError") {
+        lastErr = new Error(`Claude ${label} timed out after ${TIMEOUT_MS / 1000}s`);
+      } else {
+        lastErr = err as Error;
+      }
+      console.error(`[${label}] attempt ${attempt} failed:`, lastErr.message);
       if (attempt < MAX_ATTEMPTS) await new Promise((res) => setTimeout(res, 2000));
     }
   }
