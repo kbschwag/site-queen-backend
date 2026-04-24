@@ -1,93 +1,113 @@
 // Shared upload helper for Hostinger shared hosting.
 //
-// Hostinger's public REST API has no file-upload endpoint, and Supabase Edge
-// Runtime blocks outbound TCP on FTP/SFTP ports. So we POST files over HTTPS
-// to a tiny PHP receiver living on the Hostinger account itself
-// (scripts/hostinger-upload-receiver.php → uploaded to /public_html/_sq_upload.php).
+// We POST files over HTTPS to a tiny PHP receiver living on the Hostinger
+// account itself (/public_html/_sq_upload.php).
+//
+// Receiver contract (current):
+//   - Header: X-SECRET = STAGING_UPLOAD_SECRET
+//   - Body:   multipart/form-data with:
+//       file       — the file blob
+//       client_id  — destination client folder (UUID) or "__root__" for /public_html
+//       filename   — destination filename (e.g. index.html)
 //
 // Required project secrets:
-//   - HOSTINGER_UPLOAD_URL    — full https URL of the receiver
-//                                (e.g. https://sitequeen.ai/_sq_upload.php)
-//   - HOSTINGER_UPLOAD_SECRET — shared secret string; must match the
-//                                SHARED_SECRET constant in the PHP file.
+//   - STAGING_UPLOAD_SECRET — shared secret string; must match the
+//                              SHARED_SECRET / X-SECRET expected by the PHP file.
+//   - HOSTINGER_UPLOAD_URL  — full https URL of the receiver
+//                              (e.g. https://staging.sitequeen.ai/_sq_upload.php).
+//                              Falls back to the staging URL if not set.
+
+const DEFAULT_RECEIVER_URL = "https://staging.sitequeen.ai/_sq_upload.php";
 
 export interface FtpUpload {
-  /** Absolute remote path, e.g. "/public_html/index.html" */
+  /** Absolute remote path, e.g. "/public_html/staging/<clientId>/index.html"
+   *  or "/public_html/index.html". The helper derives client_id + filename
+   *  from the trailing two path segments. */
   remotePath: string;
   /** Raw file contents (UTF-8 string for HTML, or bytes) */
   content: string | Uint8Array;
 }
 
 function getCreds() {
-  const url = Deno.env.get("HOSTINGER_UPLOAD_URL");
-  const secret = Deno.env.get("HOSTINGER_UPLOAD_SECRET");
-  if (!url || !secret) {
+  const url = Deno.env.get("HOSTINGER_UPLOAD_URL") || DEFAULT_RECEIVER_URL;
+  const secret =
+    Deno.env.get("STAGING_UPLOAD_SECRET") ||
+    Deno.env.get("HOSTINGER_UPLOAD_SECRET");
+  if (!secret) {
     throw new Error(
-      "Hostinger upload receiver not configured — set HOSTINGER_UPLOAD_URL and HOSTINGER_UPLOAD_SECRET in project secrets, and upload scripts/hostinger-upload-receiver.php to /public_html/_sq_upload.php on Hostinger.",
+      "Hostinger upload receiver not configured — set STAGING_UPLOAD_SECRET in project secrets.",
     );
   }
   return { url, secret };
 }
 
-function toBase64(content: string | Uint8Array): string {
-  const bytes =
-    typeof content === "string"
-      ? new TextEncoder().encode(content)
-      : content;
-  // Base64-encode without busting the call stack on large payloads.
-  let bin = "";
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+/** Pull `client_id` and `filename` out of a remotePath. */
+function splitRemotePath(remotePath: string): { clientId: string; filename: string } {
+  const parts = remotePath.split("/").filter(Boolean);
+  const filename = parts[parts.length - 1] || "index.html";
+  // Recognise patterns:
+  //   public_html/staging/<clientId>/<file>     → clientId = staging/<clientId>
+  //   public_html/<clientId>/<file>             → clientId = <clientId>
+  //   public_html/<file>                        → clientId = "__root__"
+  // The receiver decides the destination folder; we just pass these tokens.
+  if (parts.length >= 4 && parts[0] === "public_html" && parts[1] === "staging") {
+    return { clientId: `staging/${parts[2]}`, filename };
   }
-  return btoa(bin);
+  if (parts.length >= 3 && parts[0] === "public_html") {
+    return { clientId: parts[1], filename };
+  }
+  return { clientId: "__root__", filename };
+}
+
+async function uploadOne(
+  url: string,
+  secret: string,
+  upload: FtpUpload,
+): Promise<void> {
+  const { clientId, filename } = splitRemotePath(upload.remotePath);
+  const bytes =
+    typeof upload.content === "string"
+      ? new TextEncoder().encode(upload.content)
+      : upload.content;
+  const blob = new Blob([bytes], { type: "text/html" });
+
+  const form = new FormData();
+  form.append("file", blob, filename);
+  form.append("client_id", clientId);
+  form.append("filename", filename);
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "X-SECRET": secret },
+    body: form,
+  });
+
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(
+      `Hostinger upload receiver failed for ${upload.remotePath} (${resp.status}): ${text.substring(0, 400)}`,
+    );
+  }
+  console.log(`[hostinger-upload] ${upload.remotePath} → ${text.substring(0, 200)}`);
 }
 
 /**
- * Upload one or many files to Hostinger via the PHP receiver. All uploads
- * happen in a single POST so it stays fast.
+ * Upload one or many files to Hostinger via the PHP receiver. Each file is
+ * sent as its own multipart POST (the receiver accepts one file per request).
  */
 export async function uploadToHostingerFtp(uploads: FtpUpload[]): Promise<void> {
   if (uploads.length === 0) return;
   const { url, secret } = getCreds();
-
-  const payload = {
-    files: uploads.map((u) => ({
-      path: u.remotePath,
-      content_b64: toBase64(u.content),
-    })),
-  };
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Upload-Secret": secret,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const text = await resp.text();
-  if (!resp.ok && resp.status !== 207) {
-    throw new Error(
-      `Hostinger upload receiver failed (${resp.status}): ${text.substring(0, 400)}`,
-    );
+  const failures: string[] = [];
+  for (const u of uploads) {
+    try {
+      await uploadOne(url, secret, u);
+    } catch (e: any) {
+      failures.push(e.message || String(e));
+    }
   }
-
-  // Parse response and surface partial failures as a thrown error.
-  let parsed: any;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error(
-      `Hostinger upload receiver returned non-JSON (${resp.status}): ${text.substring(0, 200)}`,
-    );
-  }
-  if (Array.isArray(parsed?.failed) && parsed.failed.length > 0) {
-    const summary = parsed.failed
-      .map((f: any) => `${f.path}: ${f.error}`)
-      .join("; ");
-    throw new Error(`Hostinger upload partial failure: ${summary}`);
+  if (failures.length > 0) {
+    throw new Error(`Hostinger upload partial failure: ${failures.join("; ")}`);
   }
 }
 
