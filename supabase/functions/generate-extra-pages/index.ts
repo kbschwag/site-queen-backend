@@ -204,34 +204,96 @@ ${siteMeta.classes.join(", ")}`;
           ? buildRef("SERVICES PAGE REFERENCE (layout inspiration only — do NOT copy code or CSS)", servicesTpl, servicesCss)
           : "";
 
-        const prompt = `You are building the ${page.label.toUpperCase()} page of a multi-page small business website.
+        const prompt = `You are an expert web developer working for SiteQueen, a done-for-you website service. Your job is to build the ${page.label.toUpperCase()} page for a real paying client's website. The homepage already exists and was built from a professional template. Your inner page must match it exactly in design, tone, and quality.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CLIENT DATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${sharedContext}
 
-HOMEPAGE HEADER (visual reference — will be injected separately):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HOMEPAGE HEADER (inject this exactly — do not rewrite it)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 ${headerBlock}
 
-HOMEPAGE FOOTER (visual reference — will be injected separately):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HOMEPAGE FOOTER (inject this exactly — do not rewrite it)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 ${footerBlock}
 ${ref}
 
-PAGE BRIEF — ${page.label.toUpperCase()}:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR RULES — apply these in order for every section
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RULE 1 — CALL NOTES OVERRIDE EVERYTHING
+Follow all call notes instructions exactly for this page. They override intake data and template structure.
+
+RULE 2 — FILL IN WITH REAL CLIENT DATA
+Use intake form data to fill in all sections. Keep HTML structure identical to the reference template for this page type. Only change text and image URLs.
+
+RULE 3 — MISSING DATA: FILL WITH AI GENERATED CONTENT OR REMOVE
+FILL WITH AI GENERATED CONTENT:
+- Service descriptions missing → write professional ones based on the service name and business type
+- About story missing → write a compelling story using everything known about the business
+- Team bios missing → if team section exists in template, write professional bios based on the business or remove the team section entirely
+- FAQ missing → write 5-8 relevant questions a real customer of this business would ask
+- Testimonials missing → write 3 realistic ones with local names and specific service details
+
+REMOVE ENTIRELY if real unverifiable data is missing:
+- Star ratings and review counts → remove if not provided
+- Certifications, licenses, awards → remove if not provided, never invent
+- Real address → remove if not provided
+- Real phone → remove if not provided, never invent
+Never fabricate contact details, credentials, or ratings.
+
+RULE 4 — REMOVING A SECTION
+Delete it entirely. No empty divs, no commented-out code, no gaps in layout.
+
+RULE 5 — ADDING A NEW SECTION
+Only if explicitly requested in call notes or intake. Match the homepage design system exactly — same colors, fonts, spacing, button styles. Add minimal CSS in a <style> block before the new section only.
+
+RULE 6 — COPY AND TONE
+Match the tone from call notes exactly. If not specified, match the industry and stay consistent with the homepage copy style. Write like a real person. No corporate filler phrases.
+
+RULE 7 — TECHNICAL REQUIREMENTS
+- All phone numbers → tel: links
+- All emails → mailto: links
+- All images → loading="lazy" and meaningful alt text
+- Zero inline styles — no style="" attributes
+- No placeholder images — use provided URLs or remove the element
+- Internal links: Home → "./index.html", About → "./about.html", Services → "./services.html", Contact → "./contact.html"
+- Mark the current page as active in the navigation
+
+RULE 8 — PAGE STRUCTURE
+- Start with a page hero section (dark background, page title, breadcrumb navigation)
+- Use the same section rhythm and spacing as the homepage
+- End with a strong CTA section directing visitors to contact or book
+
+RULE 9 — WHAT GOOD OUTPUT LOOKS LIKE
+This page must feel like a natural continuation of the homepage. Same fonts, same colors, same button styles, same card styles, same spacing. A visitor navigating from the homepage to this page should feel like they are still on the same professionally designed website.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PAGE BRIEF — ${page.label.toUpperCase()}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 ${page.brief}
 
-REQUIREMENTS:
-- Return ONLY the markup between the shared header and footer. Nothing else.
-- Do NOT return <!DOCTYPE html>, <html>, <head>, <body>, <header>, or <footer> tags.
-- Use the SAME BEM-lite class names already in site.css (listed in the brand design system above). Do not invent a new design system.
-- If you need a class that does not exist, add ONE small <style> block before your first <section> — keep it minimal, use CSS custom properties from :root.
-- Start with a page-hero section (dark background, page title, optional breadcrumb).
-- All internal links: Home → "./index.html", About → "./about.html", Services → "./services.html", Contact → "./contact.html". Other pages use "./<slug>.html".
-- All phone numbers must be tel: links. All emails must be mailto: links.
-- All <img> tags must have loading="lazy" and a meaningful alt attribute.
-- Zero inline styles. No style="" attributes.
-- Do NOT include any <script> tags.
-- Do NOT include a <link> to site.css — it is already in the <head>.
-- If a section has no real data, remove it entirely. Never render an empty or skeleton section.
-- Mobile-perfect responsive.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INSTRUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Return ONLY the markup that goes between the shared header and footer.
+Do NOT return <!DOCTYPE html>, <html>, <head>, <body>, <header>, or <footer> tags.
+If you need any new CSS that is not already in the homepage stylesheet, add ONE <style> block before your first <section> — keep it minimal.
+Do NOT include any <script> tags.
+Do NOT include a <link> to any stylesheet — the homepage CSS is already injected in the <head>.
+Start with a page hero / breadcrumb section.
+End before </body>.
+Mobile-perfect responsive.
 
 CRITICAL OUTPUT INSTRUCTIONS:
 Return ONLY raw HTML — no markdown, no code blocks, no explanation.
@@ -534,7 +596,7 @@ function escapeHtml(value: string): string {
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
-  const TIMEOUT_MS = 120_000; // 2 minutes per page (pages run in parallel)
+  const TIMEOUT_MS = 600_000; // 10 minutes — maximum time per Claude call
   let lastErr: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {

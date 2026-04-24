@@ -81,36 +81,78 @@ serve(async (req) => {
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
     // ── CALL 2: bottom half ──────────────────────────────────────────────
-    const call2Prompt = `You are a professional web developer continuing to build a website for a small business client.
+    const call2Prompt = `You are an expert web developer working for SiteQueen, a done-for-you website service. You are continuing to build a website for a real paying client. Part 1 has already been generated. Your job is to complete the second half of the page using the exact same rules.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CLIENT DATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${ctx.sharedContext}
 
-Here is the FIRST HALF already generated (for context — do NOT repeat any of it):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FIRST HALF ALREADY GENERATED (do not repeat any of this)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 ${firstHalf}
 
-INSTRUCTIONS — SECOND HALF:
-Generate the SECOND HALF continuing exactly where the first half left off.
-Start directly with the next section after services — do NOT repeat <!DOCTYPE html>, <head>, or any CSS.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR RULES — apply these in order for every section
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-STRUCTURE RULES (same as first half — maintain consistency):
-- Semantic HTML5 elements only. No div soup.
-- Same BEM-lite class naming as the first half. No new naming schemes.
-- Zero inline styles. Reuse classes already defined in the first half's CSS.
-- If you need a new class not in the first half, add a single <style> block before the first new section only — keep it minimal.
+RULE 1 — CALL NOTES OVERRIDE EVERYTHING
+Follow all call notes instructions exactly. They override intake data and template structure.
 
-SECTIONS TO INCLUDE:
-Emergency CTA (if applicable), why us, reviews/testimonials, financing (if applicable), service areas, FAQ, final CTA, footer.
-If a section has no real data, remove it entirely. Never render an empty section.
+RULE 2 — FILL IN WITH REAL CLIENT DATA
+Keep all HTML structure and class names identical to the template. Only change text and image URLs.
 
-JAVASCRIPT — write ONE <script> block at the very end of <body>, before </body>:
+RULE 3 — MISSING DATA: FILL WITH AI GENERATED CONTENT OR REMOVE
+FILL WITH AI GENERATED CONTENT:
+- Testimonials missing or fewer than 3 → write realistic ones with local names and specific service details
+- FAQ missing or fewer than 5 → write relevant questions a real customer would ask
+- Service area copy missing → write based on their city and nearby suburbs
+- Why choose us points missing → write based on everything known about the business
+- Footer tagline missing → write one matching their tone and industry
+
+REMOVE ENTIRELY if real unverifiable data is missing:
+- Star ratings and review counts → remove if not provided, never invent
+- Certifications and awards → remove if not provided, never invent
+- Street address → remove if not provided
+Never fabricate contact details, credentials, or ratings.
+
+RULE 4 — REMOVING A SECTION
+Delete it entirely. No empty divs, no commented-out code, no gaps.
+
+RULE 5 — ADDING A NEW SECTION
+Only if explicitly requested in call notes or intake. Match the template's design system exactly — same colors, fonts, spacing, button styles. Add minimal new CSS in a <style> block before the new section only.
+
+RULE 6 — COPY AND TONE
+Match the tone from call notes. If not specified, match the industry. Write like a real person, not a template. No corporate filler phrases.
+
+RULE 7 — TECHNICAL REQUIREMENTS
+- All phone numbers → tel: links
+- All emails → mailto: links
+- All images → loading="lazy" and meaningful alt text
+- Zero inline styles
+- No placeholder images
+
+RULE 8 — DESIGN CONSISTENCY
+Reuse the exact same class names, colors, spacing, and component styles from Part 1. The page must look seamless — a visitor should never be able to tell where Part 1 ends and Part 2 begins.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INSTRUCTIONS — SECOND HALF
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Continue exactly where Part 1 left off. Start directly with the next section after services.
+Do NOT repeat <!DOCTYPE html>, <head>, or any CSS.
+Include all remaining sections: emergency CTA (if in call notes), why us, reviews/testimonials, financing (if in call notes or intake), service areas, FAQ, final CTA, footer.
+
+JAVASCRIPT — write ONE <script> block at the very end of <body>:
 - Vanilla JavaScript only. No jQuery, no lodash, no external libraries.
 - Wrap ALL logic in one DOMContentLoaded listener.
-- Include: mobile menu toggle with body scroll lock and Escape key handler, FAQ accordion, sticky header on scroll, scroll-reveal animations (default elements to visible — use IntersectionObserver to ADD a class, never start hidden), smooth scroll for anchor links, contact form validation and submit handler.
-- No inline event handlers (no onclick=, no onsubmit=). All event listeners added in JS only.
-- The <script defer src="./site.js"></script> tag will be injected by post-processing. Do NOT add it yourself.
+- Include: mobile menu toggle with body scroll lock and Escape key handler, FAQ accordion, sticky header on scroll, scroll animations (always default elements to visible — use IntersectionObserver to ADD a visible class, never start hidden), smooth scroll for anchor links, contact form validation.
+- No inline event handlers anywhere (no onclick=, no onsubmit=).
 
-ANALYTICS — include this script just before </body>, after your main <script> block:
-
+Then include this analytics script just before </body>:
 <script>
 (function(){
   var CID='${clientId}';
@@ -125,8 +167,6 @@ ANALYTICS — include this script just before </body>, after your main <script> 
 </script>
 
 End with </body> and </html> as the absolute last things.
-Replace all {{PLACEHOLDERS}} with real client data.
-Make all phone numbers tel: links and email addresses mailto: links.
 
 CRITICAL OUTPUT INSTRUCTIONS:
 Return ONLY raw HTML — no markdown, no code blocks, no explanation.
@@ -368,7 +408,7 @@ End with </html> as the very last character.`;
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
-  const TIMEOUT_MS = 180_000; // 3 minutes for Part 2
+  const TIMEOUT_MS = 600_000; // 10 minutes — maximum time per Claude call
   let lastErr: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
