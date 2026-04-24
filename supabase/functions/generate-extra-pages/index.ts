@@ -254,7 +254,44 @@ Do not include closing </body> or </html> tags.`;
       generation_notes: `Extra pages — built: ${generated.join(", ") || "none"}. Failed: ${failed.join("; ") || "none"}.`,
     } as any);
 
-    return new Response(JSON.stringify({ success: true, generated, failed }), {
+    // ── Mark generation fully complete ───────────────────────────────────
+    // Extra-pages is the LAST function in the chain (homepage part1 → part2 →
+    // extra-pages). It owns the final "complete" status flip so the operator
+    // portal stops showing "Generating…" only after every page is on Hostinger.
+    const stagingURL = `https://staging.sitequeen.ai/${clientId}/index.html`;
+    const { error: siteUpdateErr } = await supabase
+      .from("sites")
+      .update({
+        generation_status: "complete",
+        generation_progress: "complete",
+        generated_at: new Date().toISOString(),
+        staging_url: stagingURL,
+        site_status: "review",
+      } as any)
+      .eq("client_id", clientId);
+    if (siteUpdateErr) {
+      console.error("[extra-pages] Failed to mark site complete:", siteUpdateErr);
+    } else {
+      console.log(`[extra-pages] ✓ Marked site complete for ${clientId}`);
+    }
+
+    const { data: clientRow } = await supabase
+      .from("clients")
+      .select("business_name")
+      .eq("id", clientId)
+      .maybeSingle();
+    const businessName = (clientRow as any)?.business_name || "Website";
+
+    await supabase.from("notifications").insert({
+      type: "site_ready_for_review",
+      client_id: clientId,
+      message: `${businessName} website ready for review ♛`,
+      staging_url: stagingURL,
+      target_role: "operator",
+      read: false,
+    });
+
+    return new Response(JSON.stringify({ success: true, generated, failed, staging_url: stagingURL }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
