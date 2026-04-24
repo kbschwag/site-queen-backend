@@ -65,11 +65,10 @@ async function uploadOne(
   upload: FtpUpload,
 ): Promise<void> {
   const { clientId, filename } = splitRemotePath(upload.remotePath);
-  const bytes =
+  const blob =
     typeof upload.content === "string"
-      ? new TextEncoder().encode(upload.content)
-      : upload.content;
-  const blob = new Blob([bytes], { type: "text/html" });
+      ? new Blob([upload.content], { type: "text/html" })
+      : new Blob([upload.content as BlobPart], { type: "text/html" });
 
   const form = new FormData();
   form.append("file", blob, filename);
