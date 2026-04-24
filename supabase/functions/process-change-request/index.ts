@@ -59,15 +59,18 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Check if there's a generated site HTML to modify
+    // Check if there's a generated site HTML to modify.
+    // Source of truth is the clean copy at deploy/index.html — staging
+    // copies live on Hostinger and the legacy root index.html path is no
+    // longer maintained.
     let currentHTML = "";
     try {
       const { data: htmlFile } = await supabase.storage
         .from("generated-sites")
-        .download(`${clientId}/index.html`);
+        .download(`${clientId}/deploy/index.html`);
       if (htmlFile) currentHTML = await htmlFile.text();
     } catch {
-      console.log("No existing site HTML found");
+      console.log("No existing site HTML found at deploy/index.html");
     }
 
     let aiPrompt: string;
@@ -154,11 +157,38 @@ Return ONLY a valid JSON object with these four fields. No explanation or markdo
     }
 
     if (currentHTML && result.status === "completed" && result.html) {
-      // Save updated HTML back to storage
+      // Save updated HTML back to the deploy/ backup folder (clean copy).
       const htmlBlob = new Blob([result.html], { type: "text/html" });
       await supabase.storage
         .from("generated-sites")
-        .upload(`${clientId}/index.html`, htmlBlob, { upsert: true });
+        .upload(`${clientId}/deploy/index.html`, htmlBlob, { upsert: true, contentType: "text/html" });
+
+      // Push the updated copy straight to Hostinger staging so the operator
+      // and client preview iframes show the change immediately. Skipped if
+      // the site is already live — the deploy step below will handle that.
+      const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
+      if (hostingerToken && clientData?.site_status !== "live") {
+        try {
+          const stagingHtml = injectNoindex(result.html);
+          const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${hostingerToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              path: `/public_html/staging/${clientId}/index.html`,
+              content: btoa(unescape(encodeURIComponent(stagingHtml))),
+            }),
+          });
+          if (!r.ok) {
+            const errText = await r.text();
+            console.error(`[process-change-request] staging push failed ${r.status}:`, errText.substring(0, 300));
+          }
+        } catch (e) {
+          console.error("[process-change-request] staging push error:", e);
+        }
+      }
 
       await supabase.from("change_requests").update({
         status: "completed",
