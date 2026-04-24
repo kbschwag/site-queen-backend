@@ -12,7 +12,7 @@ const AI_MODEL = "claude-sonnet-4-20250514";
 
 // Staging is hosted on Hostinger at staging.sitequeen.ai → /public_html/staging
 const STAGING_BASE_URL = "https://staging.sitequeen.ai";
-const STAGING_FOLDER_ROOT = "/public_html/staging";
+const STAGING_FOLDER_ROOT = "/public_html";
 
 // Staging URL — points at the Hostinger staging subdomain. Real web server,
 // real relative links, no router needed.
