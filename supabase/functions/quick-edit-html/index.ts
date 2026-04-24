@@ -169,7 +169,7 @@ Rules:
     try {
       const stagingHtml = injectNoindex(updatedHtml);
       await uploadFileToHostingerFtp(
-        `/public_html/staging/${clientId}/index.html`,
+        `/public_html/${clientId}/index.html`,
         stagingHtml,
       );
     } catch (e: any) {

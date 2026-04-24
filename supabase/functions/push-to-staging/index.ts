@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const STAGING_FOLDER_ROOT = "/public_html/staging";
+const STAGING_FOLDER_ROOT = "/public_html";
 
 // Inject a noindex meta tag if not already present so search engines never
 // index the staging copy.
