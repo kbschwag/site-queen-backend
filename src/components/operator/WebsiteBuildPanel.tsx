@@ -382,6 +382,18 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </div>
         </div>
 
+        {/* Generation error details (collapsed) */}
+        {generationStatus === "failed" && generationError && (
+          <details className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs">
+            <summary className="cursor-pointer font-medium text-destructive">
+              View generation error
+            </summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] text-destructive/90 font-mono">
+              {generationError}
+            </pre>
+          </details>
+        )}
+
         {/* Advanced collapsible */}
         {(clientData as any)?.site_status !== "live" && (
           <div className="text-xs">
