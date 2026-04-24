@@ -358,7 +358,7 @@ End with </html> as the very last character.`;
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
-  const TIMEOUT_MS = 90_000; // 90 seconds — clean error instead of silent hang
+  const TIMEOUT_MS = 180_000; // 3 minutes for Part 2
   let lastErr: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
