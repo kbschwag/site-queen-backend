@@ -104,7 +104,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
 
         const htmlRes = await supabase.storage
           .from("generated-sites")
-          .download(`${clientId}/index.html`);
+          .download(`${clientId}/deploy/index.html`);
 
         if (cancelled) return;
 
@@ -153,11 +153,20 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
       const htmlContent = htmlEditorRef.current.getValue();
       const htmlBlob = new Blob([htmlContent], { type: "text/html" });
 
+      // 1) Save clean copy to deploy/ backup folder
       const { error: upErr } = await supabase.storage
         .from("generated-sites")
-        .upload(`${clientId}/index.html`, htmlBlob, { upsert: true, contentType: "text/html" });
-
+        .upload(`${clientId}/deploy/index.html`, htmlBlob, { upsert: true, contentType: "text/html" });
       if (upErr) throw upErr;
+
+      // 2) Push staging copy to Hostinger so the live preview updates
+      const { error: pushErr } = await supabase.functions.invoke("push-to-staging", {
+        body: { client_id: clientId, file: "index.html", content: htmlContent },
+      });
+      if (pushErr) {
+        console.error("Push to staging failed:", pushErr);
+        toast.warning("Saved to backup but staging push failed");
+      }
 
       const { data: site } = await supabase
         .from("sites")
@@ -188,7 +197,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
         } as any);
       }
 
-      toast.success("Saved ♛ — preview updated");
+      if (!pushErr) toast.success("Saved and pushed to staging ♛");
       onSaved?.();
     } catch (e: any) {
       console.error(e);
