@@ -113,9 +113,9 @@ serve(async (req) => {
       ]);
     }
 
-    const aboutImageUrl = intake.owner_photo_url || aboutPhoto?.url || "";
-    const whyUsImageUrl = intake.hero_photo_url || whyUsPhoto?.url || "";
-    const heroImageUrl = intake.hero_photo_url || heroPhoto?.url || "";
+    const aboutImageUrl = teamPhotos[0] || portfolioPhotos[0] || aboutPhoto?.url || "";
+    const whyUsImageUrl = portfolioPhotos[1] || portfolioPhotos[0] || whyUsPhoto?.url || "";
+    const heroImageUrl = portfolioPhotos[2] || portfolioPhotos[0] || heroPhoto?.url || "";
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
@@ -125,19 +125,26 @@ serve(async (req) => {
     // ── Business data shortcuts ──────────────────────────────────────────
     const businessName = (clientData as any)?.business_name || intake.business_name || "Business";
     const businessType = (clientData as any)?.business_type || "Service Business";
-    const city = intake.business_city || "";
-    const state = intake.business_state || "";
-    const phone = intake.business_phone || "";
+    const city = intake.business_city || intake.city || "";
+    const state = intake.business_state || intake.state || "";
+    const phone = intake.business_phone || intake.primary_phone || intake.phone || "";
     const phoneRaw = phone.replace(/\D/g, "");
-    const email = intake.business_email || "";
-    const address = intake.business_address || "";
-    const yearsInBusiness = intake.years_in_business || "";
+    const email = intake.business_email || intake.email || "";
+    const address = intake.business_address || intake.address || "";
+    const yearsInBusiness = intake.years_in_business || intake.years || "";
     const googleRating = intake.google_rating || "";
     const googleReviewCount = intake.google_review_count || "";
-    const aboutStory = intake.about_story || "";
+    const aboutStory = intake.about_story || intake.owner_bio_raw || intake.story_started || "";
+    const ownerName = intake.owner_name || "";
+    const ownerTitle = intake.owner_title || "Owner";
+    const noTestimonials = !!intake.no_testimonials;
     const tagline = intake.tagline || "";
     const mapEmbedUrl = intake.map_embed_url || "";
     const domain = intake.domain || "";
+    const logoUrl = intake.logo_url || "";
+
+    const portfolioPhotos: string[] = Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : [];
+    const teamPhotos: string[] = Array.isArray(intake.team_photos) ? intake.team_photos : [];
 
     const services: any[] = Array.isArray(intake.services) ? intake.services : [];
     const testimonials: any[] = Array.isArray(intake.testimonials) ? intake.testimonials : [];
@@ -157,8 +164,13 @@ BUSINESS INFORMATION:
 - Business name: ${businessName}
 - Business type: ${businessType}
 - City: ${city}, ${state}
-- Years in business: ${yearsInBusiness || "not provided"}
+- Owner name: ${ownerName || "not provided"}
+- Owner title: ${ownerTitle || "Owner"}
 - Owner story: ${aboutStory || "not provided"}
+- What makes them different: ${intake.story_different || "not provided"}
+- How they started: ${intake.story_started || "not provided"}
+- Ideal customer: ${intake.story_ideal_customer || "not provided"}
+- IMPORTANT: no_testimonials is ${noTestimonials}. ${noTestimonials ? "Return TESTIMONIALS as empty array []. Do NOT generate fake testimonials — the client explicitly does not want them." : "Generate 3 realistic local testimonials since none were provided."}
 - Services: ${services.map((s: any) => typeof s === "string" ? s : s?.name || "").filter(Boolean).join(", ") || "not provided"}
 - Google rating: ${googleRating || "not provided"}
 - Google review count: ${googleReviewCount || "not provided"}
@@ -383,7 +395,7 @@ Return ONLY a valid JSON object. No markdown. No explanation. No code blocks. St
     html = renderLoop(html, "WHY_US_POINTS", Array.isArray(copyData.WHY_US_POINTS) ? copyData.WHY_US_POINTS : []);
 
     // TESTIMONIALS — use provided ones or Claude-generated
-    const testimonialsData = testimonials.length >= 3
+    const testimonialsData = noTestimonials ? [] : testimonials.length >= 3
       ? testimonials.slice(0, 3).map((t: any) => ({
           TESTIMONIAL_TEXT: t.text || t.testimonial || "",
           TESTIMONIAL_NAME: t.name || t.author || "",
