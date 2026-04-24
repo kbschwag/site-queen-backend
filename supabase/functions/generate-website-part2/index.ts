@@ -144,51 +144,80 @@ End with </html> as the very last character.`;
     if (!finalHTML.includes("</body>")) throw new Error("Site incomplete — missing </body>");
 
     // Strip any stray external stylesheet link
-    finalHTML = finalHTML.replace(/<link[^>]*href=["']styles\.css["'][^>]*>/gi, "");
+    finalHTML = finalHTML.replace(/<link[^>]*href=["']styles?\.css["'][^>]*>/gi, "");
 
-    // Safety net: ensure animate-on-scroll elements are ALWAYS visible.
-    // Claude often generates `.animate-on-scroll { opacity: 0 }` with an
-    // IntersectionObserver to fade in. In iframe previews, mobile, or when
-    // the observer misses below-fold elements, sections stay invisible —
-    // making the page look completely blank. We force visibility from the
-    // start; the fade-in is purely cosmetic and not worth the risk.
+    // ── Extract CSS into site.css ────────────────────────────────────────
+    const cssMatch = finalHTML.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+    const extractedCSS = cssMatch ? cssMatch[1].trim() : "";
+    if (!extractedCSS) throw new Error("Generated HTML contains no <style> block — cannot extract site.css");
+
+    // ── Extract JS into site.js ─────────────────────────────────────────
+    // Collect all <script> blocks except the analytics snippet (keep that inline)
+    const scriptBlocks: string[] = [];
+    const analyticsMarker = "(function(){";
+    finalHTML = finalHTML.replace(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi, (_match, content) => {
+      if (content.includes(analyticsMarker)) return _match; // keep analytics inline
+      if (content.trim().length > 0) scriptBlocks.push(content.trim());
+      return ""; // remove from HTML
+    });
+    const extractedJS = scriptBlocks.join("\n\n");
+
+    // ── Rewrite HTML to reference external files ─────────────────────────
+    // Replace the <style> block with a <link> to site.css
+    finalHTML = finalHTML.replace(/<style[^>]*>[\s\S]*?<\/style>/i,
+      `<link rel="stylesheet" href="./site.css" />`
+    );
+    // Inject site.js <script defer> just before </body>
+    finalHTML = finalHTML.replace("</body>",
+      `<script defer src="./site.js"></script>\n</body>`
+    );
+
+    // ── Animate-on-scroll safety net (goes into site.js, not inline) ─────
     const animateSafetyNet = `
-<style>
-  /* Force all scroll-animated elements visible (fade-in disabled for reliability) */
-  .animate-on-scroll { opacity: 1 !important; transform: none !important; }
-</style>
-<script>
-  // Belt-and-suspenders: also add the .visible class so any code reading it works.
-  (function(){
-    function reveal(){
-      document.querySelectorAll('.animate-on-scroll').forEach(function(el){
-        el.classList.add('visible');
-      });
-    }
+// Belt-and-suspenders: force all scroll-animated elements visible on load
+(function(){
+  function reveal(){
+    document.querySelectorAll('.animate-on-scroll').forEach(function(el){
+      el.classList.add('visible');
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', reveal);
+  } else {
     reveal();
-    if (document.readyState !== 'complete') window.addEventListener('load', reveal);
-  })();
-</script>`;
-    finalHTML = finalHTML.replace("</body>", animateSafetyNet + "\n</body>");
+  }
+})();`;
+
+    const finalJS = extractedJS + "\n" + animateSafetyNet;
+
+    // ── Build site-meta.json ─────────────────────────────────────────────
+    const classNames = [...new Set(
+      [...extractedCSS.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[{,]/g)].map(m => m[1])
+    )].filter(c => !c.startsWith("animate") && c.length > 1).slice(0, 200);
+
+    const primaryColorMatch = extractedCSS.match(/--color-primary\s*:\s*([^;]+)/);
+    const accentColorMatch = extractedCSS.match(/--color-accent\s*:\s*([^;]+)/);
+    const fontHeadingMatch = extractedCSS.match(/--font-heading\s*:\s*'([^']+)'/);
+    const fontBodyMatch = extractedCSS.match(/--font-body\s*:\s*'([^']+)'/);
+
+    const siteMeta = {
+      primaryColor: primaryColorMatch ? primaryColorMatch[1].trim() : "",
+      accentColor: accentColorMatch ? accentColorMatch[1].trim() : "",
+      fontHeading: fontHeadingMatch ? fontHeadingMatch[1] : "",
+      fontBody: fontBodyMatch ? fontBodyMatch[1] : "",
+      classes: classNames,
+      generatedAt: new Date().toISOString(),
+    };
 
     // Append Unsplash photo credits comment
     const { heroPhoto, aboutPhoto, whyUsPhoto, emergencyBgPhoto } = ctx.photos || {};
     if (ctx.usingStockPhotos && (heroPhoto || aboutPhoto || whyUsPhoto || emergencyBgPhoto)) {
-      const credits = `
-<!-- Photo credits (Unsplash):
-${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unsplash_url})\n` : ""}${aboutPhoto ? `  About: ${aboutPhoto.photographer} on Unsplash (${aboutPhoto.unsplash_url})\n` : ""}${whyUsPhoto ? `  Why us: ${whyUsPhoto.photographer} on Unsplash (${whyUsPhoto.unsplash_url})\n` : ""}${emergencyBgPhoto ? `  Emergency bg: ${emergencyBgPhoto.photographer} on Unsplash (${emergencyBgPhoto.unsplash_url})\n` : ""}  Search terms used: ${(ctx.photoTerms || []).join(", ")}
--->`;
+      const credits = `\n<!-- Photo credits (Unsplash):\n${heroPhoto ? `  Hero: ${heroPhoto.photographer} (${heroPhoto.unsplash_url})\n` : ""}${aboutPhoto ? `  About: ${aboutPhoto.photographer} (${aboutPhoto.unsplash_url})\n` : ""}${whyUsPhoto ? `  Why us: ${whyUsPhoto.photographer} (${whyUsPhoto.unsplash_url})\n` : ""}${emergencyBgPhoto ? `  Emergency: ${emergencyBgPhoto.photographer} (${emergencyBgPhoto.unsplash_url})\n` : ""}-->`;
       finalHTML += credits;
     }
 
-    // ── Save final ───────────────────────────────────────────────────────
-    // ── Save final ───────────────────────────────────────────────────────
-    // Two destinations:
-    //   - Hostinger /public_html/staging/{clientId}/index.html — the LIVE
-    //     staging copy operators preview at https://staging.sitequeen.ai/...
-    //     (links rewritten as no-op, noindex meta injected).
-    //   - Supabase storage [clientId]/deploy/index.html — backup + source
-    //     of truth for the go-live deploy-to-hostinger step.
     const cleanHTML = finalHTML;
     const stagingHTML = rewriteLinksForStaging(finalHTML);
 
