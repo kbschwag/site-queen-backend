@@ -216,10 +216,9 @@ Do not include closing </body> or </html> tags.`;
         const cleanHTML = html;
         const stagingHTML = rewriteLinksForStaging(html);
 
-        // 1) Push staging copy to Hostinger
+        // 1) Push staging copy to Hostinger over FTPS
         try {
-          await uploadToHostinger(
-            hostingerToken,
+          await uploadFileToHostingerFtp(
             `${STAGING_FOLDER_ROOT}/${clientId}/${page.slug}.html`,
             stagingHTML,
           );
