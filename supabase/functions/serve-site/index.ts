@@ -40,13 +40,15 @@ serve(async (req) => {
 
     const html = await file.text();
 
+    const headers = new Headers();
+    headers.set("Content-Type", "text/html; charset=utf-8");
+    headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    headers.set("X-Content-Type-Options", "nosniff");
+    headers.set("X-Frame-Options", "ALLOWALL");
+
     return new Response(html, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-cache",
-        "X-Frame-Options": "ALLOWALL",
-        "Content-Security-Policy": "frame-ancestors *",
-      },
+      status: 200,
+      headers: headers,
     });
   } catch (e) {
     console.error("[serve-site] error:", e);
