@@ -8,6 +8,19 @@ const corsHeaders = {
 
 const MODEL = "google/gemini-2.5-flash";
 
+// Inject a noindex meta tag for staging copies pushed to Hostinger.
+function injectNoindex(html: string): string {
+  if (/name=["']robots["']/i.test(html)) return html;
+  const tag = `\n  <meta name="robots" content="noindex, nofollow" />`;
+  if (/<meta\s+charset=["'][^"']+["']\s*\/?>/i.test(html)) {
+    return html.replace(/(<meta\s+charset=["'][^"']+["']\s*\/?>)/i, `$1${tag}`);
+  }
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
+  }
+  return html;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
