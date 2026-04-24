@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,28 +29,9 @@ function rewriteLinksForStaging(html: string): string {
   return out;
 }
 
-// Upload one HTML page to Hostinger via REST API.
-async function uploadToHostinger(
-  hostingerToken: string,
-  remotePath: string,
-  content: string,
-): Promise<void> {
-  const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${hostingerToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      path: remotePath,
-      content: btoa(unescape(encodeURIComponent(content))),
-    }),
-  });
-  if (!r.ok) {
-    const errText = await r.text();
-    throw new Error(`Hostinger upload failed (${r.status}) for ${remotePath}: ${errText.substring(0, 300)}`);
-  }
-}
+// Hostinger uploads now go over FTPS via the shared helper. The fictional
+// REST endpoint we used before (`/v1/hosting/files/upload`) does not exist —
+// it returned 530 because Cloudflare had nothing to route to.
 
 // Page slug → human label + brief
 const PAGE_BRIEFS: Record<string, { label: string; brief: string; templateRef?: "about" | "services" }> = {
@@ -117,8 +99,7 @@ serve(async (req) => {
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
-    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
-    if (!hostingerToken) throw new Error("HOSTINGER_API_TOKEN not configured");
+    // FTP credentials are checked lazily inside uploadFileToHostingerFtp.
 
     // ── Load homepage (clean copy) + supporting context ─────────────────
     // Homepage now lives only in the deploy/ backup folder — staging is
@@ -235,10 +216,9 @@ Do not include closing </body> or </html> tags.`;
         const cleanHTML = html;
         const stagingHTML = rewriteLinksForStaging(html);
 
-        // 1) Push staging copy to Hostinger
+        // 1) Push staging copy to Hostinger over FTPS
         try {
-          await uploadToHostinger(
-            hostingerToken,
+          await uploadFileToHostingerFtp(
             `${STAGING_FOLDER_ROOT}/${clientId}/${page.slug}.html`,
             stagingHTML,
           );

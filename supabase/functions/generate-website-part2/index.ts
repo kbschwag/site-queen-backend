@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,28 +44,8 @@ function rewriteLinksForStaging(html: string): string {
   return out;
 }
 
-// Upload one HTML page to Hostinger via REST API. Used for staging deploys.
-async function uploadToHostinger(
-  hostingerToken: string,
-  remotePath: string,
-  content: string,
-): Promise<void> {
-  const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${hostingerToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      path: remotePath,
-      content: btoa(unescape(encodeURIComponent(content))),
-    }),
-  });
-  if (!r.ok) {
-    const errText = await r.text();
-    throw new Error(`Hostinger upload failed (${r.status}) for ${remotePath}: ${errText.substring(0, 300)}`);
-  }
-}
+// Hostinger uploads now go over FTPS via the shared helper. The fictional
+// REST endpoint we used before (`/v1/hosting/files/upload`) does not exist.
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -197,12 +178,9 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     const cleanHTML = finalHTML;
     const stagingHTML = rewriteLinksForStaging(finalHTML);
 
-    // 1) Push staging copy to Hostinger via REST API
-    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
-    if (!hostingerToken) throw new Error("HOSTINGER_API_TOKEN not configured");
+    // 1) Push staging copy to Hostinger over FTPS
     try {
-      await uploadToHostinger(
-        hostingerToken,
+      await uploadFileToHostingerFtp(
         `${STAGING_FOLDER_ROOT}/${clientId}/index.html`,
         stagingHTML,
       );

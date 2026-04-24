@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -91,35 +92,12 @@ serve(async (req) => {
     });
   }
 
-  const apiToken = Deno.env.get("HOSTINGER_API_TOKEN");
-  if (!apiToken) {
-    return new Response(JSON.stringify({ error: "HOSTINGER_API_TOKEN not configured" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
+  // FTP credentials are checked lazily inside uploadFileToHostingerFtp.
   const stagingHtml = injectNoindex(content);
   const path = `${STAGING_FOLDER_ROOT}/${clientId}/${file}`;
 
   try {
-    const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        path,
-        content: btoa(unescape(encodeURIComponent(stagingHtml))),
-      }),
-    });
-
-    if (!r.ok) {
-      const errText = await r.text();
-      console.error(`[push-to-staging] Hostinger ${r.status}:`, errText.substring(0, 300));
-      throw new Error(`Hostinger upload failed (${r.status}): ${errText.substring(0, 200)}`);
-    }
-
+    await uploadFileToHostingerFtp(path, stagingHtml);
     return new Response(JSON.stringify({ success: true, path }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
