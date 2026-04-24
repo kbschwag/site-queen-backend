@@ -166,30 +166,14 @@ Rules:
 
     // 2) Push staging copy (with noindex) straight to Hostinger so the
     //    operator + client preview iframes show the change immediately.
-    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
-    if (hostingerToken) {
-      try {
-        const stagingHtml = injectNoindex(updatedHtml);
-        const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${hostingerToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            path: `/public_html/staging/${clientId}/index.html`,
-            content: btoa(unescape(encodeURIComponent(stagingHtml))),
-          }),
-        });
-        if (!r.ok) {
-          const errText = await r.text();
-          console.error(`[quick-edit] Hostinger staging push failed ${r.status}:`, errText.substring(0, 300));
-        }
-      } catch (e: any) {
-        console.error("[quick-edit] Hostinger staging push error:", e);
-      }
-    } else {
-      console.warn("[quick-edit] HOSTINGER_API_TOKEN missing — skipping staging push");
+    try {
+      const stagingHtml = injectNoindex(updatedHtml);
+      await uploadFileToHostingerFtp(
+        `/public_html/staging/${clientId}/index.html`,
+        stagingHtml,
+      );
+    } catch (e: any) {
+      console.error("[quick-edit] Hostinger staging push error:", e);
     }
 
     // Update sites metadata
