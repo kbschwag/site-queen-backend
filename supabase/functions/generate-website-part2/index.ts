@@ -140,6 +140,16 @@ End with </html> as the very last character.`;
 
     // ── Join + validate ──────────────────────────────────────────────────
     let finalHTML = firstHalf + "\n" + secondHalf;
+
+    // If Claude was cut off, attempt to close the document gracefully
+    if (!finalHTML.includes("</html>")) {
+      if (!finalHTML.includes("</body>")) {
+        finalHTML += "\n</body>";
+      }
+      finalHTML += "\n</html>";
+      console.warn("[part2] Claude output was truncated — closed document automatically");
+    }
+
     if (!finalHTML.includes("</html>")) throw new Error("Site incomplete — missing </html>");
     if (!finalHTML.includes("</body>")) throw new Error("Site incomplete — missing </body>");
 
@@ -375,7 +385,7 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
         },
         body: JSON.stringify({
           model: AI_MODEL,
-          max_tokens: 12000,
+          max_tokens: 16000,
           messages: [{ role: "user", content }],
         }),
       });
