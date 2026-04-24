@@ -213,7 +213,7 @@ Do not include closing </body> or </html> tags.`;
         });
 
         const cleanHTML = html;
-        const stagingHTML = rewriteForStaging(html, clientId, supabaseUrl);
+        const stagingHTML = rewriteLinksForStaging(html, clientId, supabaseUrl);
 
         const { error: stagingErr } = await supabase.storage
           .from("generated-sites")
