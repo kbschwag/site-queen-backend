@@ -133,12 +133,32 @@ serve(async (req) => {
     const brandingInstructions = BRANDING_INSTRUCTIONS;
     const missingDataInstructions = MISSING_DATA_INSTRUCTIONS;
 
+    // Trim intake to only the fields Claude actually needs — reduces input tokens
+    // and prevents Call 1 from timing out on large intake payloads.
+    const trimmedIntake = {
+      business_name: (intakeData as any).business_name,
+      tagline: (intakeData as any).tagline,
+      phone: (intakeData as any).business_phone,
+      email: (intakeData as any).business_email,
+      city: (intakeData as any).business_city,
+      state: (intakeData as any).business_state,
+      services: (intakeData as any).services,
+      about_story: (intakeData as any).about_story,
+      years_in_business: (intakeData as any).years_in_business,
+      google_rating: (intakeData as any).google_rating,
+      google_review_count: (intakeData as any).google_review_count,
+      primary_color: (intakeData as any).primary_color,
+      accent_color: (intakeData as any).accent_color,
+      hero_badge: (intakeData as any).hero_badge,
+      template_id: (intakeData as any).template_id,
+    };
+
     const sharedContext = `BUSINESS CONTEXT:
 Business name: ${clientData?.business_name || "Business"}
 Business type: ${clientData?.business_type || "Service Business"}
 
-SOURCE 1 — CLIENT INTAKE FORM:
-${JSON.stringify(intakeData, null, 2)}
+SOURCE 1 — CLIENT INTAKE FORM (key fields):
+${JSON.stringify(trimmedIntake, null, 2)}
 ${callNotesSection}
 ${photoSection}
 ${brandingInstructions}
