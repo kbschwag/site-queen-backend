@@ -91,11 +91,25 @@ ${firstHalf}
 INSTRUCTIONS — SECOND HALF:
 Generate the SECOND HALF continuing exactly where the first half left off.
 Start directly with the next section after services — do NOT repeat <!DOCTYPE html>, <head>, or any CSS.
-Include all remaining sections: emergency CTA (if applicable), why us, reviews/testimonials, financing (if applicable), service areas, FAQ, final CTA, footer.
-Reuse the design system and class naming already established in the first half so every later section is fully styled by the CSS that is already in the document.
-Do NOT invent a new naming scheme for second-half sections unless you use inline styles on those elements.
-Then include all JavaScript for mobile menu, FAQ accordion, form submit handler, scroll animations, sticky header.
-Then include this analytics script just before </body>:
+
+STRUCTURE RULES (same as first half — maintain consistency):
+- Semantic HTML5 elements only. No div soup.
+- Same BEM-lite class naming as the first half. No new naming schemes.
+- Zero inline styles. Reuse classes already defined in the first half's CSS.
+- If you need a new class not in the first half, add a single <style> block before the first new section only — keep it minimal.
+
+SECTIONS TO INCLUDE:
+Emergency CTA (if applicable), why us, reviews/testimonials, financing (if applicable), service areas, FAQ, final CTA, footer.
+If a section has no real data, remove it entirely. Never render an empty section.
+
+JAVASCRIPT — write ONE <script> block at the very end of <body>, before </body>:
+- Vanilla JavaScript only. No jQuery, no lodash, no external libraries.
+- Wrap ALL logic in one DOMContentLoaded listener.
+- Include: mobile menu toggle with body scroll lock and Escape key handler, FAQ accordion, sticky header on scroll, scroll-reveal animations (default elements to visible — use IntersectionObserver to ADD a class, never start hidden), smooth scroll for anchor links, contact form validation and submit handler.
+- No inline event handlers (no onclick=, no onsubmit=). All event listeners added in JS only.
+- The <script defer src="./site.js"></script> tag will be injected by post-processing. Do NOT add it yourself.
+
+ANALYTICS — include this script just before </body>, after your main <script> block:
 
 <script>
 (function(){
@@ -112,11 +126,11 @@ Then include this analytics script just before </body>:
 
 End with </body> and </html> as the absolute last things.
 Replace all {{PLACEHOLDERS}} with real client data.
-Make all phone numbers click-to-call links and email addresses mailto links.
+Make all phone numbers tel: links and email addresses mailto: links.
 
 CRITICAL OUTPUT INSTRUCTIONS:
 Return ONLY raw HTML — no markdown, no code blocks, no explanation.
-Do NOT wrap the response in \`\`\`html fences.
+Do NOT wrap in \`\`\`html fences.
 Do NOT start with <!DOCTYPE html> — start directly with the first section after services.
 End with </html> as the very last character.`;
 
