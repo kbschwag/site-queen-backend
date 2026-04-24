@@ -534,11 +534,16 @@ function escapeHtml(value: string): string {
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
+  const TIMEOUT_MS = 90_000; // 90 seconds — clean error instead of silent hang
   let lastErr: Error | null = null;
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const r = await fetch(AI_ENDPOINT, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
@@ -550,6 +555,7 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
           messages: [{ role: "user", content }],
         }),
       });
+      clearTimeout(timeout);
       if (!r.ok) {
         const errText = await r.text();
         console.error(`[${label}] Claude error ${r.status}:`, errText);
@@ -564,8 +570,14 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
         ? data.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
         : "";
       return { text, outputTokens: data.usage?.output_tokens || 0 };
-    } catch (err) {
-      lastErr = err as Error;
+    } catch (err: any) {
+      clearTimeout(timeout);
+      if (err.name === "AbortError") {
+        lastErr = new Error(`Claude ${label} timed out after ${TIMEOUT_MS / 1000}s`);
+      } else {
+        lastErr = err as Error;
+      }
+      console.error(`[${label}] attempt ${attempt} failed:`, lastErr.message);
       if (attempt < MAX_ATTEMPTS) await new Promise((res) => setTimeout(res, 2000));
     }
   }
@@ -574,4 +586,14 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
 
 function stripMarkdown(s: string): string {
   return s.replace(/^```(?:html|json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+}
+
+function stripCssBody(head: string): string {
+  return head.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (_match, cssContent) => {
+    const classNames = [...new Set(
+      [...cssContent.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[{,]/g)]
+        .map((m: RegExpMatchArray) => m[1])
+    )].slice(0, 150).join(", ");
+    return `<style>/* Existing classes (reuse these): ${classNames} */</style>`;
+  });
 }
