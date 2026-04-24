@@ -50,7 +50,8 @@ export async function uploadToHostingerFtp(uploads: FtpUpload[]): Promise<void> 
   const { host, user, password } = getCreds();
 
   const client = new Client(30_000); // 30s timeout
-  client.ftp.verbose = false;
+  client.ftp.verbose = true;
+  client.ftp.log = (msg: string) => console.log(`[ftp] ${msg}`);
 
   try {
     await client.access({
