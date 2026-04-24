@@ -178,12 +178,9 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     const cleanHTML = finalHTML;
     const stagingHTML = rewriteLinksForStaging(finalHTML);
 
-    // 1) Push staging copy to Hostinger via REST API
-    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
-    if (!hostingerToken) throw new Error("HOSTINGER_API_TOKEN not configured");
+    // 1) Push staging copy to Hostinger over FTPS
     try {
-      await uploadToHostinger(
-        hostingerToken,
+      await uploadFileToHostingerFtp(
         `${STAGING_FOLDER_ROOT}/${clientId}/index.html`,
         stagingHTML,
       );
