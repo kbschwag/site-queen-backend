@@ -117,9 +117,13 @@ serve(async (req) => {
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
+    if (!hostingerToken) throw new Error("HOSTINGER_API_TOKEN not configured");
 
-    // ── Load homepage + supporting context ──────────────────────────────
-    const { data: homeFile, error: homeErr } = await supabase.storage.from("generated-sites").download(`${clientId}/index.html`);
+    // ── Load homepage (clean copy) + supporting context ─────────────────
+    // Homepage now lives only in the deploy/ backup folder — staging is
+    // pushed straight to Hostinger.
+    const { data: homeFile, error: homeErr } = await supabase.storage.from("generated-sites").download(`${clientId}/deploy/index.html`);
     if (homeErr || !homeFile) throw new Error(`Cannot load homepage: ${homeErr?.message}`);
     const homepageHTML = await homeFile.text();
 
