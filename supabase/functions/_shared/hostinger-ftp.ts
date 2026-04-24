@@ -11,7 +11,7 @@
 // we use. Plain FTP would also work but transmits credentials in cleartext.
 
 // deno-lint-ignore-file no-explicit-any
-import { Client } from "npm:basic-ftp@5.3.0";
+import { Client } from "https://esm.sh/basic-ftp@5.3.0?target=deno";
 import { Buffer } from "node:buffer";
 import { Readable } from "node:stream";
 
