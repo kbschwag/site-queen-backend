@@ -71,15 +71,19 @@ serve(async (req) => {
     const domain = client.domain_name;
     const deployCount = client.deploy_count || 0;
 
-    // Fetch all generated HTML pages from Supabase storage
-    const { data: fileList, error: listError } = await supabase.storage
+    // Fetch all generated HTML pages from the CLEAN deploy folder.
+    // Staging copies live at `[clientId]/<slug>.html` (router-rewritten links
+    // for the operator preview) — those must NEVER reach Hostinger. The
+    // production-ready files live at `[clientId]/deploy/<slug>.html` with
+    // normal relative links and no noindex meta tag.
+    const { data: deployList, error: listError } = await supabase.storage
       .from("generated-sites")
-      .list(clientId, { limit: 100 });
-    if (listError) throw new Error(`Cannot list site files: ${listError.message}`);
+      .list(`${clientId}/deploy`, { limit: 100 });
+    if (listError) throw new Error(`Cannot list deploy files: ${listError.message}`);
 
-    const htmlFiles = (fileList || []).filter((f: any) => f.name.toLowerCase().endsWith(".html"));
+    const htmlFiles = (deployList || []).filter((f: any) => f.name.toLowerCase().endsWith(".html"));
     if (!htmlFiles.find((f: any) => f.name.toLowerCase() === "index.html")) {
-      throw new Error("Generated HTML not found in storage (no index.html)");
+      throw new Error("Clean deploy/index.html not found in storage — re-generate the site first");
     }
 
     // Check for Hostinger API token
@@ -88,14 +92,14 @@ serve(async (req) => {
       throw new Error("HOSTINGER_API_TOKEN not configured");
     }
 
-    // Upload every HTML page (index.html + about.html + services.html + …)
+    // Upload every clean HTML page (index.html + about.html + services.html + …)
     const uploaded: string[] = [];
     for (const f of htmlFiles) {
       const { data: pageFile, error: pageErr } = await supabase.storage
         .from("generated-sites")
-        .download(`${clientId}/${f.name}`);
+        .download(`${clientId}/deploy/${f.name}`);
       if (pageErr || !pageFile) {
-        throw new Error(`Could not download ${f.name}: ${pageErr?.message}`);
+        throw new Error(`Could not download deploy/${f.name}: ${pageErr?.message}`);
       }
       const pageContent = await pageFile.text();
       const uploadResponse = await fetch(
@@ -118,7 +122,7 @@ serve(async (req) => {
       }
       uploaded.push(f.name);
     }
-    console.log(`[deploy] Uploaded ${uploaded.length} pages: ${uploaded.join(", ")}`);
+    console.log(`[deploy] Uploaded ${uploaded.length} pages from deploy/: ${uploaded.join(", ")}`);
 
     // Plant safety marker file on first deployment
     if (deployCount === 0) {

@@ -9,14 +9,38 @@ const corsHeaders = {
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
-// Direct Supabase Storage public URL — bucket `generated-sites` is public,
-// so files are served with their stored MIME type (text/html). No proxy
-// edge function needed.
-function buildPreviewUrl(supabase: any, clientId: string, page = "index.html") {
-  const { data } = supabase.storage
-    .from("generated-sites")
-    .getPublicUrl(`${clientId}/${page}`);
-  return data.publicUrl as string;
+// Staging URL — routes through serve-site edge function so internal links
+// (./about.html, ./services.html) can be rewritten to navigate inside the
+// preview. Also injects noindex so the staging copy is never indexed.
+function buildStagingUrl(supabaseUrl: string, clientId: string, page = "index"): string {
+  const slug = page.replace(/\.html$/i, "");
+  return `${supabaseUrl}/functions/v1/serve-site?client=${clientId}&page=${slug}`;
+}
+
+// Rewrite ./pagename.html and pagename.html links to route through serve-site.
+// Skip external links (http*) and anchors (#…). Also injects a noindex meta tag.
+function rewriteForStaging(html: string, clientId: string, supabaseUrl: string): string {
+  const baseUrl = `${supabaseUrl}/functions/v1/serve-site?client=${clientId}&page=`;
+
+  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g,
+    (_m, q, slug) => `href=${q}${baseUrl}${slug}${q}`);
+
+  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g, (match, q, slug) => {
+    if (slug.startsWith("http")) return match;
+    return `href=${q}${baseUrl}${slug}${q}`;
+  });
+
+  // Inject noindex once
+  if (!/name=["']robots["']/i.test(out)) {
+    const tag = `\n  <meta name="robots" content="noindex, nofollow" />`;
+    if (/<meta\s+charset=["'][^"']+["']\s*\/?>/i.test(out)) {
+      out = out.replace(/(<meta\s+charset=["'][^"']+["']\s*\/?>)/i, `$1${tag}`);
+    } else if (/<head[^>]*>/i.test(out)) {
+      out = out.replace(/(<head[^>]*>)/i, `$1${tag}`);
+    }
+  }
+
+  return out;
 }
 
 serve(async (req) => {
@@ -140,18 +164,39 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     }
 
     // ── Save final ───────────────────────────────────────────────────────
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    // Two copies of every page:
+    //   - staging copy at `[clientId]/index.html` — links rewritten to route
+    //     through serve-site so multi-page nav works inside the preview;
+    //     also has noindex meta so search engines never see it.
+    //   - clean copy at `[clientId]/deploy/index.html` — original relative
+    //     links, no noindex. This is what we ship to Hostinger.
+    const cleanHTML = finalHTML;
+    const stagingHTML = rewriteForStaging(finalHTML, clientId, supabaseUrl);
+
+    const { error: stagingErr } = await supabase.storage
       .from("generated-sites")
       .upload(
         `${clientId}/index.html`,
-        new Blob([finalHTML], { type: "text/html" }),
-        { upsert: true, contentType: "text/html; charset=utf-8" }
+        new Blob([stagingHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" },
       );
-    if (uploadError) {
-      console.error("[part2] Storage upload failed:", uploadError);
-      throw new Error(`Failed to save site to storage: ${uploadError.message}`);
+    if (stagingErr) {
+      console.error("[part2] Staging upload failed:", stagingErr);
+      throw new Error(`Failed to save staging index.html: ${stagingErr.message}`);
     }
-    console.log("[part2] Upload successful:", uploadData);
+
+    const { error: cleanErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/deploy/index.html`,
+        new Blob([cleanHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" },
+      );
+    if (cleanErr) {
+      console.error("[part2] Deploy copy upload failed:", cleanErr);
+      throw new Error(`Failed to save deploy/index.html: ${cleanErr.message}`);
+    }
+    console.log("[part2] Upload successful (staging + deploy copies)");
 
     // Cleanup intermediate files (best-effort)
     await supabase.storage.from("generated-sites").remove([
@@ -159,7 +204,7 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       `${clientId}/part2-context.json`,
     ]).catch(() => {});
 
-    const stagingURL = buildPreviewUrl(supabase, clientId, "index.html");
+    const stagingURL = buildStagingUrl(supabaseUrl, clientId, "index");
 
     await supabase.from("sites").update({
       generation_status: "complete",

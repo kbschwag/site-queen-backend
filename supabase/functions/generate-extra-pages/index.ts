@@ -9,6 +9,31 @@ const corsHeaders = {
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
+// Rewrite ./pagename.html and pagename.html links to route through serve-site,
+// and inject a noindex meta tag. Used only for staging copies.
+function rewriteForStaging(html: string, clientId: string, supabaseUrl: string): string {
+  const baseUrl = `${supabaseUrl}/functions/v1/serve-site?client=${clientId}&page=`;
+
+  let out = html.replace(/href=(['"])\.\/([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g,
+    (_m, q, slug) => `href=${q}${baseUrl}${slug}${q}`);
+
+  out = out.replace(/href=(['"])([a-zA-Z0-9-]+)\.html(?:#[^'"]*)?\1/g, (match, q, slug) => {
+    if (slug.startsWith("http")) return match;
+    return `href=${q}${baseUrl}${slug}${q}`;
+  });
+
+  if (!/name=["']robots["']/i.test(out)) {
+    const tag = `\n  <meta name="robots" content="noindex, nofollow" />`;
+    if (/<meta\s+charset=["'][^"']+["']\s*\/?>/i.test(out)) {
+      out = out.replace(/(<meta\s+charset=["'][^"']+["']\s*\/?>)/i, `$1${tag}`);
+    } else if (/<head[^>]*>/i.test(out)) {
+      out = out.replace(/(<head[^>]*>)/i, `$1${tag}`);
+    }
+  }
+
+  return out;
+}
+
 // Page slug → human label + brief
 const PAGE_BRIEFS: Record<string, { label: string; brief: string; templateRef?: "about" | "services" }> = {
   about: {
@@ -186,19 +211,34 @@ Do not include closing </body> or </html> tags.`;
           pageBody,
         });
 
-        const { data: pageUpload, error: pageUploadErr } = await supabase.storage
+        const cleanHTML = html;
+        const stagingHTML = rewriteForStaging(html, clientId, supabaseUrl);
+
+        const { error: stagingErr } = await supabase.storage
           .from("generated-sites")
           .upload(
             `${clientId}/${page.slug}.html`,
-            new Blob([html], { type: "text/html" }),
-            { upsert: true, contentType: "text/html; charset=utf-8" }
+            new Blob([stagingHTML], { type: "text/html" }),
+            { upsert: true, contentType: "text/html; charset=utf-8" },
           );
-        if (pageUploadErr) {
-          console.error(`[extra-pages] Storage upload failed for ${page.slug}:`, pageUploadErr);
-          throw new Error(`Failed to save ${page.slug}.html to storage: ${pageUploadErr.message}`);
+        if (stagingErr) {
+          console.error(`[extra-pages] Staging upload failed for ${page.slug}:`, stagingErr);
+          throw new Error(`Failed to save staging ${page.slug}.html: ${stagingErr.message}`);
+        }
+
+        const { error: cleanErr } = await supabase.storage
+          .from("generated-sites")
+          .upload(
+            `${clientId}/deploy/${page.slug}.html`,
+            new Blob([cleanHTML], { type: "text/html" }),
+            { upsert: true, contentType: "text/html; charset=utf-8" },
+          );
+        if (cleanErr) {
+          console.error(`[extra-pages] Deploy copy upload failed for ${page.slug}:`, cleanErr);
+          throw new Error(`Failed to save deploy/${page.slug}.html: ${cleanErr.message}`);
         }
         generated.push(page.slug);
-        console.log(`[extra-pages] ✓ ${page.slug}.html saved (${res.outputTokens} tokens)`, pageUpload);
+        console.log(`[extra-pages] ✓ ${page.slug}.html saved (staging + deploy, ${res.outputTokens} tokens)`);
       } catch (e: any) {
         console.error(`[extra-pages] ✗ ${page.slug} failed:`, e.message);
         failed.push(`${page.slug}: ${e.message}`);

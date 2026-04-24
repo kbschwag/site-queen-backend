@@ -2,3 +2,7 @@ project_id = "onrvqbygwzhmhgkctcrm"
 
 [functions.quick-edit-html]
 verify_jwt = true
+
+[functions.serve-site]
+verify_jwt = false
+
