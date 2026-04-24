@@ -162,8 +162,7 @@ ${JSON.stringify(trimmedIntake, null, 2)}
 ${callNotesSection}
 ${photoSection}
 ${brandingInstructions}
-${missingDataInstructions}
-${templateHTML ? `\nDESIGN REFERENCE (section layout inspiration only — do NOT copy class names, CSS, or hardcoded text. Write all HTML and CSS cleanly from scratch):\n${templateHTML.slice(0, 3000)}\n` : ""}`;
+${missingDataInstructions}`;
 
     // ── Update progress, then CALL 1 ────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "building_first_half" } as any).eq("client_id", clientId);
@@ -171,60 +170,142 @@ ${templateHTML ? `\nDESIGN REFERENCE (section layout inspiration only — do NOT
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const call1Prompt = `You are a professional web developer building a website for a small business client.
+    const call1Prompt = `You are an expert web developer working for SiteQueen, a done-for-you website service. Your job is to customize a professional template for a real paying client. The output will go live on their business website. Quality matters — this client is trusting us with their business's online presence.
+
+You will receive three inputs:
+
+1. A TEMPLATE — this is the design. The HTML structure, CSS classes, and layout are professionally designed and must be preserved exactly. Think of it like a form you are filling in, not a starting point to redesign.
+
+2. AN INTAKE FORM — this is what the client submitted. It contains their business name, phone, services, photos, story, and other details. Use this to fill in the template.
+
+3. CALL NOTES — this is the operator's expert judgment from a discovery call with the client. This is the highest priority input. The operator has spoken to the client directly and knows things the intake form doesn't capture. Follow call notes instructions exactly, even if they contradict the intake form.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CLIENT DATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${sharedContext}
 
-INSTRUCTIONS — FIRST HALF:
-Generate the FIRST HALF of this website.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TEMPLATE (this is your design foundation — fill it in, do not redesign it)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-STRUCTURE RULES:
-- Use semantic HTML5 elements throughout: <section>, <article>, <nav>, <main>, <aside>, <header>, <footer>. No div soup.
-- All class names must follow BEM-lite convention: block, block-title, block-body, block-cta, block-item, block-icon. Never use arbitrary names like wrapper-19 or container-58.
-- Zero inline styles. Everything goes in the <style> block. No style="" attributes anywhere.
-- Define ALL colors, fonts, and spacing as CSS custom properties at the very top of the <style> block:
-  :root {
-    --color-primary: [client primary or industry default];
-    --color-accent: [client accent or industry default];
-    --color-dark: #0d1d3b;
-    --color-text: #333333;
-    --color-bg: #ffffff;
-    --font-heading: '[chosen heading font]', sans-serif;
-    --font-body: '[chosen body font]', sans-serif;
-    --spacing-section: 80px;
-    --border-radius: 8px;
-  }
-- One Google Fonts <link> tag only. Combine all fonts into a single URL request.
-- All CSS goes in ONE <style> block in the <head>. That CSS must cover the ENTIRE site — all sections from both halves, plus shared inner-page classes: .page-hero, .breadcrumb, .content-section, .sidebar, .service-card, .pricing-card, .accordion, .accordion-item, .accordion-trigger, .accordion-body, .feature-list, .coupon-card.
-- The output will be post-processed: the <style> block will be extracted into site.css and the <script> block will be extracted into site.js. Write CSS and JS with this in mind — no duplicate rules, no conflicts.
+${templateHTML}
 
-HTML STRUCTURE:
-Start with <!DOCTYPE html> and include the full <head> with ALL CSS inlined in a <style> tag.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TEMPLATE CSS (include this exactly in a <style> tag — do not rewrite it)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${templateCSS}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR RULES — apply these in order for every section
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RULE 1 — CALL NOTES OVERRIDE EVERYTHING
+If the call notes mention a section, element, tone, color, or content decision → follow that instruction exactly. Call notes beat the intake form. Call notes beat the template. Examples:
+- "don't include financing" → remove that section entirely and cleanly
+- "add an emergency banner" → add it matching the template's exact style
+- "their tone is friendly not corporate" → apply that tone to every word of copy
+- "use navy and gold" → apply those exact colors throughout
+- "remove the awards section" → delete it, no trace left
+
+RULE 2 — FILL IN WITH REAL CLIENT DATA
+If you have real data from the intake form for a section → fill it in.
+Keep the HTML structure and every class name exactly as they appear in the template.
+Only change text content and image URLs. Never change a class name. Never restructure the HTML.
+
+RULE 3 — MISSING DATA: FILL WITH AI GENERATED CONTENT OR REMOVE
+When client data is missing for a section, ask yourself: "Can I write convincing, accurate content here based on everything I know about this business?"
+
+FILL WITH AI GENERATED CONTENT when the section needs copy or descriptions:
+- Hero tagline missing → write one specific to their business type, city, and services
+- About story missing → write a compelling 2-3 paragraph story using everything known about the business from intake and call notes. Make it feel personal and real.
+- Service descriptions missing → write professional descriptions based on the service names and business type
+- FAQ missing or fewer than 5 items → write relevant questions a real customer of THIS business would ask. Make them specific, not generic.
+- Testimonials missing or fewer than 3 → write realistic ones with local-sounding names and specific details about the actual services this business offers. Never use generic praise.
+- Why choose us points missing → write based on years in business, service area, specialties, and anything from call notes
+- Trust badges missing → generate relevant industry-appropriate ones
+- Emergency callout copy missing → write based on their specific service type
+
+REMOVE THE SECTION ENTIRELY when real unverifiable data is required:
+- Real photos missing and no Unsplash fallback → remove the photo-dependent element
+- Google rating/review count missing → remove stars and review count display entirely
+- Certifications or licenses missing → remove — never invent credentials
+- Awards missing → remove entirely
+- Real team member names or bios missing → remove the team section
+- Real street address missing → remove from contact section
+- Real phone number missing → remove — never invent contact details
+Never fabricate: phone numbers, addresses, star ratings, review counts, certifications, license numbers, award names, or years in business.
+
+RULE 4 — REMOVING A TEMPLATE SECTION
+When removing a section for any reason → delete it entirely from the HTML.
+No empty divs. No commented-out code. No gaps in layout. It should look like that section was never there.
+
+RULE 5 — ADDING A NEW SECTION TO THE HOMEPAGE
+If call notes or intake request a section not in the template → build it and insert it in the most logical position.
+When building a new section you MUST:
+- Use the exact same CSS custom properties already in the template (--color-primary, --color-accent, --font-heading, --font-body etc.)
+- Match the spacing, padding, and rhythm of surrounding sections exactly
+- Use the same button styles, card styles, and heading styles already in the template
+- Add any new CSS in a single <style> block at the top of the new section only — keep it minimal
+- Never load an external library or font not already in the template
+The new section must be indistinguishable in style from the rest of the page.
+Only add what is explicitly requested in call notes or intake. Never add sections on your own initiative.
+
+RULE 6 — CUSTOM PAGES REQUESTED
+If intake or call notes mention a page not in the standard set (home, about, services, contact) → do NOT build it here.
+Instead:
+1. Add a navigation link to it (e.g. ./gallery.html, ./financing.html)
+2. Add this HTML comment at the bottom of the page: <!-- CUSTOM PAGE REQUESTED: [pagename] -->
+The extra-pages function will build it automatically.
+
+RULE 7 — COPY AND TONE
+Write all copy in the tone specified in call notes.
+If no tone is specified, match the industry:
+- Trades and contractors: confident, direct, no-nonsense. "We get it done right."
+- Wellness and beauty: warm, nurturing, reassuring.
+- Professional services: polished, trustworthy, credible.
+- Food and hospitality: inviting, warm, appetizing.
+All copy must sound like a real local business owner, not a template. Avoid: "we are committed to excellence", "your satisfaction is our priority", "we pride ourselves on", and all other corporate filler phrases. Write like a real person.
+
+RULE 8 — TECHNICAL REQUIREMENTS
+- All phone numbers → <a href="tel:[number]"> click-to-call links
+- All emails → <a href="mailto:[email]"> mailto links
+- Hero background image → CSS background-image only, never an <img> tag
+- First visible <img> → loading="eager" fetchpriority="high"
+- All other <img> tags → loading="lazy"
+- Every <img> → meaningful descriptive alt attribute
+- Navigation links → ./index.html, ./about.html, ./services.html, ./contact.html and any custom pages
+- Zero inline styles — no style="" attributes anywhere
+- No placeholder images — use provided URLs or remove the image element entirely
+
+RULE 9 — WHAT GOOD OUTPUT LOOKS LIKE
+When you are done, someone reading this page should:
+- Immediately know what this business does
+- Know exactly where they serve
+- Have a compelling reason to choose them over competitors
+- Know how to contact them
+- Trust them as a legitimate professional business
+No section should look generic. No content should feel templated. The design must look identical to the template. The content must feel completely custom to this specific business.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INSTRUCTIONS — FIRST HALF
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Apply all rules above to generate the FIRST HALF of this website.
+Start with <!DOCTYPE html> and include the full <head> with the complete template CSS inlined in a <style> tag exactly as provided — do not rewrite or trim it.
 Include these sections in order: topbar, header, mobile nav, hero, trust bar, credentials, about, stats, services.
-Stop after the closing </section> tag of the services section.
-Do NOT close </body> or </html> yet.
+Stop after the closing </section> of the services section.
+Do NOT close </body> or </html> yet — Part 2 continues from here.
 
-IMAGES:
-- Hero background image: CSS background-image only, never an <img> tag.
-- All <img> tags must have loading="lazy" except the first visible image which gets loading="eager" fetchpriority="high".
-- Every image must have a meaningful alt attribute.
-
-NAVIGATION:
-Multi-page site. Desktop AND mobile nav links must point to real files:
-Home → "./index.html", About → "./about.html", Services → "./services.html", Contact → "./contact.html".
-If call notes list additional pages, link those too (e.g. "./gallery.html").
-Anchors like #about are fine ONLY for sections on the homepage itself.
-
-CONTENT:
-Replace all {{PLACEHOLDERS}} with real client data.
-For any missing data use a professional relevant default — never leave a placeholder visible.
-If a section has no real data to fill it, remove it entirely. Never render an empty or skeleton section.
-Make all phone numbers click-to-call tel: links and email addresses mailto: links.
-The site must be fully responsive and mobile-perfect.
+Multi-page navigation: desktop AND mobile nav links must point to real files:
+Home → "./index.html", About → "./about.html", Services → "./services.html", Contact → "./contact.html"
+If call notes or intake list additional pages, include those links too.
 
 CRITICAL OUTPUT INSTRUCTIONS:
 Return ONLY raw HTML — no markdown, no code blocks, no explanation.
-Do NOT wrap the response in \`\`\`html fences.
+Do NOT wrap in \`\`\`html fences.
 The very first character must be < and start with <!DOCTYPE html>.`;
 
     console.log("[part1] Calling Claude for top half…");
@@ -294,7 +375,7 @@ The very first character must be < and start with <!DOCTYPE html>.`;
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
-  const TIMEOUT_MS = 300_000; // 5 minutes for Part 1
+  const TIMEOUT_MS = 600_000; // 10 minutes — maximum time per Claude call
   let lastErr: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
