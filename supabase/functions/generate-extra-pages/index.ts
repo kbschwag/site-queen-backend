@@ -11,7 +11,7 @@ const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
 
 // Staging is hosted on Hostinger at staging.sitequeen.ai → /public_html/staging
-const STAGING_FOLDER_ROOT = "/public_html/staging";
+const STAGING_FOLDER_ROOT = "/public_html";
 
 // Inject noindex meta tag for staging copies. Internal page links use plain
 // relative paths (./about.html etc.) which work natively on the Hostinger
