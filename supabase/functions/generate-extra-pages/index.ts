@@ -99,8 +99,7 @@ serve(async (req) => {
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
-    const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
-    if (!hostingerToken) throw new Error("HOSTINGER_API_TOKEN not configured");
+    // FTP credentials are checked lazily inside uploadFileToHostingerFtp.
 
     // ── Load homepage (clean copy) + supporting context ─────────────────
     // Homepage now lives only in the deploy/ backup folder — staging is
