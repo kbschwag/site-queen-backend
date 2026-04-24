@@ -163,7 +163,7 @@ ${callNotesSection}
 ${photoSection}
 ${brandingInstructions}
 ${missingDataInstructions}
-${templateHTML ? `\nHTML TEMPLATE (replace placeholders):\n${templateHTML}\n` : ""}${templateCSS ? `\nCSS TEMPLATE (inline this in <style>):\n${templateCSS}\n` : ""}`;
+${templateHTML ? `\nDESIGN REFERENCE (section layout inspiration only — do NOT copy class names, CSS, or hardcoded text. Write all HTML and CSS cleanly from scratch):\n${templateHTML.slice(0, 3000)}\n` : ""}`;
 
     // ── Update progress, then CALL 1 ────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "building_first_half" } as any).eq("client_id", clientId);
@@ -294,7 +294,7 @@ The very first character must be < and start with <!DOCTYPE html>.`;
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
-  const TIMEOUT_MS = 90_000; // 90 seconds — clean error instead of silent hang
+  const TIMEOUT_MS = 300_000; // 5 minutes for Part 1
   let lastErr: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
