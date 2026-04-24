@@ -91,11 +91,25 @@ ${firstHalf}
 INSTRUCTIONS — SECOND HALF:
 Generate the SECOND HALF continuing exactly where the first half left off.
 Start directly with the next section after services — do NOT repeat <!DOCTYPE html>, <head>, or any CSS.
-Include all remaining sections: emergency CTA (if applicable), why us, reviews/testimonials, financing (if applicable), service areas, FAQ, final CTA, footer.
-Reuse the design system and class naming already established in the first half so every later section is fully styled by the CSS that is already in the document.
-Do NOT invent a new naming scheme for second-half sections unless you use inline styles on those elements.
-Then include all JavaScript for mobile menu, FAQ accordion, form submit handler, scroll animations, sticky header.
-Then include this analytics script just before </body>:
+
+STRUCTURE RULES (same as first half — maintain consistency):
+- Semantic HTML5 elements only. No div soup.
+- Same BEM-lite class naming as the first half. No new naming schemes.
+- Zero inline styles. Reuse classes already defined in the first half's CSS.
+- If you need a new class not in the first half, add a single <style> block before the first new section only — keep it minimal.
+
+SECTIONS TO INCLUDE:
+Emergency CTA (if applicable), why us, reviews/testimonials, financing (if applicable), service areas, FAQ, final CTA, footer.
+If a section has no real data, remove it entirely. Never render an empty section.
+
+JAVASCRIPT — write ONE <script> block at the very end of <body>, before </body>:
+- Vanilla JavaScript only. No jQuery, no lodash, no external libraries.
+- Wrap ALL logic in one DOMContentLoaded listener.
+- Include: mobile menu toggle with body scroll lock and Escape key handler, FAQ accordion, sticky header on scroll, scroll-reveal animations (default elements to visible — use IntersectionObserver to ADD a class, never start hidden), smooth scroll for anchor links, contact form validation and submit handler.
+- No inline event handlers (no onclick=, no onsubmit=). All event listeners added in JS only.
+- The <script defer src="./site.js"></script> tag will be injected by post-processing. Do NOT add it yourself.
+
+ANALYTICS — include this script just before </body>, after your main <script> block:
 
 <script>
 (function(){
@@ -112,11 +126,11 @@ Then include this analytics script just before </body>:
 
 End with </body> and </html> as the absolute last things.
 Replace all {{PLACEHOLDERS}} with real client data.
-Make all phone numbers click-to-call links and email addresses mailto links.
+Make all phone numbers tel: links and email addresses mailto: links.
 
 CRITICAL OUTPUT INSTRUCTIONS:
 Return ONLY raw HTML — no markdown, no code blocks, no explanation.
-Do NOT wrap the response in \`\`\`html fences.
+Do NOT wrap in \`\`\`html fences.
 Do NOT start with <!DOCTYPE html> — start directly with the first section after services.
 End with </html> as the very last character.`;
 
@@ -130,51 +144,80 @@ End with </html> as the very last character.`;
     if (!finalHTML.includes("</body>")) throw new Error("Site incomplete — missing </body>");
 
     // Strip any stray external stylesheet link
-    finalHTML = finalHTML.replace(/<link[^>]*href=["']styles\.css["'][^>]*>/gi, "");
+    finalHTML = finalHTML.replace(/<link[^>]*href=["']styles?\.css["'][^>]*>/gi, "");
 
-    // Safety net: ensure animate-on-scroll elements are ALWAYS visible.
-    // Claude often generates `.animate-on-scroll { opacity: 0 }` with an
-    // IntersectionObserver to fade in. In iframe previews, mobile, or when
-    // the observer misses below-fold elements, sections stay invisible —
-    // making the page look completely blank. We force visibility from the
-    // start; the fade-in is purely cosmetic and not worth the risk.
+    // ── Extract CSS into site.css ────────────────────────────────────────
+    const cssMatch = finalHTML.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+    const extractedCSS = cssMatch ? cssMatch[1].trim() : "";
+    if (!extractedCSS) throw new Error("Generated HTML contains no <style> block — cannot extract site.css");
+
+    // ── Extract JS into site.js ─────────────────────────────────────────
+    // Collect all <script> blocks except the analytics snippet (keep that inline)
+    const scriptBlocks: string[] = [];
+    const analyticsMarker = "(function(){";
+    finalHTML = finalHTML.replace(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi, (_match, content) => {
+      if (content.includes(analyticsMarker)) return _match; // keep analytics inline
+      if (content.trim().length > 0) scriptBlocks.push(content.trim());
+      return ""; // remove from HTML
+    });
+    const extractedJS = scriptBlocks.join("\n\n");
+
+    // ── Rewrite HTML to reference external files ─────────────────────────
+    // Replace the <style> block with a <link> to site.css
+    finalHTML = finalHTML.replace(/<style[^>]*>[\s\S]*?<\/style>/i,
+      `<link rel="stylesheet" href="./site.css" />`
+    );
+    // Inject site.js <script defer> just before </body>
+    finalHTML = finalHTML.replace("</body>",
+      `<script defer src="./site.js"></script>\n</body>`
+    );
+
+    // ── Animate-on-scroll safety net (goes into site.js, not inline) ─────
     const animateSafetyNet = `
-<style>
-  /* Force all scroll-animated elements visible (fade-in disabled for reliability) */
-  .animate-on-scroll { opacity: 1 !important; transform: none !important; }
-</style>
-<script>
-  // Belt-and-suspenders: also add the .visible class so any code reading it works.
-  (function(){
-    function reveal(){
-      document.querySelectorAll('.animate-on-scroll').forEach(function(el){
-        el.classList.add('visible');
-      });
-    }
+// Belt-and-suspenders: force all scroll-animated elements visible on load
+(function(){
+  function reveal(){
+    document.querySelectorAll('.animate-on-scroll').forEach(function(el){
+      el.classList.add('visible');
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', reveal);
+  } else {
     reveal();
-    if (document.readyState !== 'complete') window.addEventListener('load', reveal);
-  })();
-</script>`;
-    finalHTML = finalHTML.replace("</body>", animateSafetyNet + "\n</body>");
+  }
+})();`;
+
+    const finalJS = extractedJS + "\n" + animateSafetyNet;
+
+    // ── Build site-meta.json ─────────────────────────────────────────────
+    const classNames = [...new Set(
+      [...extractedCSS.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[{,]/g)].map(m => m[1])
+    )].filter(c => !c.startsWith("animate") && c.length > 1).slice(0, 200);
+
+    const primaryColorMatch = extractedCSS.match(/--color-primary\s*:\s*([^;]+)/);
+    const accentColorMatch = extractedCSS.match(/--color-accent\s*:\s*([^;]+)/);
+    const fontHeadingMatch = extractedCSS.match(/--font-heading\s*:\s*'([^']+)'/);
+    const fontBodyMatch = extractedCSS.match(/--font-body\s*:\s*'([^']+)'/);
+
+    const siteMeta = {
+      primaryColor: primaryColorMatch ? primaryColorMatch[1].trim() : "",
+      accentColor: accentColorMatch ? accentColorMatch[1].trim() : "",
+      fontHeading: fontHeadingMatch ? fontHeadingMatch[1] : "",
+      fontBody: fontBodyMatch ? fontBodyMatch[1] : "",
+      classes: classNames,
+      generatedAt: new Date().toISOString(),
+    };
 
     // Append Unsplash photo credits comment
     const { heroPhoto, aboutPhoto, whyUsPhoto, emergencyBgPhoto } = ctx.photos || {};
     if (ctx.usingStockPhotos && (heroPhoto || aboutPhoto || whyUsPhoto || emergencyBgPhoto)) {
-      const credits = `
-<!-- Photo credits (Unsplash):
-${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unsplash_url})\n` : ""}${aboutPhoto ? `  About: ${aboutPhoto.photographer} on Unsplash (${aboutPhoto.unsplash_url})\n` : ""}${whyUsPhoto ? `  Why us: ${whyUsPhoto.photographer} on Unsplash (${whyUsPhoto.unsplash_url})\n` : ""}${emergencyBgPhoto ? `  Emergency bg: ${emergencyBgPhoto.photographer} on Unsplash (${emergencyBgPhoto.unsplash_url})\n` : ""}  Search terms used: ${(ctx.photoTerms || []).join(", ")}
--->`;
+      const credits = `\n<!-- Photo credits (Unsplash):\n${heroPhoto ? `  Hero: ${heroPhoto.photographer} (${heroPhoto.unsplash_url})\n` : ""}${aboutPhoto ? `  About: ${aboutPhoto.photographer} (${aboutPhoto.unsplash_url})\n` : ""}${whyUsPhoto ? `  Why us: ${whyUsPhoto.photographer} (${whyUsPhoto.unsplash_url})\n` : ""}${emergencyBgPhoto ? `  Emergency: ${emergencyBgPhoto.photographer} (${emergencyBgPhoto.unsplash_url})\n` : ""}-->`;
       finalHTML += credits;
     }
 
-    // ── Save final ───────────────────────────────────────────────────────
-    // ── Save final ───────────────────────────────────────────────────────
-    // Two destinations:
-    //   - Hostinger /public_html/staging/{clientId}/index.html — the LIVE
-    //     staging copy operators preview at https://staging.sitequeen.ai/...
-    //     (links rewritten as no-op, noindex meta injected).
-    //   - Supabase storage [clientId]/deploy/index.html — backup + source
-    //     of truth for the go-live deploy-to-hostinger step.
     const cleanHTML = finalHTML;
     const stagingHTML = rewriteLinksForStaging(finalHTML);
 
@@ -203,6 +246,61 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       throw new Error(`Failed to save deploy/index.html backup: ${cleanErr.message}`);
     }
     console.log("[part2] ✓ Clean deploy backup saved to storage");
+
+    // ── Upload site.css ──────────────────────────────────────────────────
+    try {
+      await uploadFileToHostingerFtp(
+        `${STAGING_FOLDER_ROOT}/${clientId}/site.css`,
+        extractedCSS,
+      );
+      console.log("[part2] ✓ site.css pushed to Hostinger staging");
+    } catch (e: any) {
+      console.error("[part2] site.css Hostinger upload failed:", e.message);
+      throw new Error(`Hostinger site.css upload failed: ${e.message}`);
+    }
+
+    const { error: cssErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/deploy/site.css`,
+        new Blob([extractedCSS], { type: "text/css" }),
+        { upsert: true, contentType: "text/css; charset=utf-8" },
+      );
+    if (cssErr) throw new Error(`Failed to save deploy/site.css: ${cssErr.message}`);
+    console.log("[part2] ✓ site.css deploy backup saved");
+
+    // ── Upload site.js ───────────────────────────────────────────────────
+    try {
+      await uploadFileToHostingerFtp(
+        `${STAGING_FOLDER_ROOT}/${clientId}/site.js`,
+        finalJS,
+      );
+      console.log("[part2] ✓ site.js pushed to Hostinger staging");
+    } catch (e: any) {
+      console.error("[part2] site.js Hostinger upload failed:", e.message);
+      throw new Error(`Hostinger site.js upload failed: ${e.message}`);
+    }
+
+    const { error: jsErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/deploy/site.js`,
+        new Blob([finalJS], { type: "application/javascript" }),
+        { upsert: true, contentType: "application/javascript; charset=utf-8" },
+      );
+    if (jsErr) throw new Error(`Failed to save deploy/site.js: ${jsErr.message}`);
+    console.log("[part2] ✓ site.js deploy backup saved");
+
+    // ── Upload site-meta.json ────────────────────────────────────────────
+    const { error: metaErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/deploy/site-meta.json`,
+        new Blob([JSON.stringify(siteMeta, null, 2)], { type: "application/json" }),
+        { upsert: true, contentType: "application/json; charset=utf-8" },
+      );
+    if (metaErr) console.error("[part2] site-meta.json upload failed (non-fatal):", metaErr);
+    else console.log("[part2] ✓ site-meta.json saved");
 
     // Cleanup intermediate files (best-effort)
     await supabase.storage.from("generated-sites").remove([
@@ -260,11 +358,16 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;
+  const TIMEOUT_MS = 90_000; // 90 seconds — clean error instead of silent hang
   let lastErr: Error | null = null;
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const r = await fetch(AI_ENDPOINT, {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
@@ -272,10 +375,11 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
         },
         body: JSON.stringify({
           model: AI_MODEL,
-          max_tokens: 16000,
+          max_tokens: 12000,
           messages: [{ role: "user", content }],
         }),
       });
+      clearTimeout(timeout);
       if (!r.ok) {
         const errText = await r.text();
         console.error(`[${label}] Claude error ${r.status}:`, errText);
@@ -289,12 +393,15 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
       const text = Array.isArray(data.content)
         ? data.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
         : "";
-      return {
-        text,
-        outputTokens: data.usage?.output_tokens || 0,
-      };
-    } catch (err) {
-      lastErr = err as Error;
+      return { text, outputTokens: data.usage?.output_tokens || 0 };
+    } catch (err: any) {
+      clearTimeout(timeout);
+      if (err.name === "AbortError") {
+        lastErr = new Error(`Claude ${label} timed out after ${TIMEOUT_MS / 1000}s`);
+      } else {
+        lastErr = err as Error;
+      }
+      console.error(`[${label}] attempt ${attempt} failed:`, lastErr.message);
       if (attempt < MAX_ATTEMPTS) await new Promise((res) => setTimeout(res, 2000));
     }
   }
