@@ -177,28 +177,17 @@ Return ONLY a valid JSON object with these four fields. No explanation or markdo
         .from("generated-sites")
         .upload(`${clientId}/deploy/index.html`, htmlBlob, { upsert: true, contentType: "text/html" });
 
-      // Push the updated copy straight to Hostinger staging so the operator
-      // and client preview iframes show the change immediately. Skipped if
-      // the site is already live — the deploy step below will handle that.
-      const hostingerToken = Deno.env.get("HOSTINGER_API_TOKEN");
-      if (hostingerToken && clientData?.site_status !== "live") {
+      // Push the updated copy straight to Hostinger staging over FTPS so
+      // the operator and client preview iframes show the change immediately.
+      // Skipped if the site is already live — the deploy step below handles
+      // that case.
+      if (clientData?.site_status !== "live") {
         try {
           const stagingHtml = injectNoindex(result.html);
-          const r = await fetch("https://api.hostinger.com/v1/hosting/files/upload", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${hostingerToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              path: `/public_html/staging/${clientId}/index.html`,
-              content: btoa(unescape(encodeURIComponent(stagingHtml))),
-            }),
-          });
-          if (!r.ok) {
-            const errText = await r.text();
-            console.error(`[process-change-request] staging push failed ${r.status}:`, errText.substring(0, 300));
-          }
+          await uploadFileToHostingerFtp(
+            `/public_html/staging/${clientId}/index.html`,
+            stagingHtml,
+          );
         } catch (e) {
           console.error("[process-change-request] staging push error:", e);
         }
