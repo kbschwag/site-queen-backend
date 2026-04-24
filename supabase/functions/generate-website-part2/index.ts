@@ -164,18 +164,39 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
     }
 
     // ── Save final ───────────────────────────────────────────────────────
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    // Two copies of every page:
+    //   - staging copy at `[clientId]/index.html` — links rewritten to route
+    //     through serve-site so multi-page nav works inside the preview;
+    //     also has noindex meta so search engines never see it.
+    //   - clean copy at `[clientId]/deploy/index.html` — original relative
+    //     links, no noindex. This is what we ship to Hostinger.
+    const cleanHTML = finalHTML;
+    const stagingHTML = rewriteForStaging(finalHTML, clientId, supabaseUrl);
+
+    const { error: stagingErr } = await supabase.storage
       .from("generated-sites")
       .upload(
         `${clientId}/index.html`,
-        new Blob([finalHTML], { type: "text/html" }),
-        { upsert: true, contentType: "text/html; charset=utf-8" }
+        new Blob([stagingHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" },
       );
-    if (uploadError) {
-      console.error("[part2] Storage upload failed:", uploadError);
-      throw new Error(`Failed to save site to storage: ${uploadError.message}`);
+    if (stagingErr) {
+      console.error("[part2] Staging upload failed:", stagingErr);
+      throw new Error(`Failed to save staging index.html: ${stagingErr.message}`);
     }
-    console.log("[part2] Upload successful:", uploadData);
+
+    const { error: cleanErr } = await supabase.storage
+      .from("generated-sites")
+      .upload(
+        `${clientId}/deploy/index.html`,
+        new Blob([cleanHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" },
+      );
+    if (cleanErr) {
+      console.error("[part2] Deploy copy upload failed:", cleanErr);
+      throw new Error(`Failed to save deploy/index.html: ${cleanErr.message}`);
+    }
+    console.log("[part2] Upload successful (staging + deploy copies)");
 
     // Cleanup intermediate files (best-effort)
     await supabase.storage.from("generated-sites").remove([
@@ -183,7 +204,7 @@ ${heroPhoto ? `  Hero: ${heroPhoto.photographer} on Unsplash (${heroPhoto.unspla
       `${clientId}/part2-context.json`,
     ]).catch(() => {});
 
-    const stagingURL = buildPreviewUrl(supabase, clientId, "index.html");
+    const stagingURL = buildStagingUrl(supabaseUrl, clientId, "index");
 
     await supabase.from("sites").update({
       generation_status: "complete",
