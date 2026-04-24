@@ -274,7 +274,7 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
         },
         body: JSON.stringify({
           model: AI_MODEL,
-          max_tokens: 16000,
+          max_tokens: 6000,
           messages: [{ role: "user", content }],
         }),
       });
