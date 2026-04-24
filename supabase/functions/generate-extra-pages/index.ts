@@ -147,45 +147,71 @@ serve(async (req) => {
       loadTemplate(supabase, "trades-hero-services.css"),
     ]);
 
-    // Trim homepage to the parts useful as style/structure reference
-    const headBlock = extractHead(homepageHTML);
-    const headerBlock = extractFirstMatch(homepageHTML, /<header[\s\S]*?<\/header>/i) || "";
-    const footerBlock = extractFirstMatch(homepageHTML, /<footer[\s\S]*?<\/footer>/i) || "";
-    const sharedScripts = extractBodyScripts(homepageHTML);
+    // Trim intake to only what Claude needs for inner pages
+    const trimmedIntake = {
+      business_name: intake.business_name,
+      phone: intake.business_phone,
+      email: intake.business_email,
+      city: intake.business_city,
+      state: intake.business_state,
+      services: intake.services,
+      about_story: intake.about_story,
+      years_in_business: intake.years_in_business,
+      google_rating: intake.google_rating,
+      google_review_count: intake.google_review_count,
+      tagline: intake.tagline,
+      team_members: intake.team_members,
+      testimonials: intake.testimonials,
+      service_areas: intake.service_areas,
+      faq_items: intake.faq_items,
+    };
 
     const sharedContext = `BUSINESS CONTEXT:
 Business name: ${clientData?.business_name || "Business"}
 Business type: ${clientData?.business_type || "Service Business"}
 
 CLIENT INTAKE:
-${JSON.stringify(intake, null, 2)}
+${JSON.stringify(trimmedIntake, null, 2)}
 
-${callNotes ? `CALL NOTES:\n${JSON.stringify(callNotes, null, 2)}\n` : ""}`;
+${callNotes ? `CALL NOTES (higher priority than intake):\n${JSON.stringify({
+  their_story: callNotes.their_story,
+  ideal_customer: callNotes.ideal_customer,
+  google_search_terms: callNotes.google_search_terms,
+  website_goal: callNotes.website_goal,
+  expert_additions: callNotes.expert_additions,
+  expert_avoid: callNotes.expert_avoid,
+  exact_phrases: callNotes.exact_phrases,
+  tone_of_voice: callNotes.tone_of_voice,
+  pages_agreed: callNotes.pages_agreed,
+}, null, 2)}\n` : ""}
+
+BRAND DESIGN SYSTEM (already defined in site.css — reuse these exactly):
+Primary color: ${siteMeta.primaryColor || "see CSS --color-primary"}
+Accent color: ${siteMeta.accentColor || "see CSS --color-accent"}
+Heading font: ${siteMeta.fontHeading || "see CSS --font-heading"}
+Body font: ${siteMeta.fontBody || "see CSS --font-body"}
+Available CSS classes (use these, do not invent new ones unless essential):
+${siteMeta.classes.join(", ")}`;
 
     const generated: string[] = [];
     const failed: string[] = [];
 
-    for (const page of pages) {
-      try {
+    const results = await Promise.allSettled(
+      pages.map(async (page): Promise<string> => {
         const ref = page.templateRef === "about"
-          ? buildRef("ABOUT PAGE REFERENCE (trades-hero template — use ONLY for inspiration on layout & sections, NOT for code/CSS to copy)", aboutTpl, aboutCss)
+          ? buildRef("ABOUT PAGE REFERENCE (layout inspiration only — do NOT copy code or CSS)", aboutTpl, aboutCss)
           : page.templateRef === "services"
-          ? buildRef("SERVICES PAGE REFERENCE (trades-hero template — use ONLY for inspiration on layout & sections, NOT for code/CSS to copy)", servicesTpl, servicesCss)
+          ? buildRef("SERVICES PAGE REFERENCE (layout inspiration only — do NOT copy code or CSS)", servicesTpl, servicesCss)
           : "";
 
-        const prompt = `You are building the ${page.label.toUpperCase()} page of a multi-page website for a small business.
-The homepage already exists. You must produce ONLY the INNER PAGE CONTENT that belongs between the shared header and shared footer.
-Your output must visually match the homepage exactly — same fonts, colors, spacing, buttons, cards, and section rhythm.
+        const prompt = `You are building the ${page.label.toUpperCase()} page of a multi-page small business website.
 
 ${sharedContext}
 
-HOMEPAGE <head> (contains the full inlined CSS that styles the entire site):
-${headBlock}
-
-HOMEPAGE HEADER (already handled separately — use it as visual reference only):
+HOMEPAGE HEADER (visual reference — will be injected separately):
 ${headerBlock}
 
-HOMEPAGE FOOTER (already handled separately):
+HOMEPAGE FOOTER (visual reference — will be injected separately):
 ${footerBlock}
 ${ref}
 
@@ -193,71 +219,70 @@ PAGE BRIEF — ${page.label.toUpperCase()}:
 ${page.brief}
 
 REQUIREMENTS:
-- Return ONLY the markup that goes BETWEEN the shared header and footer.
-- Do NOT return <!DOCTYPE html>, <html>, <head>, <body>, <header>, or <footer>.
-- Build the page body using the SAME class names the homepage uses (e.g. .hero, .about, .services, .btn, .section-heading, .section-eyebrow). Do NOT invent a new design system. If you need a new section, you may include one small <style> block before the first section — but prefer reusing existing classes.
-- Add a small "page hero" / breadcrumb area at the top (dark background, page title, optional breadcrumb). The homepage CSS already has helpers — reuse them.
-- All internal links: Home → "./index.html", About → "./about.html", Services → "./services.html", Contact → "./contact.html", and any other pages should follow the same "./<slug>.html" pattern.
-- All phone numbers must be tel: links, emails must be mailto: links.
-- Replace any nav link to a page that does not exist with "#".
-- Do NOT include any <script> tags. Shared scripts are already handled globally.
-- Inline-only CSS. No external stylesheets.
+- Return ONLY the markup between the shared header and footer. Nothing else.
+- Do NOT return <!DOCTYPE html>, <html>, <head>, <body>, <header>, or <footer> tags.
+- Use the SAME BEM-lite class names already in site.css (listed in the brand design system above). Do not invent a new design system.
+- If you need a class that does not exist, add ONE small <style> block before your first <section> — keep it minimal, use CSS custom properties from :root.
+- Start with a page-hero section (dark background, page title, optional breadcrumb).
+- All internal links: Home → "./index.html", About → "./about.html", Services → "./services.html", Contact → "./contact.html". Other pages use "./<slug>.html".
+- All phone numbers must be tel: links. All emails must be mailto: links.
+- All <img> tags must have loading="lazy" and a meaningful alt attribute.
+- Zero inline styles. No style="" attributes.
+- Do NOT include any <script> tags.
+- Do NOT include a <link> to site.css — it is already in the <head>.
+- If a section has no real data, remove it entirely. Never render an empty or skeleton section.
 - Mobile-perfect responsive.
 
 CRITICAL OUTPUT INSTRUCTIONS:
-Return ONLY raw HTML for the inner page content — no markdown, no code blocks, no explanation.
+Return ONLY raw HTML — no markdown, no code blocks, no explanation.
 Do NOT wrap in \`\`\`.
-First character must be < and should usually begin with <section or <style>.
-Do not include closing </body> or </html> tags.`;
+First character must be < and start with <section or <style>.
+Do not include </body> or </html>.`;
 
-        console.log(`[extra-pages] Generating ${page.slug} (${prompt.length} chars prompt)…`);
+        console.log(`[extra-pages] Generating ${page.slug} (${prompt.length} chars)…`);
         const res = await callAI(ANTHROPIC_API_KEY, prompt, `page-${page.slug}`);
         const pageBody = normalizeGeneratedBody(stripMarkdown(res.text));
-        if (!pageBody) {
-          throw new Error(`Page ${page.slug} returned malformed HTML`);
-        }
+        if (!pageBody) throw new Error(`Page ${page.slug} returned malformed HTML`);
+
         const html = composePageHtml({
           businessName: clientData?.business_name || "Business",
           headBlock,
           headerBlock,
           footerBlock,
-          sharedScripts,
+          sharedScripts: `<script defer src="./site.js"></script>`,
           pageSlug: page.slug,
           pageLabel: page.label,
           pageBody,
         });
 
-        const cleanHTML = html;
         const stagingHTML = rewriteLinksForStaging(html);
 
-        // 1) Push staging copy to Hostinger over FTPS
-        try {
-          await uploadFileToHostingerFtp(
-            `${STAGING_FOLDER_ROOT}/${clientId}/${page.slug}.html`,
-            stagingHTML,
-          );
-        } catch (e: any) {
-          console.error(`[extra-pages] Hostinger staging upload failed for ${page.slug}:`, e.message);
-          throw new Error(`Hostinger staging upload failed for ${page.slug}: ${e.message}`);
-        }
+        await uploadFileToHostingerFtp(
+          `${STAGING_FOLDER_ROOT}/${clientId}/${page.slug}.html`,
+          stagingHTML,
+        );
 
-        // 2) Backup clean copy to Supabase storage (deploy folder)
         const { error: cleanErr } = await supabase.storage
           .from("generated-sites")
           .upload(
             `${clientId}/deploy/${page.slug}.html`,
-            new Blob([cleanHTML], { type: "text/html" }),
+            new Blob([html], { type: "text/html" }),
             { upsert: true, contentType: "text/html; charset=utf-8" },
           );
-        if (cleanErr) {
-          console.error(`[extra-pages] Deploy backup upload failed for ${page.slug}:`, cleanErr);
-          throw new Error(`Failed to save deploy/${page.slug}.html backup: ${cleanErr.message}`);
-        }
-        generated.push(page.slug);
-        console.log(`[extra-pages] ✓ ${page.slug}.html (staging→Hostinger + deploy backup, ${res.outputTokens} tokens)`);
-      } catch (e: any) {
-        console.error(`[extra-pages] ✗ ${page.slug} failed:`, e.message);
-        failed.push(`${page.slug}: ${e.message}`);
+        if (cleanErr) throw new Error(`Failed to save deploy/${page.slug}.html: ${cleanErr.message}`);
+
+        console.log(`[extra-pages] ✓ ${page.slug}.html (${res.outputTokens} tokens)`);
+        return page.slug;
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        generated.push(result.value);
+      } else {
+        const msg = (result.reason as any)?.message || "unknown error";
+        console.error(`[extra-pages] ✗ page failed:`, msg);
+        failed.push(msg);
       }
     }
 
