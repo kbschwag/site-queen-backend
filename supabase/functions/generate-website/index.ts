@@ -548,6 +548,13 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{SUPABASE_URL}}": supabaseUrl,
     };
 
+    // Pre-fill header logo block: logo XOR business name (never both).
+    // Matches the template pattern: {{LOGO_HTML}}<span class="logo-text">{{BUSINESS_NAME}}</span>
+    const headerLogoBlockRe = /\{\{LOGO_HTML\}\}\s*<span class="logo-text">\s*\{\{BUSINESS_NAME\}\}\s*<\/span>/g;
+    html = html.replace(headerLogoBlockRe, hasLogo
+      ? logoHTML
+      : `<span class="logo-text">${escapeHTML(businessName)}</span>`);
+
     for (const [key, value] of Object.entries(fill)) {
       html = html.split(key).join(value);
     }
