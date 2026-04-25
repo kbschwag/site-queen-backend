@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
-const TIMEOUT_MS = 600_000; // 10 minutes per Claude call
+const TIMEOUT_MS = 600_000; // 10 minutes
 
 const STAGING_BASE_URL = "https://staging.sitequeen.ai";
 const STAGING_FOLDER_ROOT = "/public_html";
@@ -33,12 +33,9 @@ serve(async (req) => {
   }
 
   try {
-    // ── Bump attempt counter + status ────────────────────────────────────
+    // ── Bump attempt counter ─────────────────────────────────────────────
     const { data: existingSite } = await supabase
-      .from("sites")
-      .select("generation_attempts")
-      .eq("client_id", clientId)
-      .maybeSingle();
+      .from("sites").select("generation_attempts").eq("client_id", clientId).maybeSingle();
 
     await supabase.from("sites").update({
       generation_status: "generating",
@@ -91,36 +88,8 @@ serve(async (req) => {
       : "trades-hero";
 
     const { data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}.html`);
-    const { data: cssFile } = await supabase.storage.from("templates").download(`${templateId}.css`);
     if (!htmlFile) throw new Error(`Template not found: ${templateId}.html`);
-
     const templateHTML = await htmlFile.text();
-    const templateCSS = cssFile ? await cssFile.text() : "";
-
-    // ── Photos ───────────────────────────────────────────────────────────
-    const usingStockPhotos = !!(siteData as any).using_stock_photos;
-    const photoTerms = getPhotoSearchTerms(clientData, intake);
-
-    let heroPhoto: any = null;
-    let aboutPhoto: any = null;
-    let whyUsPhoto: any = null;
-
-    if (usingStockPhotos) {
-      [heroPhoto, aboutPhoto, whyUsPhoto] = await Promise.all([
-        fetchUnsplashPhoto(photoTerms.map((t: string) => `${t} wide`), 1920, 900),
-        fetchUnsplashPhoto(photoTerms.map((t: string) => `${t} team`), 800, 600),
-        fetchUnsplashPhoto(photoTerms.map((t: string) => `${t} professional`), 600, 700),
-      ]);
-    }
-
-    const aboutImageUrl = teamPhotos[0] || portfolioPhotos[0] || aboutPhoto?.url || "";
-    const whyUsImageUrl = portfolioPhotos[1] || portfolioPhotos[0] || whyUsPhoto?.url || "";
-    const heroImageUrl = portfolioPhotos[2] || portfolioPhotos[0] || heroPhoto?.url || "";
-
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
-
-    await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
 
     // ── Business data shortcuts ──────────────────────────────────────────
     const businessName = (clientData as any)?.business_name || intake.business_name || "Business";
@@ -131,7 +100,7 @@ serve(async (req) => {
     const phoneRaw = phone.replace(/\D/g, "");
     const email = intake.business_email || intake.email || "";
     const address = intake.business_address || intake.address || "";
-    const yearsInBusiness = intake.years_in_business || intake.years || "";
+    const yearsInBusiness = intake.years_in_business || "";
     const googleRating = intake.google_rating || "";
     const googleReviewCount = intake.google_review_count || "";
     const aboutStory = intake.about_story || intake.owner_bio_raw || intake.story_started || "";
@@ -139,43 +108,49 @@ serve(async (req) => {
     const ownerTitle = intake.owner_title || "Owner";
     const noTestimonials = !!intake.no_testimonials;
     const tagline = intake.tagline || "";
-    const mapEmbedUrl = intake.map_embed_url || "";
     const domain = intake.domain || "";
-    const logoUrl = intake.logo_url || "";
 
     const portfolioPhotos: string[] = Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : [];
     const teamPhotos: string[] = Array.isArray(intake.team_photos) ? intake.team_photos : [];
-
     const services: any[] = Array.isArray(intake.services) ? intake.services : [];
-    const testimonials: any[] = Array.isArray(intake.testimonials) ? intake.testimonials : [];
-    const faqItems: any[] = Array.isArray(intake.faq_items) ? intake.faq_items : [];
     const awards: any[] = Array.isArray(intake.awards) ? intake.awards : [];
     const coupons: any[] = Array.isArray(intake.coupons) ? intake.coupons : [];
     const serviceAreas: any[] = Array.isArray(intake.service_areas) ? intake.service_areas : [];
+    const testimonials: any[] = Array.isArray(intake.testimonials) ? intake.testimonials : [];
+    const faqItems: any[] = Array.isArray(intake.faq_items) ? intake.faq_items : [];
 
     const showFinancing = !!(callNotes as any)?.show_financing || !!intake.show_financing;
-    const showCoupons = !!(callNotes as any)?.show_coupons || !!intake.show_coupons || coupons.length > 0;
-    const showAwards = !!(callNotes as any)?.show_awards || awards.length > 0;
 
-    // ── CALL 1: Generate copy as JSON ────────────────────────────────────
-    const copyPrompt = `You are a professional copywriter for SiteQueen, a done-for-you website service. Generate copy for a ${businessType} website. This copy will be injected directly into a real client's website. Write for real business owners — specific, local, authentic.
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-BUSINESS INFORMATION:
-- Business name: ${businessName}
-- Business type: ${businessType}
+    await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
+
+    // ── CALL 1: Generate all copy as JSON ────────────────────────────────
+    const serviceNames = services.slice(0, 6).map((s: any) =>
+      typeof s === "string" ? s : s?.name || s?.title || ""
+    ).filter(Boolean);
+
+    const copyPrompt = `You are a professional copywriter for SiteQueen. Generate website copy for a ${businessType} business. Return ONLY valid JSON — no markdown, no explanation, no code blocks. Start with { and end with }.
+
+BUSINESS INFO:
+- Name: ${businessName}
+- Type: ${businessType}
 - City: ${city}, ${state}
+- Phone: ${phone}
+- Years in business: ${yearsInBusiness || "not provided"}
 - Owner name: ${ownerName || "not provided"}
-- Owner title: ${ownerTitle || "Owner"}
+- Owner title: ${ownerTitle}
 - Owner story: ${aboutStory || "not provided"}
 - What makes them different: ${intake.story_different || "not provided"}
 - How they started: ${intake.story_started || "not provided"}
 - Ideal customer: ${intake.story_ideal_customer || "not provided"}
-- IMPORTANT: no_testimonials is ${noTestimonials}. ${noTestimonials ? "Return TESTIMONIALS as empty array []. Do NOT generate fake testimonials — the client explicitly does not want them." : "Generate 3 realistic local testimonials since none were provided."}
-- Services: ${services.map((s: any) => typeof s === "string" ? s : s?.name || "").filter(Boolean).join(", ") || "not provided"}
 - Google rating: ${googleRating || "not provided"}
 - Google review count: ${googleReviewCount || "not provided"}
+- Services: ${serviceNames.join(", ") || "not provided"}
+- Tagline: ${tagline || "not provided"}
 
-CALL NOTES FROM OPERATOR — HIGHEST PRIORITY, follow these exactly:
+CALL NOTES (highest priority — follow exactly):
 ${callNotes ? JSON.stringify({
   their_story: (callNotes as any).their_story,
   ideal_customer: (callNotes as any).ideal_customer,
@@ -189,40 +164,27 @@ ${callNotes ? JSON.stringify({
   vibe_notes: (callNotes as any).vibe_notes,
   color_direction: (callNotes as any).color_direction,
   final_notes: (callNotes as any).final_notes,
-}, null, 2) : "No call notes — use intake data only."}
+}, null, 2) : "No call notes."}
 
-TONE RULES:
-- Follow call notes tone exactly. If not specified: trades = confident and direct, wellness = warm and nurturing, professional = polished and credible.
-- Write like a real local business owner talking to a neighbor. Not a marketing agency.
-- Use exact_phrases from call notes if provided.
-- BANNED phrases: "we are committed to excellence", "your satisfaction is our priority", "we pride ourselves on", "world-class", "cutting-edge", "seamless experience".
-- Every field must feel specific to THIS business and THIS city. Not generic.
+TONE: Match call notes tone. If not specified: trades = confident and direct, no corporate filler.
+BANNED PHRASES: "committed to excellence", "your satisfaction is our priority", "world-class", "seamless", "cutting-edge"
+NEVER INVENT: phone numbers, addresses, ratings, certifications, years in business if not provided.
+${noTestimonials ? "IMPORTANT: Client has no testimonials. Set TESTIMONIAL_1/2/3_TEXT to empty string." : "Generate 3 realistic local testimonials referencing actual services."}
 
-COPY RULES:
-- If data is missing, write a great professional default based on the business type and city.
-- For testimonials: write realistic ones with names that sound local to ${city}. Reference the actual services this business offers.
-- For FAQs: write questions a real customer of this specific business would actually ask.
-- NEVER invent: phone numbers, addresses, license numbers, star ratings, review counts, years in business. If missing, leave as empty string "".
-
-Return ONLY a valid JSON object. No markdown. No explanation. No code blocks. Start with { and end with }:
-
+Return this exact JSON structure:
 {
-  "META_DESCRIPTION": "155 character SEO description mentioning business name, main service, and city",
-  "HERO_BADGE": "3-5 word trust badge e.g. TRUSTED LOCAL EXPERTS",
-  "HERO_HEADLINE_LINE1": "first line of headline 2-4 words all caps",
-  "HERO_HEADLINE_HIGHLIGHT": "the core service 1-3 words all caps shown in accent color",
-  "HERO_HEADLINE_LINE2": "second line 2-4 words all caps",
-  "HERO_HEADLINE_LINE3": "third line 2-4 words all caps",
-  "HERO_SUBHEADING": "1-2 sentences. What they do, where, why choose them. Specific.",
-  "TRUST_ITEM_3": "one trust badge e.g. FAMILY OWNED or BBB ACCREDITED",
-  "ABOUT_HEADLINE": "5-8 word about section headline",
-  "ABOUT_STORY": "3-4 paragraphs. Personal, specific, compelling. Use owner story if provided. Reference years, city, what drives them.",
-  "ABOUT_POINTS": [
-    {"ABOUT_POINT": "key differentiator 1"},
-    {"ABOUT_POINT": "key differentiator 2"},
-    {"ABOUT_POINT": "key differentiator 3"},
-    {"ABOUT_POINT": "key differentiator 4"}
-  ],
+  "HERO_HEADLINE_LINE1": "2-4 words all caps",
+  "HERO_HEADLINE_HIGHLIGHT": "core service 1-3 words all caps",
+  "HERO_HEADLINE_LINE2": "2-4 words all caps",
+  "HERO_HEADLINE_LINE3": "2-4 words all caps",
+  "HERO_SUBHEADING": "1-2 sentences specific to this business",
+  "TRUST_ITEM_3": "one trust badge e.g. FAMILY OWNED",
+  "ABOUT_HEADLINE": "5-8 word headline",
+  "ABOUT_STORY": "3-4 paragraph about story using owner info. Personal and specific.",
+  "ABOUT_POINT_1": "key differentiator",
+  "ABOUT_POINT_2": "key differentiator",
+  "ABOUT_POINT_3": "key differentiator",
+  "ABOUT_POINT_4": "key differentiator",
   "STAT_1_NUMBER": "e.g. 500+",
   "STAT_1_LABEL": "e.g. JOBS COMPLETED",
   "STAT_2_NUMBER": "e.g. 4.9★",
@@ -231,279 +193,220 @@ Return ONLY a valid JSON object. No markdown. No explanation. No code blocks. St
   "STAT_3_LABEL": "e.g. EMERGENCY SERVICE",
   "STAT_4_NUMBER": "e.g. 100%",
   "STAT_4_LABEL": "e.g. SATISFACTION GUARANTEED",
-  "SERVICES_HEADLINE": "3-5 word services headline all caps",
-  "SERVICES_SUBTEXT": "1 sentence describing their range of services",
-  "SERVICE_COPY": ${JSON.stringify(services.slice(0, 8).map((s: any) => {
-    const name = typeof s === "string" ? s : s?.name || s?.title || "";
-    return { name, description: "" };
-  }))},
-  "EMERGENCY_HEADLINE": "emergency section headline 4-6 words all caps e.g. PIPE BURST AT 2AM?",
-  "EMERGENCY_SUBTEXT": "1-2 sentences about 24/7 availability. Reassuring and direct.",
-  "WHY_US_HEADLINE": "4-7 word why choose us headline",
-  "WHY_US_POINTS": [
-    {"POINT_NUMBER": "01", "POINT_TITLE": "3-5 word reason title", "POINT_DESCRIPTION": "2 sentences specific to this business"},
-    {"POINT_NUMBER": "02", "POINT_TITLE": "3-5 word reason title", "POINT_DESCRIPTION": "2 sentences specific to this business"},
-    {"POINT_NUMBER": "03", "POINT_TITLE": "3-5 word reason title", "POINT_DESCRIPTION": "2 sentences specific to this business"},
-    {"POINT_NUMBER": "04", "POINT_TITLE": "3-5 word reason title", "POINT_DESCRIPTION": "2 sentences specific to this business"}
-  ],
+  "SERVICES_HEADLINE": "3-5 words all caps",
+  "SERVICES_SUBTEXT": "1 sentence",
+  "SERVICE_1_NAME": "${serviceNames[0] || "Service 1"}",
+  "SERVICE_1_DESC": "2 sentences about this specific service",
+  "SERVICE_2_NAME": "${serviceNames[1] || "Service 2"}",
+  "SERVICE_2_DESC": "2 sentences",
+  "SERVICE_3_NAME": "${serviceNames[2] || "Service 3"}",
+  "SERVICE_3_DESC": "2 sentences",
+  "SERVICE_4_NAME": "${serviceNames[3] || "Service 4"}",
+  "SERVICE_4_DESC": "2 sentences",
+  "SERVICE_5_NAME": "${serviceNames[4] || "Service 5"}",
+  "SERVICE_5_DESC": "2 sentences",
+  "SERVICE_6_NAME": "${serviceNames[5] || "Service 6"}",
+  "SERVICE_6_DESC": "2 sentences",
+  "EMERGENCY_HEADLINE": "4-6 words all caps e.g. EMERGENCY? WE ARE ON THE WAY.",
+  "EMERGENCY_SUBTEXT": "1-2 sentences about 24/7 availability",
+  "WHY_US_HEADLINE": "4-7 words",
+  "WHY_US_1_TITLE": "3-5 word reason",
+  "WHY_US_1_DESC": "2 sentences specific to this business",
+  "WHY_US_2_TITLE": "3-5 word reason",
+  "WHY_US_2_DESC": "2 sentences",
+  "WHY_US_3_TITLE": "3-5 word reason",
+  "WHY_US_3_DESC": "2 sentences",
+  "WHY_US_4_TITLE": "3-5 word reason",
+  "WHY_US_4_DESC": "2 sentences",
   "HAPPY_CUSTOMERS": "number e.g. 500",
   "REVIEW_PLATFORMS": "e.g. Google and Facebook",
-  "TESTIMONIALS": [
-    {"TESTIMONIAL_TEXT": "2-3 sentence realistic testimonial referencing a specific service", "TESTIMONIAL_NAME": "local sounding full name", "TESTIMONIAL_LOCATION": "${city}, ${state}"},
-    {"TESTIMONIAL_TEXT": "different realistic testimonial", "TESTIMONIAL_NAME": "different local name", "TESTIMONIAL_LOCATION": "nearby area"},
-    {"TESTIMONIAL_TEXT": "third realistic testimonial", "TESTIMONIAL_NAME": "different local name", "TESTIMONIAL_LOCATION": "${city} area"}
-  ],
-  "SERVICE_AREAS_HEADLINE": "4-6 word service areas headline all caps",
-  "SERVICE_AREA_LOCATIONS": [
-    {"LOCATION_NAME": "${city}"},
-    {"LOCATION_NAME": "nearby city 2"},
-    {"LOCATION_NAME": "nearby city 3"},
-    {"LOCATION_NAME": "nearby city 4"},
-    {"LOCATION_NAME": "nearby city 5"},
-    {"LOCATION_NAME": "nearby city 6"}
-  ],
-  "FAQ_ITEMS": [
-    {"FAQ_QUESTION": "real customer question 1", "FAQ_ANSWER": "helpful specific answer"},
-    {"FAQ_QUESTION": "real customer question 2", "FAQ_ANSWER": "helpful specific answer"},
-    {"FAQ_QUESTION": "real customer question 3", "FAQ_ANSWER": "helpful specific answer"},
-    {"FAQ_QUESTION": "real customer question 4", "FAQ_ANSWER": "helpful specific answer"},
-    {"FAQ_QUESTION": "real customer question 5", "FAQ_ANSWER": "helpful specific answer"}
-  ],
-  "FINAL_CTA_HEADLINE": "5-8 word final CTA headline all caps compelling",
-  "FINAL_CTA_SUBTEXT": "1-2 sentences urgency and reassurance drive them to call",
-  "FOOTER_TAGLINE": "5-8 word brand tagline for footer",
-  "FOOTER_NEWSLETTER_TEXT": "1 sentence inviting email signup",
-  "FINANCING_HEADLINE": "financing section headline",
+  "TESTIMONIAL_1_TEXT": "realistic 2-3 sentence testimonial",
+  "TESTIMONIAL_1_NAME": "local sounding full name",
+  "TESTIMONIAL_1_LOCATION": "${city}, ${state}",
+  "TESTIMONIAL_2_TEXT": "different testimonial",
+  "TESTIMONIAL_2_NAME": "different local name",
+  "TESTIMONIAL_2_LOCATION": "nearby area",
+  "TESTIMONIAL_3_TEXT": "third testimonial",
+  "TESTIMONIAL_3_NAME": "different local name",
+  "TESTIMONIAL_3_LOCATION": "${city} area",
+  "FINANCING_HEADLINE": "financing headline",
   "FINANCING_SUBTEXT": "financing offer details",
-  "COUPONS_NOTE": "note about coupon terms",
-  "SERVICE_AREAS_HEADLINE": "service areas section headline"
+  "SERVICE_AREAS_HEADLINE": "4-6 words all caps",
+  "AREA_1": "${city}",
+  "AREA_2": "nearby city",
+  "AREA_3": "nearby city",
+  "AREA_4": "nearby city",
+  "AREA_5": "nearby city",
+  "AREA_6": "nearby city",
+  "AREA_7": "nearby city",
+  "AREA_8": "nearby city",
+  "AWARD_1": "relevant award or certification",
+  "AWARD_2": "relevant award or certification",
+  "AWARD_3": "relevant award or certification",
+  "AWARD_4": "relevant award or certification",
+  "AWARD_5": "relevant award or certification",
+  "FAQ_1_Q": "real customer question",
+  "FAQ_2_Q": "real customer question",
+  "FAQ_3_Q": "real customer question",
+  "FAQ_4_Q": "real customer question",
+  "FAQ_5_Q": "real customer question",
+  "FAQ_6_Q": "real customer question",
+  "FINAL_CTA_HEADLINE": "5-8 words all caps",
+  "FINAL_CTA_SUBTEXT": "1-2 sentences urgency and reassurance",
+  "FOOTER_TAGLINE": "5-8 word brand tagline"
 }`;
 
-    console.log("[part1] Calling Claude for copy generation...");
-    const copyResult = await callAI(ANTHROPIC_API_KEY, copyPrompt, "copy-generation");
+    console.log("[part1] Calling Claude for copy...");
+    const copyResult = await callAI(ANTHROPIC_API_KEY, copyPrompt, "copy");
 
-    let copyData: any = {};
+    let copy: any = {};
     try {
-      copyData = JSON.parse(stripMarkdown(copyResult.text));
+      copy = JSON.parse(stripMarkdown(copyResult.text));
     } catch (e) {
-      console.error("[part1] Failed to parse copy JSON:", e);
-      console.error("[part1] Raw response:", copyResult.text.substring(0, 500));
-      throw new Error("Claude returned invalid JSON for copy generation");
+      console.error("[part1] JSON parse failed:", e);
+      console.error("[part1] Raw:", copyResult.text.substring(0, 500));
+      throw new Error("Claude returned invalid JSON for copy");
     }
 
     await supabase.from("sites").update({ generation_progress: "filling_template" } as any).eq("client_id", clientId);
 
-    // ── Fill template with real data ─────────────────────────────────────
+    // ── Fill all placeholders ────────────────────────────────────────────
     let html = templateHTML;
 
-    // Simple placeholder replacements
-    const replacements: Record<string, string> = {
+    const fill: Record<string, string> = {
       "{{BUSINESS_NAME}}": businessName,
-      "{{BUSINESS_TAGLINE}}": tagline || copyData.FOOTER_TAGLINE || "",
-      "{{META_DESCRIPTION}}": copyData.META_DESCRIPTION || "",
-      "{{DOMAIN}}": domain,
-      "{{BUSINESS_PHONE_RAW}}": phoneRaw,
       "{{BUSINESS_PHONE}}": phone,
       "{{BUSINESS_EMAIL}}": email,
       "{{BUSINESS_ADDRESS}}": address,
       "{{BUSINESS_CITY}}": city,
       "{{BUSINESS_STATE}}": state,
-      "{{GOOGLE_RATING}}": String(googleRating),
-      "{{GOOGLE_REVIEW_COUNT}}": String(googleReviewCount),
+      "{{GOOGLE_RATING}}": String(googleRating || "4.9"),
+      "{{GOOGLE_REVIEW_COUNT}}": String(googleReviewCount || "100"),
       "{{SERVICE_AREA}}": intake.service_area || (city ? `${city} & Surrounding Areas` : ""),
-      "{{HERO_BADGE}}": copyData.HERO_BADGE || "TRUSTED LOCAL EXPERTS",
-      "{{HERO_HEADLINE_LINE1}}": copyData.HERO_HEADLINE_LINE1 || "",
-      "{{HERO_HEADLINE_HIGHLIGHT}}": copyData.HERO_HEADLINE_HIGHLIGHT || "",
-      "{{HERO_HEADLINE_LINE2}}": copyData.HERO_HEADLINE_LINE2 || "",
-      "{{HERO_HEADLINE_LINE3}}": copyData.HERO_HEADLINE_LINE3 || "",
-      "{{HERO_SUBHEADING}}": copyData.HERO_SUBHEADING || "",
-      "{{TRUST_ITEM_3}}": copyData.TRUST_ITEM_3 || "FAMILY OWNED",
       "{{YEARS_IN_BUSINESS}}": String(yearsInBusiness || "10"),
-      "{{ABOUT_IMAGE_URL}}": aboutImageUrl,
-      "{{ABOUT_HEADLINE}}": copyData.ABOUT_HEADLINE || "",
-      "{{ABOUT_STORY}}": copyData.ABOUT_STORY || "",
-      "{{STAT_1_NUMBER}}": copyData.STAT_1_NUMBER || "500+",
-      "{{STAT_1_LABEL}}": copyData.STAT_1_LABEL || "JOBS COMPLETED",
-      "{{STAT_2_NUMBER}}": copyData.STAT_2_NUMBER || (googleRating ? `${googleRating}★` : "4.9★"),
-      "{{STAT_2_LABEL}}": copyData.STAT_2_LABEL || "GOOGLE RATING",
-      "{{STAT_3_NUMBER}}": copyData.STAT_3_NUMBER || "24/7",
-      "{{STAT_3_LABEL}}": copyData.STAT_3_LABEL || "EMERGENCY SERVICE",
-      "{{STAT_4_NUMBER}}": copyData.STAT_4_NUMBER || "100%",
-      "{{STAT_4_LABEL}}": copyData.STAT_4_LABEL || "SATISFACTION GUARANTEED",
-      "{{SERVICES_HEADLINE}}": copyData.SERVICES_HEADLINE || "OUR SERVICES",
-      "{{SERVICES_SUBTEXT}}": copyData.SERVICES_SUBTEXT || "",
-      "{{WHY_US_IMAGE_URL}}": whyUsImageUrl,
-      "{{WHY_US_HEADLINE}}": copyData.WHY_US_HEADLINE || "",
-      "{{EMERGENCY_HEADLINE}}": copyData.EMERGENCY_HEADLINE || "EMERGENCY? WE'RE ON THE WAY.",
-      "{{EMERGENCY_SUBTEXT}}": copyData.EMERGENCY_SUBTEXT || "",
-      "{{HAPPY_CUSTOMERS}}": copyData.HAPPY_CUSTOMERS || "500",
+      "{{COPYRIGHT_YEAR}}": String(new Date().getFullYear()),
       "{{CITY}}": city,
       "{{CLIENT_TYPE}}": "CUSTOMERS",
-      "{{REVIEW_PLATFORMS}}": copyData.REVIEW_PLATFORMS || "Google",
-      "{{SERVICE_AREAS_HEADLINE}}": copyData.SERVICE_AREAS_HEADLINE || `SERVING ${city.toUpperCase()} & BEYOND`,
-      "{{MAP_EMBED_URL}}": mapEmbedUrl,
-      "{{FINAL_CTA_HEADLINE}}": copyData.FINAL_CTA_HEADLINE || "READY TO GET STARTED?",
-      "{{FINAL_CTA_SUBTEXT}}": copyData.FINAL_CTA_SUBTEXT || "",
-      "{{FOOTER_TAGLINE}}": copyData.FOOTER_TAGLINE || "",
-      "{{FOOTER_NEWSLETTER_TEXT}}": copyData.FOOTER_NEWSLETTER_TEXT || "Sign up for exclusive deals and tips.",
-      "{{COPYRIGHT_YEAR}}": String(new Date().getFullYear()),
-      "{{CLIENT_ID}}": clientId,
-      "{{SUPABASE_URL}}": supabaseUrl,
-      "{{FINANCING_HEADLINE}}": copyData.FINANCING_HEADLINE || "FLEXIBLE FINANCING AVAILABLE",
-      "{{FINANCING_SUBTEXT}}": copyData.FINANCING_SUBTEXT || "0% interest financing — get approved on the spot.",
-      "{{COUPONS_NOTE}}": copyData.COUPONS_NOTE || "Cannot be combined with other offers.",
+      "{{HAPPY_CUSTOMERS}}": copy.HAPPY_CUSTOMERS || "500",
+      "{{REVIEW_PLATFORMS}}": copy.REVIEW_PLATFORMS || "Google",
+      // Hero
+      "{{HERO_HEADLINE_LINE1}}": copy.HERO_HEADLINE_LINE1 || "",
+      "{{HERO_HEADLINE_HIGHLIGHT}}": copy.HERO_HEADLINE_HIGHLIGHT || "",
+      "{{HERO_HEADLINE_LINE2}}": copy.HERO_HEADLINE_LINE2 || "",
+      "{{HERO_HEADLINE_LINE3}}": copy.HERO_HEADLINE_LINE3 || "",
+      "{{HERO_SUBHEADING}}": copy.HERO_SUBHEADING || "",
+      "{{TRUST_ITEM_3}}": copy.TRUST_ITEM_3 || "FAMILY OWNED",
+      // About
+      "{{ABOUT_HEADLINE}}": copy.ABOUT_HEADLINE || "",
+      "{{ABOUT_STORY}}": copy.ABOUT_STORY || "",
+      "{{ABOUT_POINT_1}}": copy.ABOUT_POINT_1 || "",
+      "{{ABOUT_POINT_2}}": copy.ABOUT_POINT_2 || "",
+      "{{ABOUT_POINT_3}}": copy.ABOUT_POINT_3 || "",
+      "{{ABOUT_POINT_4}}": copy.ABOUT_POINT_4 || "",
+      // Stats
+      "{{STAT_1_NUMBER}}": copy.STAT_1_NUMBER || "500+",
+      "{{STAT_1_LABEL}}": copy.STAT_1_LABEL || "JOBS COMPLETED",
+      "{{STAT_2_NUMBER}}": copy.STAT_2_NUMBER || (googleRating ? `${googleRating}★` : "4.9★"),
+      "{{STAT_2_LABEL}}": copy.STAT_2_LABEL || "GOOGLE RATING",
+      "{{STAT_3_NUMBER}}": copy.STAT_3_NUMBER || "24/7",
+      "{{STAT_3_LABEL}}": copy.STAT_3_LABEL || "EMERGENCY SERVICE",
+      "{{STAT_4_NUMBER}}": copy.STAT_4_NUMBER || "100%",
+      "{{STAT_4_LABEL}}": copy.STAT_4_LABEL || "SATISFACTION GUARANTEED",
+      // Services
+      "{{SERVICES_HEADLINE}}": copy.SERVICES_HEADLINE || "OUR SERVICES",
+      "{{SERVICES_SUBTEXT}}": copy.SERVICES_SUBTEXT || "",
+      "{{SERVICE_1_NAME}}": copy.SERVICE_1_NAME || serviceNames[0] || "",
+      "{{SERVICE_1_DESC}}": copy.SERVICE_1_DESC || "",
+      "{{SERVICE_2_NAME}}": copy.SERVICE_2_NAME || serviceNames[1] || "",
+      "{{SERVICE_2_DESC}}": copy.SERVICE_2_DESC || "",
+      "{{SERVICE_3_NAME}}": copy.SERVICE_3_NAME || serviceNames[2] || "",
+      "{{SERVICE_3_DESC}}": copy.SERVICE_3_DESC || "",
+      "{{SERVICE_4_NAME}}": copy.SERVICE_4_NAME || serviceNames[3] || "",
+      "{{SERVICE_4_DESC}}": copy.SERVICE_4_DESC || "",
+      "{{SERVICE_5_NAME}}": copy.SERVICE_5_NAME || serviceNames[4] || "",
+      "{{SERVICE_5_DESC}}": copy.SERVICE_5_DESC || "",
+      "{{SERVICE_6_NAME}}": copy.SERVICE_6_NAME || serviceNames[5] || "",
+      "{{SERVICE_6_DESC}}": copy.SERVICE_6_DESC || "",
+      // Emergency
+      "{{EMERGENCY_HEADLINE}}": copy.EMERGENCY_HEADLINE || "EMERGENCY? WE'RE ON THE WAY.",
+      "{{EMERGENCY_SUBTEXT}}": copy.EMERGENCY_SUBTEXT || "",
+      // Why us
+      "{{WHY_US_HEADLINE}}": copy.WHY_US_HEADLINE || "",
+      "{{WHY_US_1_TITLE}}": copy.WHY_US_1_TITLE || "",
+      "{{WHY_US_1_DESC}}": copy.WHY_US_1_DESC || "",
+      "{{WHY_US_2_TITLE}}": copy.WHY_US_2_TITLE || "",
+      "{{WHY_US_2_DESC}}": copy.WHY_US_2_DESC || "",
+      "{{WHY_US_3_TITLE}}": copy.WHY_US_3_TITLE || "",
+      "{{WHY_US_3_DESC}}": copy.WHY_US_3_DESC || "",
+      "{{WHY_US_4_TITLE}}": copy.WHY_US_4_TITLE || "",
+      "{{WHY_US_4_DESC}}": copy.WHY_US_4_DESC || "",
+      // Testimonials
+      "{{TESTIMONIAL_1_TEXT}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_TEXT || ""),
+      "{{TESTIMONIAL_1_NAME}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_NAME || ""),
+      "{{TESTIMONIAL_1_LOCATION}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_LOCATION || city),
+      "{{TESTIMONIAL_2_TEXT}}": noTestimonials ? "" : (copy.TESTIMONIAL_2_TEXT || ""),
+      "{{TESTIMONIAL_2_NAME}}": noTestimonials ? "" : (copy.TESTIMONIAL_2_NAME || ""),
+      "{{TESTIMONIAL_2_LOCATION}}": noTestimonials ? "" : (copy.TESTIMONIAL_2_LOCATION || city),
+      "{{TESTIMONIAL_3_TEXT}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_TEXT || ""),
+      "{{TESTIMONIAL_3_NAME}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_NAME || ""),
+      "{{TESTIMONIAL_3_LOCATION}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_LOCATION || city),
+      // Financing
+      "{{FINANCING_HEADLINE}}": showFinancing ? (copy.FINANCING_HEADLINE || "FLEXIBLE FINANCING AVAILABLE") : "",
+      "{{FINANCING_SUBTEXT}}": showFinancing ? (copy.FINANCING_SUBTEXT || "") : "",
+      // Service areas
+      "{{SERVICE_AREAS_HEADLINE}}": copy.SERVICE_AREAS_HEADLINE || `SERVING ${city.toUpperCase()} & BEYOND`,
+      "{{AREA_1}}": serviceAreas[0] ? (typeof serviceAreas[0] === "string" ? serviceAreas[0] : serviceAreas[0].name) : (copy.AREA_1 || city),
+      "{{AREA_2}}": serviceAreas[1] ? (typeof serviceAreas[1] === "string" ? serviceAreas[1] : serviceAreas[1].name) : (copy.AREA_2 || ""),
+      "{{AREA_3}}": serviceAreas[2] ? (typeof serviceAreas[2] === "string" ? serviceAreas[2] : serviceAreas[2].name) : (copy.AREA_3 || ""),
+      "{{AREA_4}}": serviceAreas[3] ? (typeof serviceAreas[3] === "string" ? serviceAreas[3] : serviceAreas[3].name) : (copy.AREA_4 || ""),
+      "{{AREA_5}}": serviceAreas[4] ? (typeof serviceAreas[4] === "string" ? serviceAreas[4] : serviceAreas[4].name) : (copy.AREA_5 || ""),
+      "{{AREA_6}}": serviceAreas[5] ? (typeof serviceAreas[5] === "string" ? serviceAreas[5] : serviceAreas[5].name) : (copy.AREA_6 || ""),
+      "{{AREA_7}}": serviceAreas[6] ? (typeof serviceAreas[6] === "string" ? serviceAreas[6] : serviceAreas[6].name) : (copy.AREA_7 || ""),
+      "{{AREA_8}}": serviceAreas[7] ? (typeof serviceAreas[7] === "string" ? serviceAreas[7] : serviceAreas[7].name) : (copy.AREA_8 || ""),
+      // Awards
+      "{{AWARD_1}}": awards[0] ? (typeof awards[0] === "string" ? awards[0] : awards[0].name) : (copy.AWARD_1 || ""),
+      "{{AWARD_2}}": awards[1] ? (typeof awards[1] === "string" ? awards[1] : awards[1].name) : (copy.AWARD_2 || ""),
+      "{{AWARD_3}}": awards[2] ? (typeof awards[2] === "string" ? awards[2] : awards[2].name) : (copy.AWARD_3 || ""),
+      "{{AWARD_4}}": awards[3] ? (typeof awards[3] === "string" ? awards[3] : awards[3].name) : (copy.AWARD_4 || ""),
+      "{{AWARD_5}}": awards[4] ? (typeof awards[4] === "string" ? awards[4] : awards[4].name) : (copy.AWARD_5 || ""),
+      // FAQ
+      "{{FAQ_1_Q}}": faqItems[0]?.question || copy.FAQ_1_Q || "",
+      "{{FAQ_2_Q}}": faqItems[1]?.question || copy.FAQ_2_Q || "",
+      "{{FAQ_3_Q}}": faqItems[2]?.question || copy.FAQ_3_Q || "",
+      "{{FAQ_4_Q}}": faqItems[3]?.question || copy.FAQ_4_Q || "",
+      "{{FAQ_5_Q}}": faqItems[4]?.question || copy.FAQ_5_Q || "",
+      "{{FAQ_6_Q}}": faqItems[5]?.question || copy.FAQ_6_Q || "",
+      // Final CTA
+      "{{FINAL_CTA_HEADLINE}}": copy.FINAL_CTA_HEADLINE || "READY TO GET STARTED?",
+      "{{FINAL_CTA_SUBTEXT}}": copy.FINAL_CTA_SUBTEXT || "",
+      // Footer
+      "{{FOOTER_TAGLINE}}": copy.FOOTER_TAGLINE || tagline || "",
+      "{{BUSINESS_NAME_PART1}}": businessName,
+      "{{BUSINESS_NAME_PART2}}": "",
     };
 
-    for (const [key, value] of Object.entries(replacements)) {
+    for (const [key, value] of Object.entries(fill)) {
       html = html.split(key).join(value);
     }
 
-    // ── Conditional sections ─────────────────────────────────────────────
-    if (!showFinancing) {
-      html = removeSection(html, "SHOW_FINANCING");
-    } else {
-      html = html.replace(/\{\{#SHOW_FINANCING\}\}/g, "").replace(/\{\{\/SHOW_FINANCING\}\}/g, "");
-    }
-
-    if (!showCoupons) {
-      html = removeSection(html, "SHOW_COUPONS");
-    } else {
-      html = html.replace(/\{\{#SHOW_COUPONS\}\}/g, "").replace(/\{\{\/SHOW_COUPONS\}\}/g, "");
-    }
-
-    if (!showAwards) {
-      html = removeSection(html, "SHOW_AWARDS");
-    } else {
-      html = html.replace(/\{\{#SHOW_AWARDS\}\}/g, "").replace(/\{\{\/SHOW_AWARDS\}\}/g, "");
-    }
-
-    // ── Repeating sections ───────────────────────────────────────────────
-    // SERVICES
-    const serviceCopy: any[] = Array.isArray(copyData.SERVICE_COPY) ? copyData.SERVICE_COPY : [];
-    const servicesData = services.slice(0, 8).map((s: any, i: number) => {
-      const name = typeof s === "string" ? s : s?.name || s?.title || "";
-      const desc = serviceCopy[i]?.description || copyData.SERVICES_SUBTEXT || "";
-      const icon = typeof s === "object" && s?.icon_svg ? s.icon_svg : defaultServiceIcon();
-      return { SERVICE_NAME: name, SERVICE_DESCRIPTION: desc, SERVICE_ICON_SVG: icon };
-    });
-    html = renderLoop(html, "SERVICES", servicesData);
-
-    // ABOUT_POINTS
-    html = renderLoop(html, "ABOUT_POINTS", Array.isArray(copyData.ABOUT_POINTS) ? copyData.ABOUT_POINTS : []);
-
-    // WHY_US_POINTS
-    html = renderLoop(html, "WHY_US_POINTS", Array.isArray(copyData.WHY_US_POINTS) ? copyData.WHY_US_POINTS : []);
-
-    // TESTIMONIALS — use provided ones or Claude-generated
-    const testimonialsData = noTestimonials ? [] : testimonials.length >= 3
-      ? testimonials.slice(0, 3).map((t: any) => ({
-          TESTIMONIAL_TEXT: t.text || t.testimonial || "",
-          TESTIMONIAL_NAME: t.name || t.author || "",
-          TESTIMONIAL_LOCATION: t.location || city,
-        }))
-      : Array.isArray(copyData.TESTIMONIALS) ? copyData.TESTIMONIALS : [];
-    html = renderLoop(html, "TESTIMONIALS", testimonialsData);
-
-    // FAQ_ITEMS — use provided ones or Claude-generated
-    const faqData = faqItems.length >= 3
-      ? faqItems.slice(0, 6).map((f: any) => ({
-          FAQ_QUESTION: f.question || f.q || "",
-          FAQ_ANSWER: f.answer || f.a || "",
-        }))
-      : Array.isArray(copyData.FAQ_ITEMS) ? copyData.FAQ_ITEMS : [];
-    html = renderLoop(html, "FAQ_ITEMS", faqData);
-
-    // SERVICE_AREA_LOCATIONS — use provided or Claude-generated
-    const areaData = serviceAreas.length > 0
-      ? serviceAreas.map((a: any) => ({ LOCATION_NAME: typeof a === "string" ? a : a?.name || a }))
-      : Array.isArray(copyData.SERVICE_AREA_LOCATIONS) ? copyData.SERVICE_AREA_LOCATIONS : [];
-    html = renderLoop(html, "SERVICE_AREA_LOCATIONS", areaData);
-
-    // AWARDS
-    html = renderLoop(html, "AWARDS", awards.map((a: any) => ({ AWARD_NAME: typeof a === "string" ? a : a?.name || a })));
-
-    // COUPONS
-    html = renderLoop(html, "COUPONS", coupons.map((c: any) => ({
-      COUPON_AMOUNT: c.amount || "",
-      COUPON_DESCRIPTION: c.description || "",
-      COUPON_EXPIRY: c.expiry || "",
-      COUPON_CODE: c.code || "",
-    })));
-
-    // ── Inline CSS ───────────────────────────────────────────────────────
-    html = html.replace(
-      /<link\s+rel=["']stylesheet["']\s+href=["']styles\.css["']\s*\/?>/gi,
-      `<style>\n${templateCSS}\n</style>`
-    );
-
-    // Set hero background image if available
-    if (heroImageUrl) {
-      html = html.replace(
-        /class="hero"/,
-        `class="hero" style="background-image: url('${heroImageUrl}');"`
-      );
-    }
-
-    // ── Clean up any remaining unfilled placeholders ─────────────────────
+    // Clean up any remaining unfilled placeholders
     html = html.replace(/\{\{[^}]+\}\}/g, "");
 
-    // ── Animate-on-scroll safety net ─────────────────────────────────────
-    const safetyNet = `
-<style>.animate-on-scroll { opacity: 1 !important; transform: none !important; }</style>
+    // Inject analytics script before </body>
+    const analyticsScript = `
 <script>
-(function(){
-  function reveal(){ document.querySelectorAll('.animate-on-scroll').forEach(function(el){ el.classList.add('visible'); }); }
-  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',reveal); } else { reveal(); }
+(function() {
+  var CLIENT_ID = '${clientId}';
+  var ENDPOINT = '${supabaseUrl}/functions/v1/track-event';
+  function getDevice() { return /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop'; }
+  function getSid() { var s = sessionStorage.getItem('sq_sid'); if (!s) { s = Math.random().toString(36).substr(2,9); sessionStorage.setItem('sq_sid',s); } return s; }
+  function track(type, meta) { fetch(ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ client_id:CLIENT_ID, event_type:type, page_path:window.location.pathname, page_title:document.title, referrer:document.referrer, device_type:getDevice(), session_id:getSid(), metadata:meta||{} }) }).catch(function(){}); }
+  track('page_view');
+  document.addEventListener('click', function(e) { var a = e.target.closest('a'); if (!a) return; if (a.href && a.href.indexOf('tel:') === 0) track('phone_click'); if (a.href && a.href.indexOf('mailto:') === 0) track('email_click'); });
+  document.addEventListener('submit', function() { track('form_submission'); });
 })();
 </script>`;
-    html = html.replace("</body>", safetyNet + "\n</body>");
-
-    // ── Optional CALL 2: Apply special call notes instructions ───────────
-    const hasSpecialInstructions = callNotes && (
-      (callNotes as any).expert_additions ||
-      (callNotes as any).expert_avoid ||
-      (callNotes as any).color_direction
-    );
-
-    if (hasSpecialInstructions) {
-      await supabase.from("sites").update({ generation_progress: "applying_customizations" } as any).eq("client_id", clientId);
-
-      const customizePrompt = `You are a web developer applying specific operator instructions to a completed website. The HTML is fully built and looks great. Your ONLY job is to apply the specific instructions below. Do not redesign anything. Do not rewrite sections that are not mentioned.
-
-OPERATOR INSTRUCTIONS TO APPLY:
-${JSON.stringify({
-  expert_additions: (callNotes as any).expert_additions,
-  expert_avoid: (callNotes as any).expert_avoid,
-  color_direction: (callNotes as any).color_direction,
-  exact_phrases: (callNotes as any).exact_phrases,
-  final_notes: (callNotes as any).final_notes,
-}, null, 2)}
-
-RULES:
-- Apply ONLY what is listed above. Nothing else.
-- Removing a section: delete it entirely, no empty divs, no gaps.
-- Adding a section: match the existing design system exactly, same fonts colors spacing.
-- Changing colors: update CSS custom properties in :root only.
-- Using exact phrases: find the relevant text and replace it.
-- Do not change any class names.
-- Do not add external libraries.
-- Return the complete HTML with changes applied.
-
-CURRENT HTML:
-${html}
-
-CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no code blocks.`;
-
-      console.log("[part1] Calling Claude for customizations...");
-      const customizeResult = await callAI(ANTHROPIC_API_KEY, customizePrompt, "customizations");
-      const customized = stripMarkdown(customizeResult.text);
-      if (customized.includes("<!DOCTYPE html>")) {
-        html = customized;
-        console.log("[part1] Customizations applied successfully");
-      } else {
-        console.warn("[part1] Customization returned unexpected output — using pre-customization HTML");
-      }
-    }
+    html = html.replace("</body>", analyticsScript + "\n</body>");
 
     // ── Upload to Hostinger staging ──────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
@@ -511,25 +414,16 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
     const stagingHTML = injectNoindex(html);
 
     try {
-      await uploadFileToHostingerFtp(
-        `${STAGING_FOLDER_ROOT}/${clientId}/index.html`,
-        stagingHTML,
-      );
-      console.log("[part1] ✓ index.html pushed to Hostinger staging");
+      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/index.html`, stagingHTML);
+      console.log("[part1] ✓ index.html → Hostinger");
     } catch (e: any) {
-      throw new Error(`Hostinger staging upload failed: ${e.message}`);
+      throw new Error(`Hostinger upload failed: ${e.message}`);
     }
 
-    // Backup to Supabase storage
     const { error: backupErr } = await supabase.storage
       .from("generated-sites")
-      .upload(
-        `${clientId}/deploy/index.html`,
-        new Blob([html], { type: "text/html" }),
-        { upsert: true, contentType: "text/html; charset=utf-8" },
-      );
-    if (backupErr) throw new Error(`Failed to save deploy/index.html: ${backupErr.message}`);
-    console.log("[part1] ✓ Deploy backup saved to storage");
+      .upload(`${clientId}/deploy/index.html`, new Blob([html], { type: "text/html" }), { upsert: true, contentType: "text/html; charset=utf-8" });
+    if (backupErr) throw new Error(`Failed to save deploy backup: ${backupErr.message}`);
 
     const stagingURL = `${STAGING_BASE_URL}/${clientId}/index.html`;
 
@@ -545,10 +439,10 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
       template_id: templateId,
       status: "homepage_complete",
       tokens_used: copyResult.outputTokens,
-      generation_notes: `Homepage generated via template-fill. Template: ${templateId}. Copy tokens: ${copyResult.outputTokens}.`,
+      generation_notes: `Template-fill. Template: ${templateId}. Tokens: ${copyResult.outputTokens}.`,
     } as any);
 
-    console.log(`[part1] ✓ Homepage complete for ${clientId} → ${stagingURL}`);
+    console.log(`[part1] ✓ Complete → ${stagingURL}`);
 
     // ── Fire generate-extra-pages ────────────────────────────────────────
     fetch(`${supabaseUrl}/functions/v1/generate-extra-pages`, {
@@ -565,39 +459,11 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
   } catch (error: any) {
     console.error("[part1] error:", error);
     await markFailed(supabase, clientId, error.message);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: corsHeaders }
-    );
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: corsHeaders });
   }
 });
 
-// ── Helper functions ───────────────────────────────────────────────────
-
-function removeSection(html: string, key: string): string {
-  const re = new RegExp(`\\{\\{#${key}\\}\\}[\\s\\S]*?\\{\\{\\/${key}\\}\\}`, "gi");
-  return html.replace(re, "");
-}
-
-function renderLoop(html: string, key: string, items: any[]): string {
-  const re = new RegExp(`\\{\\{#${key}\\}\\}([\\s\\S]*?)\\{\\{\\/${key}\\}\\}`, "gi");
-  if (!items || items.length === 0) {
-    return html.replace(re, "");
-  }
-  return html.replace(re, (_match: string, inner: string) => {
-    return items.map((item: any) => {
-      let block = inner;
-      for (const [k, v] of Object.entries(item)) {
-        block = block.split(`{{${k}}}`).join(String(v ?? ""));
-      }
-      return block;
-    }).join("");
-  });
-}
-
-function defaultServiceIcon(): string {
-  return `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>`;
-}
+// ── Helpers ────────────────────────────────────────────────────────────
 
 function injectNoindex(html: string): string {
   if (/name=["']robots["']/i.test(html)) return html;
@@ -618,16 +484,8 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
       const r = await fetch(AI_ENDPOINT, {
         method: "POST",
         signal: controller.signal,
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: AI_MODEL,
-          max_tokens: 8000,
-          messages: [{ role: "user", content }],
-        }),
+        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+        body: JSON.stringify({ model: AI_MODEL, max_tokens: 8000, messages: [{ role: "user", content }] }),
       });
       clearTimeout(timeout);
       if (!r.ok) {
@@ -645,9 +503,7 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
       return { text, outputTokens: data.usage?.output_tokens || 0 };
     } catch (err: any) {
       clearTimeout(timeout);
-      lastErr = err.name === "AbortError"
-        ? new Error(`Claude ${label} timed out after ${TIMEOUT_MS / 1000}s`)
-        : err as Error;
+      lastErr = err.name === "AbortError" ? new Error(`Claude ${label} timed out after ${TIMEOUT_MS / 1000}s`) : err as Error;
       console.error(`[${label}] attempt ${attempt} failed:`, lastErr.message);
       if (attempt < MAX_ATTEMPTS) await new Promise((res) => setTimeout(res, 2000));
     }
@@ -662,76 +518,9 @@ function stripMarkdown(s: string): string {
 async function markFailed(supabase: any, clientId: string, message: string) {
   if (!clientId) return;
   try {
-    await supabase.from("sites").update({
-      generation_status: "failed",
-      generation_error: message,
-    }).eq("client_id", clientId);
-    await supabase.from("generation_logs").insert({
-      client_id: clientId,
-      status: "failed",
-      error_message: message,
-    });
+    await supabase.from("sites").update({ generation_status: "failed", generation_error: message }).eq("client_id", clientId);
+    await supabase.from("generation_logs").insert({ client_id: clientId, status: "failed", error_message: message });
   } catch (e) {
     console.error("[part1] failed to mark failure:", e);
   }
-}
-
-function getPhotoSearchTerms(client: any, intake: any): string[] {
-  const industry = (client?.business_type || client?.industry || "").toLowerCase();
-  const services = Array.isArray(intake?.services)
-    ? intake.services.map((s: any) => (typeof s === "string" ? s : s?.name || s?.title || "")).join(" ")
-    : "";
-  const context = `${industry} ${services}`.toLowerCase();
-
-  const photoTerms: Record<string, string[]> = {
-    excavat: ["excavator working", "excavation site", "earthwork construction", "heavy equipment excavation"],
-    plumb: ["plumber working", "pipe repair", "bathroom plumbing", "plumbing service"],
-    electr: ["electrician working", "electrical panel", "wiring installation", "electrical contractor"],
-    hvac: ["hvac technician", "air conditioning unit", "heating system repair"],
-    roof: ["roofer working", "roof repair", "roofing contractor", "roof installation"],
-    landscape: ["landscaping garden", "lawn care", "garden maintenance", "landscaper working"],
-    construct: ["construction worker", "building construction", "contractor working", "renovation"],
-    paint: ["house painter", "interior painting", "exterior painting", "painting contractor"],
-    floor: ["flooring installation", "hardwood floors", "tile flooring", "floor contractor"],
-    clean: ["house cleaning", "professional cleaning", "cleaning service"],
-    barber: ["barber shop", "barber cutting hair", "barbershop interior"],
-    salon: ["hair salon", "hair styling", "hairdresser working"],
-    spa: ["spa treatment", "massage therapy", "relaxing spa"],
-    fitness: ["gym workout", "personal trainer", "fitness training"],
-    lawyer: ["law office", "attorney office", "legal consultation"],
-    accountant: ["accounting office", "financial planning", "business meeting"],
-    restaurant: ["restaurant interior", "food dining", "restaurant kitchen"],
-    dental: ["dental office", "dentist working", "dental care"],
-    medical: ["medical office", "doctor consultation", "healthcare professional"],
-  };
-
-  for (const [keyword, terms] of Object.entries(photoTerms)) {
-    if (context.includes(keyword)) return terms;
-  }
-
-  return ["professional service", "contractor working", "small business professional"];
-}
-
-async function fetchUnsplashPhoto(searchTerms: string[], width = 800, height = 600) {
-  const key = Deno.env.get("UNSPLASH_ACCESS_KEY");
-  if (!key) return null;
-  for (const term of searchTerms) {
-    try {
-      const r = await fetch(
-        `https://api.unsplash.com/photos/random?query=${encodeURIComponent(term)}&orientation=landscape`,
-        { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } }
-      );
-      if (r.ok) {
-        const p = await r.json();
-        return {
-          url: `${p.urls.raw}&w=${width}&h=${height}&fit=crop&auto=format&q=80`,
-          photographer: p.user?.name || "Unsplash",
-          unsplash_url: p.links?.html || "https://unsplash.com",
-        };
-      }
-    } catch (e) {
-      console.error(`[unsplash] error for "${term}":`, e);
-    }
-  }
-  return null;
 }
