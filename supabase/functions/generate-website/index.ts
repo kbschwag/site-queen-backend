@@ -666,6 +666,9 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
 </script>`;
     html = html.replace("</body>", analyticsScript + "\n</body>");
 
+    // ── Wire any <form> on the page to handle-contact-form ───────────────
+    html = wireContactForms(html, clientId, supabaseUrl);
+
     // ── Upload to Hostinger staging ──────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
 
