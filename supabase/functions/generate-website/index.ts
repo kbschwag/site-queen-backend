@@ -119,20 +119,51 @@ serve(async (req) => {
     const templateCSS = cssFile ? await cssFile.text() : "";
 
     // ── Photos ───────────────────────────────────────────────────────────
-    const usingStockPhotos = !!(siteData as any).using_stock_photos;
-    const photoTerms = getPhotoSearchTerms(clientData, intake);
-    let heroPhoto: any = null, aboutPhoto: any = null, whyUsPhoto: any = null;
+    // Priority: client uploads ALWAYS win. Stock only fills empty slots when allowed.
+    // Logo is never replaced with stock.
+    const portfolioPhotos: string[] = (Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : []).filter(Boolean);
+    const teamPhotos: string[] = (Array.isArray(intake.team_photos) ? intake.team_photos : []).filter(Boolean);
 
-    if (usingStockPhotos) {
-      [heroPhoto, aboutPhoto, whyUsPhoto] = await Promise.all([
-        fetchUnsplashPhoto(photoTerms.map((t: string) => `${t} hero wide`), 1920, 900),
-        fetchUnsplashPhoto(photoTerms.map((t: string) => `${t} team working`), 800, 600),
-        fetchUnsplashPhoto(photoTerms.map((t: string) => `${t} professional`), 600, 700),
-      ]);
+    // `use_stock_photos` only controls whether stock fills EMPTY slots — it never overrides client uploads.
+    // Default true unless explicitly set to false.
+    const allowStock = intake.use_stock_photos !== false && (siteData as any).using_stock_photos !== false;
+
+    const firstServiceForStock = (Array.isArray(intake.services) && intake.services[0])
+      ? (typeof intake.services[0] === "string" ? intake.services[0] : (intake.services[0]?.name || intake.services[0]?.title || ""))
+      : "";
+    const businessTypeForStock = (clientData as any)?.business_type || "";
+    const stockTerms = buildStockSearchTerms(businessTypeForStock, firstServiceForStock);
+
+    const heroCandidates = [intake.hero_photo_url, portfolioPhotos[0]].filter(Boolean) as string[];
+    const aboutCandidates = [teamPhotos[0], intake.owner_photo_url, portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+    const whyUsCandidates = [portfolioPhotos[2], portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+
+    let heroImageUrl = heroCandidates[0] || "";
+    let aboutImageUrl = aboutCandidates[0] || "";
+    let whyUsImageUrl = whyUsCandidates[0] || "";
+
+    if (allowStock) {
+      const needed: Array<"hero" | "about" | "whyus"> = [];
+      if (!heroImageUrl) needed.push("hero");
+      if (!aboutImageUrl) needed.push("about");
+      if (!whyUsImageUrl) needed.push("whyus");
+
+      if (needed.length > 0) {
+        const stockResults = await Promise.all(needed.map((slot) => {
+          const variant = slot === "hero" ? "wide hero" : slot === "about" ? "team working" : "professional";
+          return fetchUnsplashPhotoUrl(stockTerms.map((t) => `${t} ${variant}`));
+        }));
+        needed.forEach((slot, i) => {
+          const url = stockResults[i] || "";
+          if (slot === "hero") heroImageUrl = url;
+          else if (slot === "about") aboutImageUrl = url;
+          else if (slot === "whyus") whyUsImageUrl = url;
+        });
+      }
     }
 
-    const aboutImageUrl = intake.owner_photo_url || aboutPhoto?.url || "";
-    const whyUsImageUrl = intake.hero_photo_url || whyUsPhoto?.url || "";
+    const logoUrlResolved = intake.logo_url || ""; // never replaced with stock
+    console.log(`[generate] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} logo:${logoUrlResolved ? "✓" : "✗"} (hero_upload=${!!intake.hero_photo_url}, portfolio=${portfolioPhotos.length}, team=${teamPhotos.length}, allowStock=${allowStock})`);
 
     await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
 
