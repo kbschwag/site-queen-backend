@@ -250,8 +250,8 @@ TONE RULES:
 COPY RULES:
 - Every field must sound specific to THIS business, not generic.
 - Reference the city, the specific services, the years in business where relevant.
-- If a field cannot be written without data that wasn't provided, return an empty string "" for that field — never invent phone numbers, addresses, license numbers, or credentials.
-- For testimonials: write realistic ones with names that sound local to ${city}. Reference specific services this business offers. Make them feel genuine, not corporate.
+- NEVER return an empty string for any field. Every field below MUST be filled with realistic, specific copy. The only exceptions: phone numbers, email addresses, street addresses, license numbers or specific credentials that were not provided — for those, return an empty string rather than inventing data. Headlines, subheadings, badges, stats, services, why-us reasons, FAQs, CTAs, taglines, etc. must always be written even when intake data is sparse — infer reasonable defaults from business type, city, and services.
+${noTestimonialsCopy ? "- TESTIMONIALS: client explicitly opted out — return an empty TESTIMONIALS array []." : "- For testimonials: write realistic ones with names that sound local to " + city + ". Reference specific services this business offers. Make them feel genuine, not corporate."}
 - For FAQs: write questions a real customer of THIS specific business would actually ask. Make answers helpful and specific.
 
 Return ONLY a valid JSON object with exactly these fields. No markdown, no code blocks, no explanation. Start with { and end with }:
