@@ -72,7 +72,8 @@ serve(async (req) => {
     const ownerName = savedCopy.ownerName || intake.owner_name || "";
     const ownerTitle = savedCopy.ownerTitle || intake.owner_title || "Owner";
     const logoUrl = savedCopy.logoUrl || intake.logo_url || "";
-    const primaryColor = savedCopy.primaryColor || "#cb2020";
+    const faviconUrl = savedCopy.faviconUrl || intake.favicon_url || "";
+    const primaryColor = savedCopy.primaryColor || intake.primary_color || "#cb2020";
     const accentColor = savedCopy.accentColor || "#f6a823";
     const fonts = savedCopy.fonts || { heading: "Oswald", body: "Open Sans", googleUrl: "https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Open+Sans:wght@400;600&display=swap" };
     const serviceNames: string[] = savedCopy.serviceNames || [];
