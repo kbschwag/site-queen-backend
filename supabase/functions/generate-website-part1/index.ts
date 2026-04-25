@@ -423,7 +423,22 @@ Return this exact JSON structure:
       "{{FOOTER_TAGLINE}}": copy.FOOTER_TAGLINE || tagline || "",
       "{{BUSINESS_NAME_PART1}}": businessName,
       "{{BUSINESS_NAME_PART2}}": "",
+      // Images — client uploads first, stock fills only empty slots
+      "{{HERO_IMAGE_URL}}": heroImageUrl,
+      "{{ABOUT_IMAGE_URL}}": aboutImageUrl,
+      "{{WHY_US_IMAGE_URL}}": whyUsImageUrl,
+      "{{LOGO_URL}}": logoUrlResolved,
+      "{{LOGO_HTML}}": logoUrlResolved
+        ? `<img src="${logoUrlResolved}" alt="${businessName} logo" class="logo-img" />`
+        : `<div class="logo-icon"><svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`,
+      // Service images — cycle through any remaining portfolio photos for additional slots
+      "{{SERVICE_1_IMAGE_URL}}": pickServiceImage(0, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{SERVICE_2_IMAGE_URL}}": pickServiceImage(1, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{SERVICE_3_IMAGE_URL}}": pickServiceImage(2, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{TRANSFORMATION_IMAGE_URL}}": portfolioPhotos[3] || portfolioPhotos[0] || aboutImageUrl,
+      "{{LEAD_MAGNET_IMAGE_URL}}": portfolioPhotos[4] || portfolioPhotos[0] || heroImageUrl,
     };
+
 
     for (const [key, value] of Object.entries(fill)) {
       html = html.split(key).join(value);
