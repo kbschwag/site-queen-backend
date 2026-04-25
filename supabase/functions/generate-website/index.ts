@@ -700,7 +700,7 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
     const copyDataPayload = {
       businessName, businessType, city, state, phone, phoneRaw, email, address,
       yearsInBusiness, googleRating, googleReviewCount, tagline, ownerName, ownerTitle,
-      logoUrl: logoUrlResolved, serviceNames, noTestimonials,
+      logoUrl: logoUrlResolved, faviconUrl: intake.favicon_url || "", serviceNames, noTestimonials,
       portfolioPhotos, teamPhotos,
       heroImageUrl, aboutImageUrl, whyUsImageUrl,
       stockTerms, allowStock,
