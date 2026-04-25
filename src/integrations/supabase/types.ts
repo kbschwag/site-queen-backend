@@ -835,6 +835,42 @@ export type Database = {
           },
         ]
       }
+      form_submissions: {
+        Row: {
+          client_id: string
+          email: string | null
+          id: string
+          ip_address: string | null
+          message: string | null
+          name: string | null
+          phone: string | null
+          service: string | null
+          submitted_at: string
+        }
+        Insert: {
+          client_id: string
+          email?: string | null
+          id?: string
+          ip_address?: string | null
+          message?: string | null
+          name?: string | null
+          phone?: string | null
+          service?: string | null
+          submitted_at?: string
+        }
+        Update: {
+          client_id?: string
+          email?: string | null
+          id?: string
+          ip_address?: string | null
+          message?: string | null
+          name?: string | null
+          phone?: string | null
+          service?: string | null
+          submitted_at?: string
+        }
+        Relationships: []
+      }
       generation_logs: {
         Row: {
           client_id: string

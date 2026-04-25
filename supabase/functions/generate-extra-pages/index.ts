@@ -331,6 +331,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       }
       aboutHTML = aboutHTML.replace(/\{\{[^}]+\}\}/g, "");
       aboutHTML = aboutHTML.replace("</body>", analyticsScript + "\n</body>");
+      aboutHTML = wireContactForms(aboutHTML, clientId, supabaseUrl);
 
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/about.html`, injectNoindex(aboutHTML));
       await supabase.storage.from("generated-sites").upload(
@@ -540,6 +541,7 @@ Return ONLY valid JSON. No markdown:
       }
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");
+      servicesHTML = wireContactForms(servicesHTML, clientId, supabaseUrl);
 
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/services.html`, injectNoindex(servicesHTML));
       await supabase.storage.from("generated-sites").upload(
@@ -582,7 +584,7 @@ Return ONLY valid JSON. No markdown:
         name: "Contact",
         slug: "contact",
         source: "always",
-        description: `Contact page. IMPORTANT: Do NOT use the dark full-bleed hero section with a giant headline that the homepage uses. Instead start with a simple, understated PAGE HEADER (same visual weight as the about page header) — a small breadcrumb "HOME › CONTACT", a clean page title "Contact ${businessName}", and a short one-sentence subtitle. Use existing CSS classes only (e.g. .page-header, .breadcrumb, .container, .section-title) — never the .hero or .hero-section classes. Below the header use a two-column layout. LEFT column: contact info — phone (${phone}) as a tel: link, email (${email || "n/a"}) as a mailto: link, service area (${intake.service_area || city}), business hours (${intake.business_hours ? JSON.stringify(intake.business_hours) : "by appointment"}). RIGHT column: contact form with fields — first name, last name, email, phone, service type dropdown populated with the real services [${serviceNames.join(", ") || "General Inquiry"}], message textarea, and a SUBMIT REQUEST button.`,
+        description: `Contact page. IMPORTANT: Do NOT use the dark full-bleed hero section with a giant headline that the homepage uses. Instead start with a simple, understated PAGE HEADER (same visual weight as the about page header) — a small breadcrumb "HOME › CONTACT", a clean page title "Contact ${businessName}", and a short one-sentence subtitle. Use existing CSS classes only (e.g. .page-header, .breadcrumb, .container, .section-title) — never the .hero or .hero-section classes. Below the header use a two-column layout. LEFT column: contact info — phone (${phone}) as a tel: link, email (${email || "n/a"}) as a mailto: link, service area (${intake.service_area || city}), business hours (${intake.business_hours ? JSON.stringify(intake.business_hours) : "by appointment"}). RIGHT column: a contact <form> element. The form MUST contain inputs with EXACTLY these name attributes (the platform wires them to the backend): name="name" (full name, required), name="phone" (required), name="email" (type=email, required), name="service" (a <select> populated with options for these services [${serviceNames.join(", ") || "General Inquiry"}]), name="message" (a <textarea>, required). Include a submit <button type="submit"> labelled SUBMIT REQUEST or SEND MESSAGE. Do NOT add any action attribute, do NOT add any onsubmit handler, do NOT add any hidden inputs — the platform injects those automatically. Use only existing CSS classes for styling.`,
       });
 
       // Intake custom pages
@@ -659,7 +661,7 @@ RULES:
           }
 
           // Assemble: doctype + head with extracted style + header + content + footer + analytics
-          const fullHTML = assemblePage({
+          let fullHTML = assemblePage({
             title: `${spec.name} | ${businessName}`,
             description: `${spec.name} — ${businessName}, ${businessType} in ${city}, ${state}.`,
             googleFontsUrl: fonts.googleUrl,
@@ -669,6 +671,9 @@ RULES:
             footerHTML: shell.footerHTML,
             analyticsScript,
           });
+
+          // Wire any <form> on the page to handle-contact-form
+          fullHTML = wireContactForms(fullHTML, clientId, supabaseUrl);
 
           await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/${spec.slug}.html`, injectNoindex(fullHTML));
           await supabase.storage.from("generated-sites").upload(
@@ -982,4 +987,77 @@ function escapeHTML(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// ── Contact form wiring ────────────────────────────────────────────────
+// Post-processes a generated page so every <form> element posts to the
+// handle-contact-form edge function with a hidden client_id and honeypot,
+// plus a JS handler that AJAX-submits and shows success / error inline.
+function wireContactForms(html: string, clientId: string, supabaseUrl: string): string {
+  const endpoint = `${supabaseUrl}/functions/v1/handle-contact-form`;
+  const out = html.replace(/<form\b([^>]*)>/gi, (_match, attrs: string) => {
+    let a = attrs;
+    a = a.replace(/\s+action\s*=\s*("[^"]*"|'[^']*')/gi, "");
+    a = a.replace(/\s+method\s*=\s*("[^"]*"|'[^']*')/gi, "");
+    if (!/data-sq-contact-form/i.test(a)) {
+      a += ` data-sq-contact-form="1"`;
+    }
+    const hidden = `
+      <input type="hidden" name="client_id" value="${clientId}" />
+      <input type="text" name="website" tabindex="-1" autocomplete="off" style="display:none !important;position:absolute;left:-10000px;" aria-hidden="true" />`;
+    return `<form action="${endpoint}" method="post"${a}>${hidden}`;
+  });
+  const handlerScript = `
+<script>
+(function(){
+  var ENDPOINT = ${JSON.stringify(endpoint)};
+  function handle(form){
+    if (form.__sqWired) return; form.__sqWired = true;
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var btn = form.querySelector('button[type="submit"], input[type="submit"]');
+      var origLabel = btn ? (btn.tagName === 'INPUT' ? btn.value : btn.innerHTML) : '';
+      if (btn) { btn.disabled = true; if (btn.tagName === 'INPUT') { btn.value = 'Sending...'; } else { btn.innerHTML = 'Sending...'; } }
+      var fd = new FormData(form);
+      var payload = {};
+      fd.forEach(function(v,k){ payload[k] = v; });
+      fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function(r){ return r.ok; }).catch(function(){ return false; })
+        .then(function(ok){
+          var msg = document.createElement('div');
+          msg.style.padding = '16px';
+          msg.style.marginTop = '12px';
+          msg.style.borderRadius = '6px';
+          msg.style.textAlign = 'center';
+          msg.style.fontWeight = '600';
+          if (ok) {
+            msg.style.background = '#e6f9ed';
+            msg.style.color = '#0d6b2f';
+            msg.textContent = "Message sent! We'll be in touch soon.";
+            form.reset();
+          } else {
+            msg.style.background = '#fdecec';
+            msg.style.color = '#a01010';
+            msg.textContent = "Something went wrong. Please call us directly.";
+          }
+          var existing = form.querySelector('.sq-form-status');
+          if (existing) existing.remove();
+          msg.className = 'sq-form-status';
+          form.appendChild(msg);
+          if (btn) { btn.disabled = false; if (btn.tagName === 'INPUT') { btn.value = origLabel; } else { btn.innerHTML = origLabel; } }
+        });
+    });
+  }
+  function init(){
+    document.querySelectorAll('form[data-sq-contact-form="1"]').forEach(handle);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
+})();
+</script>`;
+  return out.replace("</body>", handlerScript + "\n</body>");
 }

@@ -666,6 +666,9 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
 </script>`;
     html = html.replace("</body>", analyticsScript + "\n</body>");
 
+    // ── Wire any <form> on the page to handle-contact-form ───────────────
+    html = wireContactForms(html, clientId, supabaseUrl);
+
     // ── Upload to Hostinger staging ──────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
 
@@ -980,4 +983,85 @@ function pickServiceImage(index: number, portfolioPhotos: string[], fallbacks: s
   if (portfolioPhotos[index]) return portfolioPhotos[index];
   if (portfolioPhotos.length > 0) return portfolioPhotos[index % portfolioPhotos.length];
   return fallbacks.find((u) => !!u) || "";
+}
+
+// ── Contact form wiring ────────────────────────────────────────────────
+// Post-processes generated HTML so every <form> element on the page submits
+// to the handle-contact-form edge function with a hidden client_id and a
+// honeypot field, plus a small JS handler that AJAX-submits and shows a
+// success / error message in place of the form.
+export function wireContactForms(html: string, clientId: string, supabaseUrl: string): string {
+  const endpoint = `${supabaseUrl}/functions/v1/handle-contact-form`;
+
+  // For every <form ...> opening tag: set action, set method="post", inject hidden inputs.
+  const out = html.replace(/<form\b([^>]*)>/gi, (_match, attrs: string) => {
+    let a = attrs;
+    // Strip existing action and method to avoid duplicates
+    a = a.replace(/\s+action\s*=\s*("[^"]*"|'[^']*')/gi, "");
+    a = a.replace(/\s+method\s*=\s*("[^"]*"|'[^']*')/gi, "");
+    // Tag the form so our JS can find it
+    if (!/data-sq-contact-form/i.test(a)) {
+      a += ` data-sq-contact-form="1"`;
+    }
+    const hidden = `
+      <input type="hidden" name="client_id" value="${clientId}" />
+      <input type="text" name="website" tabindex="-1" autocomplete="off" style="display:none !important;position:absolute;left:-10000px;" aria-hidden="true" />`;
+    return `<form action="${endpoint}" method="post"${a}>${hidden}`;
+  });
+
+  // Inject the submit handler script just before </body>.
+  const handlerScript = `
+<script>
+(function(){
+  var ENDPOINT = ${JSON.stringify(endpoint)};
+  function handle(form){
+    if (form.__sqWired) return; form.__sqWired = true;
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var btn = form.querySelector('button[type="submit"], input[type="submit"]');
+      var origLabel = btn ? (btn.tagName === 'INPUT' ? btn.value : btn.innerHTML) : '';
+      if (btn) { btn.disabled = true; if (btn.tagName === 'INPUT') { btn.value = 'Sending...'; } else { btn.innerHTML = 'Sending...'; } }
+      var fd = new FormData(form);
+      var payload = {};
+      fd.forEach(function(v,k){ payload[k] = v; });
+      fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function(r){ return r.ok; }).catch(function(){ return false; })
+        .then(function(ok){
+          var msg = document.createElement('div');
+          msg.style.padding = '16px';
+          msg.style.marginTop = '12px';
+          msg.style.borderRadius = '6px';
+          msg.style.textAlign = 'center';
+          msg.style.fontWeight = '600';
+          if (ok) {
+            msg.style.background = '#e6f9ed';
+            msg.style.color = '#0d6b2f';
+            msg.textContent = "Message sent! We'll be in touch soon.";
+            form.reset();
+          } else {
+            msg.style.background = '#fdecec';
+            msg.style.color = '#a01010';
+            msg.textContent = "Something went wrong. Please call us directly.";
+          }
+          var existing = form.querySelector('.sq-form-status');
+          if (existing) existing.remove();
+          msg.className = 'sq-form-status';
+          form.appendChild(msg);
+          if (btn) { btn.disabled = false; if (btn.tagName === 'INPUT') { btn.value = origLabel; } else { btn.innerHTML = origLabel; } }
+        });
+    });
+  }
+  function init(){
+    document.querySelectorAll('form[data-sq-contact-form="1"]').forEach(handle);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
+})();
+</script>`;
+
+  return out.replace("</body>", handlerScript + "\n</body>");
 }
