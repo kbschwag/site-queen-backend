@@ -390,10 +390,16 @@ Return this exact JSON structure (every field required, no empty strings unless 
       : "";
     const businessNameInHeader = hasLogo ? "" : businessName;
 
-    const mapEmbedUrl = intake.map_embed_url || "";
-    const mapHTML = mapEmbedUrl
-      ? `<iframe class="map-iframe" src="${mapEmbedUrl}" allowfullscreen loading="lazy"></iframe>`
-      : `<div class="map-placeholder"><p>📍 SERVING ${(intake.service_area || city || "OUR AREA").toUpperCase()} &amp; SURROUNDING AREAS</p></div>`;
+    const mapBuild = buildMapHTML({
+      locationType: intake.location_type || intake.business_location_type || "",
+      streetAddress: intake.street_address || intake.business_address || intake.address || "",
+      city,
+      state,
+      zip: intake.business_zip || intake.zip || intake.postal_code || intake.zip_code || "",
+      serviceArea: intake.service_area || "",
+    });
+    const mapHTML = mapBuild.html;
+    const mapEmbedUrl = mapBuild.url;
 
     // ── Build SERVICE_OPTIONS for any contact-form selects ───────────────
     const serviceOptionsHTML = serviceNames.length
