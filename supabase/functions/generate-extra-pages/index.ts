@@ -686,6 +686,7 @@ RULES:
 
           // Wire any <form> on the page to handle-contact-form
           fullHTML = wireContactForms(fullHTML, clientId, supabaseUrl);
+          fullHTML = injectFavicon(fullHTML, faviconTag);
 
           await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/${spec.slug}.html`, injectNoindex(fullHTML));
           await supabase.storage.from("generated-sites").upload(
