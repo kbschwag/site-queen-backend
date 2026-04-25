@@ -669,6 +669,15 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
     // ── Wire any <form> on the page to handle-contact-form ───────────────
     html = wireContactForms(html, clientId, supabaseUrl);
 
+    // ── Inject favicon (uploaded → logo → generated SVG initial) ─────────
+    const faviconTag = buildFaviconHTML({
+      faviconUrl: intake.favicon_url || "",
+      logoUrl: logoUrlResolved,
+      businessName,
+      primaryColor: intake.primary_color || "",
+    });
+    html = injectFavicon(html, faviconTag);
+
     // ── Upload to Hostinger staging ──────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
 
