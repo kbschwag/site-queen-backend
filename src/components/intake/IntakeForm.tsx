@@ -29,7 +29,9 @@ interface Props {
 
 export function IntakeForm({ clientId, userId, plan, businessName, onComplete }: Props) {
   const { intakeData, currentStep, setStep, debouncedSave, saving, lastSaved } = useIntakeFormHook(clientId);
-  const { uploadFile, uploadMultiple, uploading } = useFileUpload(userId);
+  // Upload under the client record id so paths match the rest of the pipeline
+  // (generated-sites, deploy-to-hostinger, operator tooling all key off clientId).
+  const { uploadFile, uploadMultiple, uploading } = useFileUpload(clientId);
   const [submitting, setSubmitting] = useState(false);
   const [rightsError, setRightsError] = useState(false);
 
