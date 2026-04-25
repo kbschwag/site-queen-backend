@@ -390,10 +390,16 @@ Return this exact JSON structure (every field required, no empty strings unless 
       : "";
     const businessNameInHeader = hasLogo ? "" : businessName;
 
-    const mapEmbedUrl = intake.map_embed_url || "";
-    const mapHTML = mapEmbedUrl
-      ? `<iframe class="map-iframe" src="${mapEmbedUrl}" allowfullscreen loading="lazy"></iframe>`
-      : `<div class="map-placeholder"><p>📍 SERVING ${(intake.service_area || city || "OUR AREA").toUpperCase()} &amp; SURROUNDING AREAS</p></div>`;
+    const mapBuild = buildMapHTML({
+      locationType: intake.location_type || intake.business_location_type || "",
+      streetAddress: intake.street_address || intake.business_address || intake.address || "",
+      city,
+      state,
+      zip: intake.business_zip || intake.zip || intake.postal_code || intake.zip_code || "",
+      serviceArea: intake.service_area || "",
+    });
+    const mapHTML = mapBuild.html;
+    const mapEmbedUrl = mapBuild.url;
 
     // ── Build SERVICE_OPTIONS for any contact-form selects ───────────────
     const serviceOptionsHTML = serviceNames.length
@@ -865,6 +871,54 @@ function escapeHTML(s: string): string {
 
 function escapeAttr(s: string): string {
   return escapeHTML(s);
+}
+
+// ── Map helper — free Google Maps iframe embed (no API key required) ──
+type MapInput = {
+  locationType?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  serviceArea?: string;
+};
+function buildMapHTML(input: MapInput): { html: string; url: string } {
+  const type = (input.locationType || "").toLowerCase().trim();
+  const city = (input.city || "").trim();
+  const state = (input.state || "").trim();
+  const street = (input.streetAddress || "").trim();
+  const zip = (input.zip || "").trim();
+
+  // Online (or other "no map" types) → hide map entirely
+  if (type === "online" || type === "remote" || type === "virtual" || type === "none") {
+    return { html: "", url: "" };
+  }
+
+  let url = "";
+  if (type === "physical" && (street || city)) {
+    const q = [street, city, state, zip].filter(Boolean).join(", ");
+    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`;
+  } else if (type === "hybrid" && (street || city)) {
+    const q = [street, city, state].filter(Boolean).join(", ");
+    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`;
+  } else if (type === "mobile" && (city || state)) {
+    const q = [city, state].filter(Boolean).join(", ");
+    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
+  } else if (city || state) {
+    // Fallback — missing/unrecognised location_type
+    const q = [city, state].filter(Boolean).join(", ");
+    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
+  }
+
+  if (!url) {
+    return {
+      html: `<div class="map-placeholder"><p>📍 SERVING ${(input.serviceArea || city || "OUR AREA").toUpperCase()} &amp; SURROUNDING AREAS</p></div>`,
+      url: "",
+    };
+  }
+
+  const html = `<iframe class="map-iframe" src="${url}" width="100%" height="100%" style="border:0;min-height:400px;" allowfullscreen="" loading="lazy"></iframe>`;
+  return { html, url };
 }
 
 // ── Photo helpers ─────────────────────────────────────────────────────
