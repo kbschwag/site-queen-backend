@@ -342,6 +342,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       aboutHTML = aboutHTML.replace(/\{\{[^}]+\}\}/g, "");
       aboutHTML = aboutHTML.replace("</body>", analyticsScript + "\n</body>");
       aboutHTML = wireContactForms(aboutHTML, clientId, supabaseUrl);
+      aboutHTML = injectFavicon(aboutHTML, faviconTag);
 
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/about.html`, injectNoindex(aboutHTML));
       await supabase.storage.from("generated-sites").upload(
