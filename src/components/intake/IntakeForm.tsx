@@ -37,9 +37,12 @@ export function IntakeForm({ clientId, userId, plan, businessName, onComplete }:
 
   const handleChange = useCallback(
     (updates: Partial<IntakeData>) => {
-      debouncedSave({ ...intakeData, ...updates });
+      // Pass only the delta — useIntakeForm merges against its latest ref so
+      // concurrent updates (e.g. two photo uploads finishing back-to-back)
+      // don't clobber each other with stale snapshots.
+      debouncedSave(updates);
     },
-    [debouncedSave, intakeData]
+    [debouncedSave]
   );
 
   const markStepComplete = useCallback(
