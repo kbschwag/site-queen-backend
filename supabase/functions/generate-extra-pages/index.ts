@@ -36,7 +36,7 @@ serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    // ── Fetch data ───────────────────────────────────────────────────────
+    // ── Fetch all data ───────────────────────────────────────────────────
     const { data: siteData } = await supabase.from("sites").select("*").eq("client_id", clientId).single();
     const { data: clientData } = await supabase.from("clients").select("*").eq("id", clientId).single();
     const intake: any = (siteData as any)?.intake_data || {};
@@ -45,70 +45,105 @@ serve(async (req) => {
       ? await supabase.from("call_notes").select("*").eq("application_id", applicationId).maybeSingle()
       : { data: null };
 
-    // ── Business data shortcuts ──────────────────────────────────────────
-    const businessName = (clientData as any)?.business_name || intake.business_name || "Business";
-    const businessType = (clientData as any)?.business_type || "Service Business";
-    const city = intake.business_city || intake.city || "";
-    const state = intake.business_state || intake.state || "";
-    const phone = intake.business_phone || intake.primary_phone || intake.phone || "";
-    const email = intake.business_email || intake.email || "";
-    const address = intake.business_address || intake.address || "";
-    const yearsInBusiness = intake.years_in_business || "";
-    const googleRating = intake.google_rating || "";
-    const googleReviewCount = intake.google_review_count || "";
-    const aboutStory = intake.about_story || intake.owner_bio_raw || intake.story_started || "";
-    const ownerName = intake.owner_name || "";
-    const ownerTitle = intake.owner_title || "Owner";
-    const tagline = intake.tagline || "";
+    // ── Load copy-data saved by part1 ────────────────────────────────────
+    // Part1 saves a copy-data.json with the generated copy and resolved brand info
+    const { data: copyFile } = await supabase.storage
+      .from("generated-sites")
+      .download(`${clientId}/copy-data.json`);
 
-    const portfolioPhotos: string[] = Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : [];
-    const teamPhotos: string[] = Array.isArray(intake.team_photos) ? intake.team_photos : [];
-    const services: any[] = Array.isArray(intake.services) ? intake.services : [];
+    let savedCopy: any = {};
+    if (copyFile) {
+      try { savedCopy = JSON.parse(await copyFile.text()); } catch { /* use empty */ }
+    }
+
+    // ── Business data ────────────────────────────────────────────────────
+    const businessName = savedCopy.businessName || (clientData as any)?.business_name || intake.business_name || "Business";
+    const businessType = savedCopy.businessType || (clientData as any)?.business_type || "Service Business";
+    const city = savedCopy.city || intake.business_city || intake.city || "";
+    const state = savedCopy.state || intake.business_state || intake.state || "";
+    const phone = savedCopy.phone || intake.business_phone || intake.primary_phone || "";
+    const phoneRaw = savedCopy.phoneRaw || phone.replace(/\D/g, "");
+    const email = savedCopy.email || intake.business_email || "";
+    const address = savedCopy.address || intake.business_address || "";
+    const yearsInBusiness = savedCopy.yearsInBusiness || intake.years_in_business || "";
+    const googleRating = savedCopy.googleRating || intake.google_rating || "4.9";
+    const googleReviewCount = savedCopy.googleReviewCount || intake.google_review_count || "127";
+    const tagline = savedCopy.tagline || intake.tagline || "";
+    const ownerName = savedCopy.ownerName || intake.owner_name || "";
+    const ownerTitle = savedCopy.ownerTitle || intake.owner_title || "Owner";
+    const logoUrl = savedCopy.logoUrl || intake.logo_url || "";
+    const primaryColor = savedCopy.primaryColor || "#cb2020";
+    const accentColor = savedCopy.accentColor || "#f6a823";
+    const fonts = savedCopy.fonts || { heading: "Oswald", body: "Open Sans", googleUrl: "https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Open+Sans:wght@400;600&display=swap" };
+    const serviceNames: string[] = savedCopy.serviceNames || [];
+    const noTestimonials = savedCopy.noTestimonials || !!intake.no_testimonials;
+    const mapEmbedUrl = intake.map_embed_url || "";
+    const portfolioPhotos: string[] = savedCopy.portfolioPhotos || Array.isArray(intake.portfolio_photos) ? (savedCopy.portfolioPhotos || intake.portfolio_photos) : [];
+    const teamPhotos: string[] = savedCopy.teamPhotos || Array.isArray(intake.team_photos) ? (savedCopy.teamPhotos || intake.team_photos) : [];
+
+    // Previously generated homepage copy
+    const homeCopy = savedCopy.copy || {};
     const serviceAreas: any[] = Array.isArray(intake.service_areas) ? intake.service_areas : [];
+    const coupons: any[] = Array.isArray(intake.coupons) ? intake.coupons : [];
+    const aboutStory = intake.about_section_generated || intake.owner_bio_generated || intake.about_story || intake.owner_bio_raw || "";
 
-    const serviceNames = services.slice(0, 6).map((s: any) =>
-      typeof s === "string" ? s : s?.name || s?.title || ""
-    ).filter(Boolean);
-
-    // ── Determine template prefix ────────────────────────────────────────
-    // Each template lives in its own folder inside the `templates` bucket:
-    //   {templateId}/about.html, {templateId}/services.html, etc.
+    // ── Template ID ──────────────────────────────────────────────────────
     const TEMPLATE_FILE_MAP: Record<string, string> = {
-      trades: "trades-hero",
-      feminine: "feminine-bold",
-      warm: "warm-welcome",
-      local: "local-favorite",
-      modern: "modern-business",
+      trades: "trades-hero", professional: "professional",
+      warm: "warm-welcome", local: "local-favorite", modern: "modern-business",
     };
-    const selectedTemplate = intake?.template_selected || (callNotes as any)?.template_selected || intake?.template_id;
+    const selectedTemplate = (callNotes as any)?.template_selected || intake?.template_selected || intake?.template_id;
     const templateId = selectedTemplate ? (TEMPLATE_FILE_MAP[selectedTemplate] || selectedTemplate) : "trades-hero";
 
-    // ── Shared fill values (used across all pages) ───────────────────────
+    // ── Logo HTML ────────────────────────────────────────────────────────
+    const logoHTML = logoUrl
+      ? `<img src="${logoUrl}" alt="${businessName} logo" class="logo-img" />`
+      : `<div class="logo-icon"><svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`;
+
+    // ── Map HTML ─────────────────────────────────────────────────────────
+    const mapHTML = mapEmbedUrl
+      ? `<iframe class="map-iframe" src="${mapEmbedUrl}" allowfullscreen loading="lazy"></iframe>`
+      : `<div class="map-placeholder"><p>📍 SERVING ${(intake.service_area || city).toUpperCase()} &amp; SURROUNDING AREAS</p></div>`;
+
+    // ── Coupon data ──────────────────────────────────────────────────────
+    const couponOffer = coupons[0] ? `$${coupons[0].amount} OFF` : "$50 OFF";
+    const couponDesc = coupons[0]?.description || "ANY JOB OVER $250";
+    const couponNote = coupons[0] ? `Expires ${coupons[0].expiry || "12/31"}. Code: ${coupons[0].code || "SAVE50"}` : "Mention this coupon when you book. Cannot combine with other offers.";
+
+    // ── Shared fills used by all pages ───────────────────────────────────
     const sharedFill: Record<string, string> = {
       "{{BUSINESS_NAME}}": businessName,
       "{{BUSINESS_PHONE}}": phone,
+      "{{BUSINESS_PHONE_RAW}}": phoneRaw,
       "{{BUSINESS_EMAIL}}": email,
       "{{BUSINESS_ADDRESS}}": address,
       "{{BUSINESS_CITY}}": city,
       "{{BUSINESS_STATE}}": state,
-      "{{GOOGLE_RATING}}": String(googleRating || "4.9"),
-      "{{GOOGLE_REVIEW_COUNT}}": String(googleReviewCount || "100"),
+      "{{GOOGLE_RATING}}": String(googleRating),
+      "{{GOOGLE_REVIEW_COUNT}}": String(googleReviewCount),
       "{{SERVICE_AREA}}": intake.service_area || (city ? `${city} & Surrounding Areas` : ""),
-      "{{YEARS_IN_BUSINESS}}": String(yearsInBusiness || "10"),
       "{{COPYRIGHT_YEAR}}": String(new Date().getFullYear()),
-      "{{FOOTER_TAGLINE}}": tagline || "",
-      "{{SERVICE_1_NAME}}": serviceNames[0] || "",
-      "{{SERVICE_2_NAME}}": serviceNames[1] || "",
-      "{{SERVICE_3_NAME}}": serviceNames[2] || "",
-      "{{SERVICE_4_NAME}}": serviceNames[3] || "",
-      "{{SERVICE_5_NAME}}": serviceNames[4] || "",
-      "{{SERVICE_6_NAME}}": serviceNames[5] || "",
-      "{{EMERGENCY_HEADLINE}}": "EMERGENCY? WE'RE ON THE WAY.",
-      "{{AREA_1}}": serviceAreas[0] ? (typeof serviceAreas[0] === "string" ? serviceAreas[0] : serviceAreas[0].name) : city,
-      "{{AREA_2}}": serviceAreas[1] ? (typeof serviceAreas[1] === "string" ? serviceAreas[1] : serviceAreas[1].name) : "",
-      "{{AREA_3}}": serviceAreas[2] ? (typeof serviceAreas[2] === "string" ? serviceAreas[2] : serviceAreas[2].name) : "",
+      "{{FOOTER_TAGLINE}}": homeCopy.FOOTER_TAGLINE || tagline || "",
+      "{{FOOTER_NEWSLETTER_TEXT}}": homeCopy.FOOTER_NEWSLETTER_TEXT || "Sign up for exclusive deals and expert tips.",
+      "{{LOGO_HTML}}": logoHTML,
+      "{{MAP_HTML}}": mapHTML,
+      "{{GOOGLE_FONTS_URL}}": fonts.googleUrl,
+      "{{SERVICE_1_NAME}}": homeCopy.SERVICE_1_NAME || serviceNames[0] || "",
+      "{{SERVICE_2_NAME}}": homeCopy.SERVICE_2_NAME || serviceNames[1] || "",
+      "{{SERVICE_3_NAME}}": homeCopy.SERVICE_3_NAME || serviceNames[2] || "",
+      "{{SERVICE_4_NAME}}": homeCopy.SERVICE_4_NAME || serviceNames[3] || "",
+      "{{SERVICE_5_NAME}}": homeCopy.SERVICE_5_NAME || serviceNames[4] || "",
+      "{{SERVICE_6_NAME}}": homeCopy.SERVICE_6_NAME || serviceNames[5] || "",
+      "{{EMERGENCY_HEADLINE}}": homeCopy.EMERGENCY_HEADLINE || "EMERGENCY? WE'RE ON THE WAY.",
+      "{{COUPON_OFFER}}": couponOffer,
+      "{{COUPON_DESC}}": couponDesc,
+      "{{COUPON_NOTE}}": couponNote,
+      "{{AREA_1}}": serviceAreas[0] ? (typeof serviceAreas[0] === "string" ? serviceAreas[0] : serviceAreas[0].name) : (homeCopy.AREA_1 || city),
+      "{{AREA_2}}": serviceAreas[1] ? (typeof serviceAreas[1] === "string" ? serviceAreas[1] : serviceAreas[1].name) : (homeCopy.AREA_2 || ""),
+      "{{AREA_3}}": serviceAreas[2] ? (typeof serviceAreas[2] === "string" ? serviceAreas[2] : serviceAreas[2].name) : (homeCopy.AREA_3 || ""),
     };
 
+    // ── Analytics script ─────────────────────────────────────────────────
     const analyticsScript = `
 <script>
 (function() {
@@ -118,85 +153,111 @@ serve(async (req) => {
   function getSid() { var s = sessionStorage.getItem('sq_sid'); if (!s) { s = Math.random().toString(36).substr(2,9); sessionStorage.setItem('sq_sid',s); } return s; }
   function track(type, meta) { fetch(ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ client_id:CLIENT_ID, event_type:type, page_path:window.location.pathname, page_title:document.title, referrer:document.referrer, device_type:getDevice(), session_id:getSid(), metadata:meta||{} }) }).catch(function(){}); }
   track('page_view');
-  document.addEventListener('click', function(e) { var a = e.target.closest('a'); if (!a) return; if (a.href && a.href.indexOf('tel:') === 0) track('phone_click'); if (a.href && a.href.indexOf('mailto:') === 0) track('email_click'); });
-  document.addEventListener('submit', function() { track('form_submission'); });
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest('a');
+    if (!a) return;
+    if (a.href && a.href.indexOf('tel:') === 0) track('phone_click');
+    if (a.href && a.href.indexOf('mailto:') === 0) track('email_click');
+    if (a.classList.contains('btn')) track('cta_click', {text: a.textContent.trim().substring(0,50)});
+  });
+  document.addEventListener('submit', function(e) { track('form_submission', {form_id: e.target.id || 'unknown'}); });
 })();
 </script>`;
 
     const generated: string[] = [];
     const failed: string[] = [];
 
-    // ── ABOUT PAGE ───────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════
+    // ABOUT PAGE
+    // ════════════════════════════════════════════════════════════════════
     try {
-      const { data: aboutFile } = await supabase.storage.from("templates").download(`${templateId}/about.html`);
-      if (!aboutFile) throw new Error(`Template not found: ${templateId}/about.html`);
+      const { data: aboutFile } = await supabase.storage.from("templates").download(`${templateId}-about.html`);
+      if (!aboutFile) throw new Error(`Template not found: ${templateId}-about.html`);
       let aboutHTML = await aboutFile.text();
 
       // Generate about-specific copy
-      const aboutCopyPrompt = `You are a copywriter for SiteQueen. Generate about page copy for ${businessName}, a ${businessType} in ${city}, ${state}.
+      const aboutPrompt = `You are a professional copywriter for SiteQueen. Generate copy for the ABOUT page of ${businessName}, a ${businessType} in ${city}, ${state}.
 
 OWNER INFO:
 - Name: ${ownerName || "not provided"}
 - Title: ${ownerTitle}
-- Story: ${aboutStory || "not provided"}
+- Years in business: ${yearsInBusiness || "not provided"}
+- About story: ${aboutStory || "not provided"}
 - What makes them different: ${intake.story_different || "not provided"}
 - How they started: ${intake.story_started || "not provided"}
-- Years in business: ${yearsInBusiness || "not provided"}
+- Problem they solve: ${intake.story_problem || "not provided"}
 
-CALL NOTES: ${callNotes ? JSON.stringify({ their_story: (callNotes as any).their_story, tone_of_voice: (callNotes as any).tone_of_voice, expert_additions: (callNotes as any).expert_additions, exact_phrases: (callNotes as any).exact_phrases }, null, 2) : "None"}
+CALL NOTES (highest priority):
+${callNotes ? JSON.stringify({
+  their_story: (callNotes as any).their_story,
+  tone_of_voice: (callNotes as any).tone_of_voice,
+  tone_custom: (callNotes as any).tone_custom,
+  expert_additions: (callNotes as any).expert_additions,
+  expert_avoid: (callNotes as any).expert_avoid,
+  exact_phrases: (callNotes as any).exact_phrases,
+  vibe_notes: (callNotes as any).vibe_notes,
+  final_notes: (callNotes as any).final_notes,
+}, null, 2) : "No call notes."}
 
-Return ONLY valid JSON. No markdown:
+TONE: Match call notes tone. If not specified: trades = confident and direct. Never use corporate filler phrases.
+
+Return ONLY valid JSON. No markdown. No explanation:
 {
-  "ABOUT_PAGE_SUBHEADING": "1 sentence about the business location and experience",
-  "ABOUT_STORY_P1": "first paragraph of about story - personal and specific to this business",
-  "ABOUT_STORY_P2": "second paragraph - what drives them, their approach",
-  "ABOUT_STORY_P3": "third paragraph - their commitment and values",
-  "EXPECT_1": "thing clients can always expect #1",
-  "EXPECT_2": "thing clients can always expect #2",
-  "EXPECT_3": "thing clients can always expect #3",
-  "EXPECT_4": "thing clients can always expect #4",
-  "EXPECT_5": "thing clients can always expect #5",
-  "EXPECT_6": "thing clients can always expect #6",
+  "ABOUT_PAGE_SUBHEADING": "1 sentence about this business — location, years, specialty",
+  "ABOUT_STORY_P1": "first paragraph — how they started, their background. Personal and specific. 3-4 sentences.",
+  "ABOUT_STORY_P2": "second paragraph — their approach, what drives them, their values. 3-4 sentences.",
+  "ABOUT_STORY_P3": "third paragraph — their commitment, what sets them apart. 2-3 sentences.",
+  "EXPECT_1": "thing clients can always expect from them — specific to this business",
+  "EXPECT_2": "thing clients can always expect",
+  "EXPECT_3": "thing clients can always expect",
+  "EXPECT_4": "thing clients can always expect",
+  "EXPECT_5": "thing clients can always expect",
+  "EXPECT_6": "thing clients can always expect",
   "WHY_US_BADGE": "short badge text e.g. #1 CONTRACTOR",
-  "WHY_US_TAGLINE": "short tagline e.g. FAMILY-OWNED · LICENSED · SINCE ${yearsInBusiness ? String(new Date().getFullYear() - parseInt(String(yearsInBusiness))) : "2010"}",
-  "WHY_US_STORY": "2-3 sentences about why clients trust this business",
+  "WHY_US_TAGLINE": "e.g. FAMILY-OWNED · LICENSED · SINCE ${yearsInBusiness ? String(new Date().getFullYear() - parseInt(String(yearsInBusiness))) : "2010"}",
+  "WHY_US_STORY": "2-3 sentences about why clients trust this business. Reference real details.",
   "AREA_GROUP_1_NAME": "${city.toUpperCase()} AREA",
-  "AREA_GROUP_1_CITIES": "list of nearby cities separated by · ",
-  "AREA_GROUP_2_NAME": "second region name if applicable",
-  "AREA_GROUP_2_CITIES": "cities in that region",
-  "AREA_GROUP_3_NAME": "third region name if applicable",
-  "AREA_GROUP_3_CITIES": "cities in that region"
+  "AREA_GROUP_1_CITIES": "list of 6-8 nearby cities/areas separated by · ",
+  "AREA_GROUP_2_NAME": "second region name e.g. COUNTY NAME or nearby city cluster",
+  "AREA_GROUP_2_CITIES": "cities in that region separated by · ",
+  "AREA_GROUP_3_NAME": "third region or leave empty string if only 2 regions",
+  "AREA_GROUP_3_CITIES": "cities or empty string"
 }`;
 
-      const aboutCopy = await callAI(ANTHROPIC_API_KEY, aboutCopyPrompt, "about-copy");
-      let aboutCopyData: any = {};
+      console.log(`[extra-pages] Generating about copy...`);
+      const aboutCopyResult = await callAI(ANTHROPIC_API_KEY, aboutPrompt, "about-copy");
+      let aboutCopy: any = {};
       try {
-        aboutCopyData = JSON.parse(stripMarkdown(aboutCopy.text));
+        aboutCopy = JSON.parse(stripMarkdown(aboutCopyResult.text));
       } catch (e) {
-        console.error("[extra-pages] about copy JSON parse failed:", e);
+        console.error("[extra-pages] About copy JSON parse failed:", e);
       }
 
+      // Inject CSS variables
+      aboutHTML = injectCSSVars(aboutHTML, primaryColor, accentColor, fonts);
+
+      // Fill all placeholders
       const aboutFill: Record<string, string> = {
         ...sharedFill,
-        "{{ABOUT_PAGE_SUBHEADING}}": aboutCopyData.ABOUT_PAGE_SUBHEADING || "",
-        "{{ABOUT_STORY_P1}}": aboutCopyData.ABOUT_STORY_P1 || "",
-        "{{ABOUT_STORY_P2}}": aboutCopyData.ABOUT_STORY_P2 || "",
-        "{{ABOUT_STORY_P3}}": aboutCopyData.ABOUT_STORY_P3 || "",
-        "{{EXPECT_1}}": aboutCopyData.EXPECT_1 || "",
-        "{{EXPECT_2}}": aboutCopyData.EXPECT_2 || "",
-        "{{EXPECT_3}}": aboutCopyData.EXPECT_3 || "",
-        "{{EXPECT_4}}": aboutCopyData.EXPECT_4 || "",
-        "{{EXPECT_5}}": aboutCopyData.EXPECT_5 || "",
-        "{{EXPECT_6}}": aboutCopyData.EXPECT_6 || "",
-        "{{WHY_US_BADGE}}": aboutCopyData.WHY_US_BADGE || "#1 CONTRACTOR",
-        "{{WHY_US_TAGLINE}}": aboutCopyData.WHY_US_TAGLINE || "FAMILY-OWNED · LICENSED & INSURED",
-        "{{WHY_US_STORY}}": aboutCopyData.WHY_US_STORY || "",
-        "{{AREA_GROUP_1_NAME}}": aboutCopyData.AREA_GROUP_1_NAME || `${city.toUpperCase()} AREA`,
-        "{{AREA_GROUP_1_CITIES}}": aboutCopyData.AREA_GROUP_1_CITIES || city,
-        "{{AREA_GROUP_2_NAME}}": aboutCopyData.AREA_GROUP_2_NAME || "",
-        "{{AREA_GROUP_2_CITIES}}": aboutCopyData.AREA_GROUP_2_CITIES || "",
-        "{{AREA_GROUP_3_NAME}}": aboutCopyData.AREA_GROUP_3_NAME || "",
-        "{{AREA_GROUP_3_CITIES}}": aboutCopyData.AREA_GROUP_3_CITIES || "",
+        "{{ABOUT_PAGE_SUBHEADING}}": aboutCopy.ABOUT_PAGE_SUBHEADING || `Serving ${city} & Surrounding Areas for ${yearsInBusiness || "Over 10"} Years.`,
+        "{{ABOUT_STORY_P1}}": aboutCopy.ABOUT_STORY_P1 || "",
+        "{{ABOUT_STORY_P2}}": aboutCopy.ABOUT_STORY_P2 || "",
+        "{{ABOUT_STORY_P3}}": aboutCopy.ABOUT_STORY_P3 || "",
+        "{{EXPECT_1}}": aboutCopy.EXPECT_1 || "Providing free, written estimates before any work begins",
+        "{{EXPECT_2}}": aboutCopy.EXPECT_2 || "Informing you about every available option and price point",
+        "{{EXPECT_3}}": aboutCopy.EXPECT_3 || "Leaving every job site as clean as we found it",
+        "{{EXPECT_4}}": aboutCopy.EXPECT_4 || "Backing every job with our satisfaction guarantee — in writing",
+        "{{EXPECT_5}}": aboutCopy.EXPECT_5 || "Available 24/7 for true emergencies",
+        "{{EXPECT_6}}": aboutCopy.EXPECT_6 || "Treating every customer like a neighbor",
+        "{{WHY_US_BADGE}}": aboutCopy.WHY_US_BADGE || "#1 CONTRACTOR",
+        "{{WHY_US_TAGLINE}}": aboutCopy.WHY_US_TAGLINE || "FAMILY-OWNED · LICENSED & INSURED",
+        "{{WHY_US_STORY}}": aboutCopy.WHY_US_STORY || "",
+        "{{AREA_GROUP_1_NAME}}": aboutCopy.AREA_GROUP_1_NAME || `${city.toUpperCase()} AREA`,
+        "{{AREA_GROUP_1_CITIES}}": aboutCopy.AREA_GROUP_1_CITIES || city,
+        "{{AREA_GROUP_2_NAME}}": aboutCopy.AREA_GROUP_2_NAME || "",
+        "{{AREA_GROUP_2_CITIES}}": aboutCopy.AREA_GROUP_2_CITIES || "",
+        "{{AREA_GROUP_3_NAME}}": aboutCopy.AREA_GROUP_3_NAME || "",
+        "{{AREA_GROUP_3_CITIES}}": aboutCopy.AREA_GROUP_3_CITIES || "",
       };
 
       for (const [key, value] of Object.entries(aboutFill)) {
@@ -205,42 +266,66 @@ Return ONLY valid JSON. No markdown:
       aboutHTML = aboutHTML.replace(/\{\{[^}]+\}\}/g, "");
       aboutHTML = aboutHTML.replace("</body>", analyticsScript + "\n</body>");
 
-      const stagingAbout = injectNoindex(aboutHTML);
-      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/about.html`, stagingAbout);
-      await supabase.storage.from("generated-sites").upload(`${clientId}/deploy/about.html`, new Blob([aboutHTML], { type: "text/html" }), { upsert: true, contentType: "text/html; charset=utf-8" });
+      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/about.html`, injectNoindex(aboutHTML));
+      await supabase.storage.from("generated-sites").upload(
+        `${clientId}/deploy/about.html`,
+        new Blob([aboutHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" }
+      );
 
       generated.push("about");
-      console.log(`[extra-pages] ✓ about.html (${aboutCopy.outputTokens} tokens)`);
+      console.log(`[extra-pages] ✓ about.html (${aboutCopyResult.outputTokens} tokens)`);
     } catch (e: any) {
       console.error("[extra-pages] ✗ about failed:", e.message);
       failed.push(`about: ${e.message}`);
     }
 
-    // ── SERVICES PAGE ────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════
+    // SERVICES PAGE
+    // ════════════════════════════════════════════════════════════════════
     try {
-      const { data: servicesFile } = await supabase.storage.from("templates").download(`${templateId}/services.html`);
-      if (!servicesFile) throw new Error(`Template not found: ${templateId}/services.html`);
+      const { data: servicesFile } = await supabase.storage.from("templates").download(`${templateId}-services.html`);
+      if (!servicesFile) throw new Error(`Template not found: ${templateId}-services.html`);
       let servicesHTML = await servicesFile.text();
 
       // Generate services-specific copy
-      const servicesCopyPrompt = `You are a copywriter for SiteQueen. Generate services page copy for ${businessName}, a ${businessType} in ${city}, ${state}.
+      const servicesPrompt = `You are a professional copywriter for SiteQueen. Generate copy for the SERVICES page of ${businessName}, a ${businessType} in ${city}, ${state}.
 
-SERVICES: ${serviceNames.join(", ")}
+SERVICES OFFERED: ${serviceNames.join(", ") || "not provided"}
 YEARS IN BUSINESS: ${yearsInBusiness || "not provided"}
-CALL NOTES: ${callNotes ? JSON.stringify({ tone_of_voice: (callNotes as any).tone_of_voice, expert_additions: (callNotes as any).expert_additions }, null, 2) : "None"}
+ABOUT: ${aboutStory ? aboutStory.substring(0, 300) : "not provided"}
+
+CALL NOTES (highest priority):
+${callNotes ? JSON.stringify({
+  tone_of_voice: (callNotes as any).tone_of_voice,
+  expert_additions: (callNotes as any).expert_additions,
+  expert_avoid: (callNotes as any).expert_avoid,
+  exact_phrases: (callNotes as any).exact_phrases,
+  google_search_terms: (callNotes as any).google_search_terms,
+}, null, 2) : "No call notes."}
+
+TONE: Match call notes. Never use corporate filler.
 
 Return ONLY valid JSON. No markdown:
 {
+  "SERVICES_META_DESC": "155 char meta description for services page",
   "SERVICES_PAGE_HEADLINE": "3-5 words all caps e.g. OUR SERVICES",
-  "SERVICES_PAGE_SUBTEXT": "1-2 sentences about their range of services",
-  "SERVICES_MAIN_HEADLINE": "5-8 words describing their expertise",
-  "SERVICES_MAIN_BODY": "2-3 sentences about their service quality and approach",
-  "CONTACT_CTA_SUBTEXT": "1-2 sentences encouraging contact",
+  "SERVICES_PAGE_SUBTEXT": "1-2 sentences about their range of services and experience",
+  "SERVICES_MAIN_HEADLINE": "5-8 words about their expertise all caps",
+  "SERVICES_MAIN_BODY": "2-3 sentences about their quality, approach, and what clients get",
+  "CONTACT_CTA_SUBTEXT": "4-8 words all caps e.g. READY TO GET STARTED?",
+  "CONTACT_CTA_BODY": "1-2 sentences encouraging them to call or fill out the form",
   "WHY_US_BADGE": "short badge e.g. #1 CONTRACTOR",
-  "WHY_US_TAGLINE": "tagline e.g. FAMILY-OWNED · LICENSED · INSURED",
-  "WHY_US_STORY": "2-3 sentences about their expertise and reputation",
+  "WHY_US_TAGLINE": "tagline e.g. FAMILY-OWNED · LICENSED & INSURED",
+  "WHY_US_STORY": "2-3 sentences about expertise and reputation. Reference real details.",
+  "AREA_GROUP_1_NAME": "${city.toUpperCase()} AREA",
+  "AREA_GROUP_1_CITIES": "6-8 nearby cities separated by · ",
+  "AREA_GROUP_2_NAME": "second region name",
+  "AREA_GROUP_2_CITIES": "cities separated by · ",
+  "AREA_GROUP_3_NAME": "third region or empty string",
+  "AREA_GROUP_3_CITIES": "cities or empty string",
   "SERVICE_CAT_1_NAME": "${serviceNames[0] || "SERVICE 1"}",
-  "SERVICE_CAT_1_ITEM_1": "specific sub-service",
+  "SERVICE_CAT_1_ITEM_1": "specific sub-service or task",
   "SERVICE_CAT_1_ITEM_2": "specific sub-service",
   "SERVICE_CAT_1_ITEM_3": "specific sub-service",
   "SERVICE_CAT_1_ITEM_4": "specific sub-service",
@@ -278,97 +363,110 @@ Return ONLY valid JSON. No markdown:
   "SERVICE_CAT_5_ITEM_3": "specific sub-service",
   "SERVICE_CAT_5_ITEM_4": "specific sub-service",
   "SERVICE_CAT_5_ITEM_5": "specific sub-service",
-  "CASE_1_TITLE": "job title e.g. BASEMENT EXCAVATION",
-  "CASE_1_DATE": "recent date e.g. MARCH 2026",
+  "CASE_1_TITLE": "job title all caps e.g. RETAINING WALL INSTALLATION",
+  "CASE_1_DATE": "recent month year e.g. MARCH 2026",
   "CASE_1_LOCATION": "${city}, ${state}",
-  "CASE_1_QUOTE": "1-2 sentence job description",
+  "CASE_1_QUOTE": "1-2 sentence description of what was done and result",
   "CASE_2_TITLE": "different job title",
-  "CASE_2_DATE": "recent date",
+  "CASE_2_DATE": "different recent date",
   "CASE_2_LOCATION": "nearby city, ${state}",
-  "CASE_2_QUOTE": "1-2 sentence job description",
+  "CASE_2_QUOTE": "1-2 sentence description",
   "CASE_3_TITLE": "different job title",
-  "CASE_3_DATE": "recent date",
+  "CASE_3_DATE": "different recent date",
   "CASE_3_LOCATION": "nearby city, ${state}",
-  "CASE_3_QUOTE": "1-2 sentence job description",
+  "CASE_3_QUOTE": "1-2 sentence description",
   "CASE_4_TITLE": "different job title",
-  "CASE_4_DATE": "recent date",
+  "CASE_4_DATE": "different recent date",
   "CASE_4_LOCATION": "nearby city, ${state}",
-  "CASE_4_QUOTE": "1-2 sentence job description"
+  "CASE_4_QUOTE": "1-2 sentence description"
 }`;
 
-      const servicesCopy = await callAI(ANTHROPIC_API_KEY, servicesCopyPrompt, "services-copy");
-      let servicesCopyData: any = {};
+      console.log(`[extra-pages] Generating services copy...`);
+      const servicesCopyResult = await callAI(ANTHROPIC_API_KEY, servicesPrompt, "services-copy");
+      let servicesCopy: any = {};
       try {
-        servicesCopyData = JSON.parse(stripMarkdown(servicesCopy.text));
+        servicesCopy = JSON.parse(stripMarkdown(servicesCopyResult.text));
       } catch (e) {
-        console.error("[extra-pages] services copy JSON parse failed:", e);
+        console.error("[extra-pages] Services copy JSON parse failed:", e);
       }
 
+      // Inject CSS variables
+      servicesHTML = injectCSSVars(servicesHTML, primaryColor, accentColor, fonts);
+
+      // Fill all placeholders
       const servicesFill: Record<string, string> = {
         ...sharedFill,
-        "{{SERVICES_PAGE_HEADLINE}}": servicesCopyData.SERVICES_PAGE_HEADLINE || "OUR SERVICES",
-        "{{SERVICES_PAGE_SUBTEXT}}": servicesCopyData.SERVICES_PAGE_SUBTEXT || "",
-        "{{SERVICES_MAIN_HEADLINE}}": servicesCopyData.SERVICES_MAIN_HEADLINE || "",
-        "{{SERVICES_MAIN_BODY}}": servicesCopyData.SERVICES_MAIN_BODY || "",
-        "{{CONTACT_CTA_SUBTEXT}}": servicesCopyData.CONTACT_CTA_SUBTEXT || "",
-        "{{WHY_US_BADGE}}": servicesCopyData.WHY_US_BADGE || "#1 CONTRACTOR",
-        "{{WHY_US_TAGLINE}}": servicesCopyData.WHY_US_TAGLINE || "FAMILY-OWNED · LICENSED & INSURED",
-        "{{WHY_US_STORY}}": servicesCopyData.WHY_US_STORY || "",
-        "{{SERVICE_CAT_1_NAME}}": servicesCopyData.SERVICE_CAT_1_NAME || serviceNames[0] || "",
-        "{{SERVICE_CAT_1_ITEM_1}}": servicesCopyData.SERVICE_CAT_1_ITEM_1 || "",
-        "{{SERVICE_CAT_1_ITEM_2}}": servicesCopyData.SERVICE_CAT_1_ITEM_2 || "",
-        "{{SERVICE_CAT_1_ITEM_3}}": servicesCopyData.SERVICE_CAT_1_ITEM_3 || "",
-        "{{SERVICE_CAT_1_ITEM_4}}": servicesCopyData.SERVICE_CAT_1_ITEM_4 || "",
-        "{{SERVICE_CAT_1_ITEM_5}}": servicesCopyData.SERVICE_CAT_1_ITEM_5 || "",
-        "{{SERVICE_CAT_1_ITEM_6}}": servicesCopyData.SERVICE_CAT_1_ITEM_6 || "",
-        "{{SERVICE_CAT_1_ITEM_7}}": servicesCopyData.SERVICE_CAT_1_ITEM_7 || "",
-        "{{SERVICE_CAT_1_ITEM_8}}": servicesCopyData.SERVICE_CAT_1_ITEM_8 || "",
-        "{{SERVICE_CAT_1_ITEM_9}}": servicesCopyData.SERVICE_CAT_1_ITEM_9 || "",
-        "{{SERVICE_CAT_1_ITEM_10}}": servicesCopyData.SERVICE_CAT_1_ITEM_10 || "",
-        "{{SERVICE_CAT_2_NAME}}": servicesCopyData.SERVICE_CAT_2_NAME || serviceNames[1] || "",
-        "{{SERVICE_CAT_2_ITEM_1}}": servicesCopyData.SERVICE_CAT_2_ITEM_1 || "",
-        "{{SERVICE_CAT_2_ITEM_2}}": servicesCopyData.SERVICE_CAT_2_ITEM_2 || "",
-        "{{SERVICE_CAT_2_ITEM_3}}": servicesCopyData.SERVICE_CAT_2_ITEM_3 || "",
-        "{{SERVICE_CAT_2_ITEM_4}}": servicesCopyData.SERVICE_CAT_2_ITEM_4 || "",
-        "{{SERVICE_CAT_2_ITEM_5}}": servicesCopyData.SERVICE_CAT_2_ITEM_5 || "",
-        "{{SERVICE_CAT_2_ITEM_6}}": servicesCopyData.SERVICE_CAT_2_ITEM_6 || "",
-        "{{SERVICE_CAT_2_ITEM_7}}": servicesCopyData.SERVICE_CAT_2_ITEM_7 || "",
-        "{{SERVICE_CAT_3_NAME}}": servicesCopyData.SERVICE_CAT_3_NAME || serviceNames[2] || "",
-        "{{SERVICE_CAT_3_ITEM_1}}": servicesCopyData.SERVICE_CAT_3_ITEM_1 || "",
-        "{{SERVICE_CAT_3_ITEM_2}}": servicesCopyData.SERVICE_CAT_3_ITEM_2 || "",
-        "{{SERVICE_CAT_3_ITEM_3}}": servicesCopyData.SERVICE_CAT_3_ITEM_3 || "",
-        "{{SERVICE_CAT_3_ITEM_4}}": servicesCopyData.SERVICE_CAT_3_ITEM_4 || "",
-        "{{SERVICE_CAT_3_ITEM_5}}": servicesCopyData.SERVICE_CAT_3_ITEM_5 || "",
-        "{{SERVICE_CAT_3_ITEM_6}}": servicesCopyData.SERVICE_CAT_3_ITEM_6 || "",
-        "{{SERVICE_CAT_3_ITEM_7}}": servicesCopyData.SERVICE_CAT_3_ITEM_7 || "",
-        "{{SERVICE_CAT_4_NAME}}": servicesCopyData.SERVICE_CAT_4_NAME || serviceNames[3] || "",
-        "{{SERVICE_CAT_4_ITEM_1}}": servicesCopyData.SERVICE_CAT_4_ITEM_1 || "",
-        "{{SERVICE_CAT_4_ITEM_2}}": servicesCopyData.SERVICE_CAT_4_ITEM_2 || "",
-        "{{SERVICE_CAT_4_ITEM_3}}": servicesCopyData.SERVICE_CAT_4_ITEM_3 || "",
-        "{{SERVICE_CAT_4_ITEM_4}}": servicesCopyData.SERVICE_CAT_4_ITEM_4 || "",
-        "{{SERVICE_CAT_4_ITEM_5}}": servicesCopyData.SERVICE_CAT_4_ITEM_5 || "",
-        "{{SERVICE_CAT_5_NAME}}": servicesCopyData.SERVICE_CAT_5_NAME || serviceNames[4] || "",
-        "{{SERVICE_CAT_5_ITEM_1}}": servicesCopyData.SERVICE_CAT_5_ITEM_1 || "",
-        "{{SERVICE_CAT_5_ITEM_2}}": servicesCopyData.SERVICE_CAT_5_ITEM_2 || "",
-        "{{SERVICE_CAT_5_ITEM_3}}": servicesCopyData.SERVICE_CAT_5_ITEM_3 || "",
-        "{{SERVICE_CAT_5_ITEM_4}}": servicesCopyData.SERVICE_CAT_5_ITEM_4 || "",
-        "{{SERVICE_CAT_5_ITEM_5}}": servicesCopyData.SERVICE_CAT_5_ITEM_5 || "",
-        "{{CASE_1_TITLE}}": servicesCopyData.CASE_1_TITLE || "",
-        "{{CASE_1_DATE}}": servicesCopyData.CASE_1_DATE || "",
-        "{{CASE_1_LOCATION}}": servicesCopyData.CASE_1_LOCATION || city,
-        "{{CASE_1_QUOTE}}": servicesCopyData.CASE_1_QUOTE || "",
-        "{{CASE_2_TITLE}}": servicesCopyData.CASE_2_TITLE || "",
-        "{{CASE_2_DATE}}": servicesCopyData.CASE_2_DATE || "",
-        "{{CASE_2_LOCATION}}": servicesCopyData.CASE_2_LOCATION || city,
-        "{{CASE_2_QUOTE}}": servicesCopyData.CASE_2_QUOTE || "",
-        "{{CASE_3_TITLE}}": servicesCopyData.CASE_3_TITLE || "",
-        "{{CASE_3_DATE}}": servicesCopyData.CASE_3_DATE || "",
-        "{{CASE_3_LOCATION}}": servicesCopyData.CASE_3_LOCATION || city,
-        "{{CASE_3_QUOTE}}": servicesCopyData.CASE_3_QUOTE || "",
-        "{{CASE_4_TITLE}}": servicesCopyData.CASE_4_TITLE || "",
-        "{{CASE_4_DATE}}": servicesCopyData.CASE_4_DATE || "",
-        "{{CASE_4_LOCATION}}": servicesCopyData.CASE_4_LOCATION || city,
-        "{{CASE_4_QUOTE}}": servicesCopyData.CASE_4_QUOTE || "",
+        "{{SERVICES_META_DESC}}": servicesCopy.SERVICES_META_DESC || `${businessName} services in ${city}, ${state}. ${serviceNames.slice(0,3).join(", ")}.`,
+        "{{SERVICES_PAGE_HEADLINE}}": servicesCopy.SERVICES_PAGE_HEADLINE || "OUR SERVICES",
+        "{{SERVICES_PAGE_SUBTEXT}}": servicesCopy.SERVICES_PAGE_SUBTEXT || "",
+        "{{SERVICES_MAIN_HEADLINE}}": servicesCopy.SERVICES_MAIN_HEADLINE || "",
+        "{{SERVICES_MAIN_BODY}}": servicesCopy.SERVICES_MAIN_BODY || "",
+        "{{CONTACT_CTA_SUBTEXT}}": servicesCopy.CONTACT_CTA_SUBTEXT || "CONTACT US TODAY",
+        "{{CONTACT_CTA_BODY}}": servicesCopy.CONTACT_CTA_BODY || "Schedule service online or call now. We'll have someone at your door — often the same day.",
+        "{{WHY_US_BADGE}}": servicesCopy.WHY_US_BADGE || "#1 CONTRACTOR",
+        "{{WHY_US_TAGLINE}}": servicesCopy.WHY_US_TAGLINE || "FAMILY-OWNED · LICENSED & INSURED",
+        "{{WHY_US_STORY}}": servicesCopy.WHY_US_STORY || "",
+        "{{AREA_GROUP_1_NAME}}": servicesCopy.AREA_GROUP_1_NAME || `${city.toUpperCase()} AREA`,
+        "{{AREA_GROUP_1_CITIES}}": servicesCopy.AREA_GROUP_1_CITIES || city,
+        "{{AREA_GROUP_2_NAME}}": servicesCopy.AREA_GROUP_2_NAME || "",
+        "{{AREA_GROUP_2_CITIES}}": servicesCopy.AREA_GROUP_2_CITIES || "",
+        "{{AREA_GROUP_3_NAME}}": servicesCopy.AREA_GROUP_3_NAME || "",
+        "{{AREA_GROUP_3_CITIES}}": servicesCopy.AREA_GROUP_3_CITIES || "",
+        "{{SERVICE_CAT_1_NAME}}": servicesCopy.SERVICE_CAT_1_NAME || serviceNames[0] || "",
+        "{{SERVICE_CAT_1_ITEM_1}}": servicesCopy.SERVICE_CAT_1_ITEM_1 || "",
+        "{{SERVICE_CAT_1_ITEM_2}}": servicesCopy.SERVICE_CAT_1_ITEM_2 || "",
+        "{{SERVICE_CAT_1_ITEM_3}}": servicesCopy.SERVICE_CAT_1_ITEM_3 || "",
+        "{{SERVICE_CAT_1_ITEM_4}}": servicesCopy.SERVICE_CAT_1_ITEM_4 || "",
+        "{{SERVICE_CAT_1_ITEM_5}}": servicesCopy.SERVICE_CAT_1_ITEM_5 || "",
+        "{{SERVICE_CAT_1_ITEM_6}}": servicesCopy.SERVICE_CAT_1_ITEM_6 || "",
+        "{{SERVICE_CAT_1_ITEM_7}}": servicesCopy.SERVICE_CAT_1_ITEM_7 || "",
+        "{{SERVICE_CAT_1_ITEM_8}}": servicesCopy.SERVICE_CAT_1_ITEM_8 || "",
+        "{{SERVICE_CAT_1_ITEM_9}}": servicesCopy.SERVICE_CAT_1_ITEM_9 || "",
+        "{{SERVICE_CAT_1_ITEM_10}}": servicesCopy.SERVICE_CAT_1_ITEM_10 || "",
+        "{{SERVICE_CAT_2_NAME}}": servicesCopy.SERVICE_CAT_2_NAME || serviceNames[1] || "",
+        "{{SERVICE_CAT_2_ITEM_1}}": servicesCopy.SERVICE_CAT_2_ITEM_1 || "",
+        "{{SERVICE_CAT_2_ITEM_2}}": servicesCopy.SERVICE_CAT_2_ITEM_2 || "",
+        "{{SERVICE_CAT_2_ITEM_3}}": servicesCopy.SERVICE_CAT_2_ITEM_3 || "",
+        "{{SERVICE_CAT_2_ITEM_4}}": servicesCopy.SERVICE_CAT_2_ITEM_4 || "",
+        "{{SERVICE_CAT_2_ITEM_5}}": servicesCopy.SERVICE_CAT_2_ITEM_5 || "",
+        "{{SERVICE_CAT_2_ITEM_6}}": servicesCopy.SERVICE_CAT_2_ITEM_6 || "",
+        "{{SERVICE_CAT_2_ITEM_7}}": servicesCopy.SERVICE_CAT_2_ITEM_7 || "",
+        "{{SERVICE_CAT_3_NAME}}": servicesCopy.SERVICE_CAT_3_NAME || serviceNames[2] || "",
+        "{{SERVICE_CAT_3_ITEM_1}}": servicesCopy.SERVICE_CAT_3_ITEM_1 || "",
+        "{{SERVICE_CAT_3_ITEM_2}}": servicesCopy.SERVICE_CAT_3_ITEM_2 || "",
+        "{{SERVICE_CAT_3_ITEM_3}}": servicesCopy.SERVICE_CAT_3_ITEM_3 || "",
+        "{{SERVICE_CAT_3_ITEM_4}}": servicesCopy.SERVICE_CAT_3_ITEM_4 || "",
+        "{{SERVICE_CAT_3_ITEM_5}}": servicesCopy.SERVICE_CAT_3_ITEM_5 || "",
+        "{{SERVICE_CAT_3_ITEM_6}}": servicesCopy.SERVICE_CAT_3_ITEM_6 || "",
+        "{{SERVICE_CAT_3_ITEM_7}}": servicesCopy.SERVICE_CAT_3_ITEM_7 || "",
+        "{{SERVICE_CAT_4_NAME}}": servicesCopy.SERVICE_CAT_4_NAME || serviceNames[3] || "",
+        "{{SERVICE_CAT_4_ITEM_1}}": servicesCopy.SERVICE_CAT_4_ITEM_1 || "",
+        "{{SERVICE_CAT_4_ITEM_2}}": servicesCopy.SERVICE_CAT_4_ITEM_2 || "",
+        "{{SERVICE_CAT_4_ITEM_3}}": servicesCopy.SERVICE_CAT_4_ITEM_3 || "",
+        "{{SERVICE_CAT_4_ITEM_4}}": servicesCopy.SERVICE_CAT_4_ITEM_4 || "",
+        "{{SERVICE_CAT_4_ITEM_5}}": servicesCopy.SERVICE_CAT_4_ITEM_5 || "",
+        "{{SERVICE_CAT_5_NAME}}": servicesCopy.SERVICE_CAT_5_NAME || serviceNames[4] || "",
+        "{{SERVICE_CAT_5_ITEM_1}}": servicesCopy.SERVICE_CAT_5_ITEM_1 || "",
+        "{{SERVICE_CAT_5_ITEM_2}}": servicesCopy.SERVICE_CAT_5_ITEM_2 || "",
+        "{{SERVICE_CAT_5_ITEM_3}}": servicesCopy.SERVICE_CAT_5_ITEM_3 || "",
+        "{{SERVICE_CAT_5_ITEM_4}}": servicesCopy.SERVICE_CAT_5_ITEM_4 || "",
+        "{{SERVICE_CAT_5_ITEM_5}}": servicesCopy.SERVICE_CAT_5_ITEM_5 || "",
+        "{{CASE_1_TITLE}}": servicesCopy.CASE_1_TITLE || "",
+        "{{CASE_1_DATE}}": servicesCopy.CASE_1_DATE || "",
+        "{{CASE_1_LOCATION}}": servicesCopy.CASE_1_LOCATION || city,
+        "{{CASE_1_QUOTE}}": servicesCopy.CASE_1_QUOTE || "",
+        "{{CASE_2_TITLE}}": servicesCopy.CASE_2_TITLE || "",
+        "{{CASE_2_DATE}}": servicesCopy.CASE_2_DATE || "",
+        "{{CASE_2_LOCATION}}": servicesCopy.CASE_2_LOCATION || city,
+        "{{CASE_2_QUOTE}}": servicesCopy.CASE_2_QUOTE || "",
+        "{{CASE_3_TITLE}}": servicesCopy.CASE_3_TITLE || "",
+        "{{CASE_3_DATE}}": servicesCopy.CASE_3_DATE || "",
+        "{{CASE_3_LOCATION}}": servicesCopy.CASE_3_LOCATION || city,
+        "{{CASE_3_QUOTE}}": servicesCopy.CASE_3_QUOTE || "",
+        "{{CASE_4_TITLE}}": servicesCopy.CASE_4_TITLE || "",
+        "{{CASE_4_DATE}}": servicesCopy.CASE_4_DATE || "",
+        "{{CASE_4_LOCATION}}": servicesCopy.CASE_4_LOCATION || city,
+        "{{CASE_4_QUOTE}}": servicesCopy.CASE_4_QUOTE || "",
       };
 
       for (const [key, value] of Object.entries(servicesFill)) {
@@ -377,49 +475,76 @@ Return ONLY valid JSON. No markdown:
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");
 
-      const stagingServices = injectNoindex(servicesHTML);
-      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/services.html`, stagingServices);
-      await supabase.storage.from("generated-sites").upload(`${clientId}/deploy/services.html`, new Blob([servicesHTML], { type: "text/html" }), { upsert: true, contentType: "text/html; charset=utf-8" });
+      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/services.html`, injectNoindex(servicesHTML));
+      await supabase.storage.from("generated-sites").upload(
+        `${clientId}/deploy/services.html`,
+        new Blob([servicesHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" }
+      );
 
       generated.push("services");
-      console.log(`[extra-pages] ✓ services.html (${servicesCopy.outputTokens} tokens)`);
+      console.log(`[extra-pages] ✓ services.html (${servicesCopyResult.outputTokens} tokens)`);
     } catch (e: any) {
       console.error("[extra-pages] ✗ services failed:", e.message);
       failed.push(`services: ${e.message}`);
     }
 
-    // ── CONTACT PAGE (Claude generates — no template) ────────────────────
+    // ════════════════════════════════════════════════════════════════════
+    // CONTACT PAGE (Claude generates — no template)
+    // ════════════════════════════════════════════════════════════════════
     try {
-      const contactPrompt = `You are building a contact page for ${businessName}, a ${businessType} in ${city}, ${state}.
+      const contactPrompt = `You are building the CONTACT page for ${businessName}, a ${businessType} in ${city}, ${state}. Build a complete, professional, mobile-responsive HTML page.
 
 BUSINESS INFO:
 - Phone: ${phone}
 - Email: ${email}
-- Address: ${address || "mobile/service area based"}
+- Address: ${address || "mobile/service-area based — no fixed address"}
 - Service area: ${intake.service_area || city}
+- Hours: ${intake.business_hours ? JSON.stringify(intake.business_hours) : "not provided"}
 - Services: ${serviceNames.join(", ")}
 
-CALL NOTES: ${callNotes ? JSON.stringify({ tone_of_voice: (callNotes as any).tone_of_voice, contact_preferences: (callNotes as any).contact_preferences }, null, 2) : "None"}
+DESIGN REQUIREMENTS:
+- Match this exact color scheme: primary/red = ${primaryColor}, accent/gold = ${accentColor}, dark = #0d1d3b
+- Use these fonts: heading = ${fonts.heading}, body = ${fonts.body}
+- Load from Google Fonts: ${fonts.googleUrl}
+- Same topbar, header, footer structure as the homepage
+- Navigation: Home → ./index.html, Services → ./services.html, About → ./about.html, Contact → ./contact.html (active)
+- Logo: ${logoHTML}
 
-Build a complete, professional contact page HTML. Requirements:
-- Match the dark navy/gold/red color scheme of a trades business template
-- Include: page hero with breadcrumb, contact info section (phone as tel: link, email as mailto: link, service area, hours if known), contact form (name/phone/email/service/message), footer
-- Use Oswald font for headings, Open Sans for body (load from Google Fonts)
-- Mobile responsive
-- Include the full CSS inlined in a <style> tag in <head>
-- Include navigation: Home → ./index.html, Services → ./services.html, About → ./about.html, Contact → ./contact.html (active)
-- Include this analytics script before </body>:
-${analyticsScript}
+CALL NOTES: ${callNotes ? JSON.stringify({ tone_of_voice: (callNotes as any).tone_of_voice, contact_preferences: (callNotes as any).contact_preferences, booking_url: (callNotes as any).booking_url }, null, 2) : "None"}
+
+SECTIONS TO INCLUDE:
+1. Topbar with rating and phone
+2. Sticky header with logo, nav, and REQUEST SERVICE button
+3. Mobile menu (hamburger)
+4. Page hero — dark background, breadcrumb (HOME › CONTACT), page title "CONTACT {{BUSINESS_NAME}}"
+5. Main content — two column layout:
+   Left: contact info (phone as tel: link, email as mailto: link, service area, hours if available, service area tags)
+   Right: contact form (first name, last name, email, phone, service type dropdown with real services, message textarea, SUBMIT REQUEST button)
+6. Footer with logo, tagline, phone, address, service links, company links, newsletter signup
+7. Analytics script before </body>: ${analyticsScript}
+
+RULES:
+- All CSS inlined in <style> tag in <head>
+- All JS inlined in <script> before </body>
+- Mobile responsive — works perfectly on all screen sizes
+- Phone numbers as tel: links
+- Emails as mailto: links
+- No external CSS or JS files
 - Return complete HTML from <!DOCTYPE html> to </html>
 - No markdown, no code blocks, raw HTML only`;
 
+      console.log(`[extra-pages] Generating contact page...`);
       const contactResult = await callAI(ANTHROPIC_API_KEY, contactPrompt, "contact");
       let contactHTML = stripMarkdown(contactResult.text);
       if (!contactHTML.includes("<!DOCTYPE html>")) throw new Error("Contact page returned invalid HTML");
 
-      const stagingContact = injectNoindex(contactHTML);
-      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/contact.html`, stagingContact);
-      await supabase.storage.from("generated-sites").upload(`${clientId}/deploy/contact.html`, new Blob([contactHTML], { type: "text/html" }), { upsert: true, contentType: "text/html; charset=utf-8" });
+      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/contact.html`, injectNoindex(contactHTML));
+      await supabase.storage.from("generated-sites").upload(
+        `${clientId}/deploy/contact.html`,
+        new Blob([contactHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" }
+      );
 
       generated.push("contact");
       console.log(`[extra-pages] ✓ contact.html (${contactResult.outputTokens} tokens)`);
@@ -455,26 +580,44 @@ ${analyticsScript}
       read: false,
     });
 
-    console.log(`[extra-pages] ✓ Complete. Built: ${generated.join(", ")}`);
+    console.log(`[extra-pages] ✓ All done. Built: ${generated.join(", ")}`);
 
-    return new Response(JSON.stringify({ success: true, generated, failed, staging_url: stagingURL }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ success: true, generated, failed, staging_url: stagingURL }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
 
   } catch (error: any) {
     console.error("[extra-pages] fatal error:", error);
-    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: corsHeaders });
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 500, headers: corsHeaders }
+    );
   }
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
+function injectCSSVars(html: string, primaryColor: string, accentColor: string, fonts: any): string {
+  const rootCSS = `:root {
+      --navy: #0d1d3b;
+      --red: ${primaryColor};
+      --gold: ${accentColor};
+      --white: #ffffff;
+      --gray: #f3f5f7;
+      --text-muted: #47546b;
+      --font-heading: "${fonts.heading}", Helvetica, sans-serif;
+      --font-body: "${fonts.body}", Helvetica, sans-serif;
+      --max-width: 1400px;
+      --section-pad: 80px 24px;
+    }`;
+  return html.replace(/:root\s*\{[^}]+\}/s, rootCSS);
+}
+
 function injectNoindex(html: string): string {
   if (/name=["']robots["']/i.test(html)) return html;
   const tag = `\n  <meta name="robots" content="noindex, nofollow" />`;
-  if (/<meta\s+charset=/i.test(html)) {
-    return html.replace(/(<meta\s+charset=[^>]+>)/i, `$1${tag}`);
-  }
+  if (/<meta\s+charset=/i.test(html)) return html.replace(/(<meta\s+charset=[^>]+>)/i, `$1${tag}`);
   return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
 }
 
@@ -502,8 +645,7 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
       }
       const data = await r.json();
       const text = Array.isArray(data.content)
-        ? data.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("")
-        : "";
+        ? data.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("") : "";
       return { text, outputTokens: data.usage?.output_tokens || 0 };
     } catch (err: any) {
       clearTimeout(timeout);
