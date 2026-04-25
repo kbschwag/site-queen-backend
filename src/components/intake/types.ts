@@ -28,6 +28,7 @@ export interface IntakeData {
   logo_url?: string;
   logo_dark_url?: string;
   logo_white_url?: string;
+  favicon_url?: string;
   no_logo?: boolean;
   logo_addon_requested?: boolean;
   primary_color?: string;
