@@ -218,8 +218,8 @@ Return ONLY valid JSON. No markdown:
 
     // ── SERVICES PAGE ────────────────────────────────────────────────────
     try {
-      const { data: servicesFile } = await supabase.storage.from("templates").download(`${templateId}-services.html`);
-      if (!servicesFile) throw new Error(`Template not found: ${templateId}-services.html`);
+      const { data: servicesFile } = await supabase.storage.from("templates").download(`${templateId}/services.html`);
+      if (!servicesFile) throw new Error(`Template not found: ${templateId}/services.html`);
       let servicesHTML = await servicesFile.text();
 
       // Generate services-specific copy
