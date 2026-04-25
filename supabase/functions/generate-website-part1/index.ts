@@ -424,11 +424,17 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{AWARD_5}}": awards[4] ? (typeof awards[4] === "string" ? awards[4] : awards[4].name) : (copy.AWARD_5 || ""),
       // FAQ
       "{{FAQ_1_Q}}": faqItems[0]?.question || copy.FAQ_1_Q || "",
+      "{{FAQ_1_A}}": faqItems[0]?.answer || copy.FAQ_1_A || "",
       "{{FAQ_2_Q}}": faqItems[1]?.question || copy.FAQ_2_Q || "",
+      "{{FAQ_2_A}}": faqItems[1]?.answer || copy.FAQ_2_A || "",
       "{{FAQ_3_Q}}": faqItems[2]?.question || copy.FAQ_3_Q || "",
+      "{{FAQ_3_A}}": faqItems[2]?.answer || copy.FAQ_3_A || "",
       "{{FAQ_4_Q}}": faqItems[3]?.question || copy.FAQ_4_Q || "",
+      "{{FAQ_4_A}}": faqItems[3]?.answer || copy.FAQ_4_A || "",
       "{{FAQ_5_Q}}": faqItems[4]?.question || copy.FAQ_5_Q || "",
+      "{{FAQ_5_A}}": faqItems[4]?.answer || copy.FAQ_5_A || "",
       "{{FAQ_6_Q}}": faqItems[5]?.question || copy.FAQ_6_Q || "",
+      "{{FAQ_6_A}}": faqItems[5]?.answer || copy.FAQ_6_A || "",
       // Final CTA
       "{{FINAL_CTA_HEADLINE}}": copy.FINAL_CTA_HEADLINE || "READY TO GET STARTED?",
       "{{FINAL_CTA_SUBTEXT}}": copy.FINAL_CTA_SUBTEXT || "",
