@@ -669,6 +669,15 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
     // ── Wire any <form> on the page to handle-contact-form ───────────────
     html = wireContactForms(html, clientId, supabaseUrl);
 
+    // ── Inject favicon (uploaded → logo → generated SVG initial) ─────────
+    const faviconTag = buildFaviconHTML({
+      faviconUrl: intake.favicon_url || "",
+      logoUrl: logoUrlResolved,
+      businessName,
+      primaryColor: intake.primary_color || "",
+    });
+    html = injectFavicon(html, faviconTag);
+
     // ── Upload to Hostinger staging ──────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
 
@@ -691,7 +700,7 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
     const copyDataPayload = {
       businessName, businessType, city, state, phone, phoneRaw, email, address,
       yearsInBusiness, googleRating, googleReviewCount, tagline, ownerName, ownerTitle,
-      logoUrl: logoUrlResolved, serviceNames, noTestimonials,
+      logoUrl: logoUrlResolved, faviconUrl: intake.favicon_url || "", serviceNames, noTestimonials,
       portfolioPhotos, teamPhotos,
       heroImageUrl, aboutImageUrl, whyUsImageUrl,
       stockTerms, allowStock,
@@ -801,6 +810,45 @@ function injectNoindex(html: string): string {
   }
   return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
 }
+
+// ── Favicon helpers ──────────────────────────────────────────────────
+// Priority: 1) intake.favicon_url, 2) intake.logo_url, 3) generated SVG initial.
+export function buildFaviconHTML(opts: {
+  faviconUrl?: string;
+  logoUrl?: string;
+  businessName?: string;
+  primaryColor?: string;
+}): string {
+  const fav = (opts.faviconUrl || "").trim();
+  if (fav) {
+    return `<link rel="icon" href="${fav}" />`;
+  }
+  const logo = (opts.logoUrl || "").trim();
+  if (logo) {
+    return `<link rel="icon" href="${logo}" />`;
+  }
+  const initial = ((opts.businessName || "").trim().charAt(0) || "S").toUpperCase();
+  const rawColor = (opts.primaryColor || "").trim() || "#534AB7";
+  const color = /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(rawColor)
+    ? (rawColor.startsWith("#") ? rawColor : `#${rawColor}`)
+    : "#534AB7";
+  // Build the SVG; URL-encode # and a few other chars so it works inside an href.
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${color}'/><text y='.9em' font-size='75' font-family='Arial,sans-serif' font-weight='bold' fill='white' text-anchor='middle' x='50' dominant-baseline='middle' dy='5'>${escapeHTML(initial)}</text></svg>`;
+  const href = `data:image/svg+xml,${svg.replace(/#/g, "%23").replace(/"/g, "%22")}`;
+  return `<link rel="icon" type="image/svg+xml" href="${href}" />`;
+}
+
+export function injectFavicon(html: string, faviconTag: string): string {
+  if (!faviconTag) return html;
+  // Remove any existing favicon link tags so ours wins.
+  let out = html.replace(/<link[^>]+rel=["'](?:shortcut\s+)?icon["'][^>]*\/?>/gi, "");
+  const tag = `\n  ${faviconTag}`;
+  if (/<meta\s+charset=["']?[^>"']+["']?\s*\/?>/i.test(out)) {
+    return out.replace(/(<meta\s+charset=["']?[^>"']+["']?\s*\/?>)/i, `$1${tag}`);
+  }
+  return out.replace(/(<head[^>]*>)/i, `$1${tag}`);
+}
+
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;

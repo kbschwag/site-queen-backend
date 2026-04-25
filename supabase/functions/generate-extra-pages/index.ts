@@ -72,7 +72,8 @@ serve(async (req) => {
     const ownerName = savedCopy.ownerName || intake.owner_name || "";
     const ownerTitle = savedCopy.ownerTitle || intake.owner_title || "Owner";
     const logoUrl = savedCopy.logoUrl || intake.logo_url || "";
-    const primaryColor = savedCopy.primaryColor || "#cb2020";
+    const faviconUrl = savedCopy.faviconUrl || intake.favicon_url || "";
+    const primaryColor = savedCopy.primaryColor || intake.primary_color || "#cb2020";
     const accentColor = savedCopy.accentColor || "#f6a823";
     const fonts = savedCopy.fonts || { heading: "Oswald", body: "Open Sans", googleUrl: "https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Open+Sans:wght@400;600&display=swap" };
     const serviceNames: string[] = savedCopy.serviceNames || [];
@@ -147,6 +148,15 @@ serve(async (req) => {
     const logoHTML = logoUrl
       ? `<img src="${logoUrl}" alt="${businessName} logo" class="logo-img" />`
       : `<div class="logo-icon"><svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`;
+
+    // ── Favicon (uploaded → logo → generated SVG initial) ────────────────
+    const faviconTag = buildFaviconHTML({
+      faviconUrl,
+      logoUrl,
+      businessName,
+      primaryColor,
+    });
+
 
     // ── Map HTML ─────────────────────────────────────────────────────────
     const mapBuild = buildMapHTML({
@@ -332,6 +342,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       aboutHTML = aboutHTML.replace(/\{\{[^}]+\}\}/g, "");
       aboutHTML = aboutHTML.replace("</body>", analyticsScript + "\n</body>");
       aboutHTML = wireContactForms(aboutHTML, clientId, supabaseUrl);
+      aboutHTML = injectFavicon(aboutHTML, faviconTag);
 
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/about.html`, injectNoindex(aboutHTML));
       await supabase.storage.from("generated-sites").upload(
@@ -542,6 +553,7 @@ Return ONLY valid JSON. No markdown:
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");
       servicesHTML = wireContactForms(servicesHTML, clientId, supabaseUrl);
+      servicesHTML = injectFavicon(servicesHTML, faviconTag);
 
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/services.html`, injectNoindex(servicesHTML));
       await supabase.storage.from("generated-sites").upload(
@@ -674,6 +686,7 @@ RULES:
 
           // Wire any <form> on the page to handle-contact-form
           fullHTML = wireContactForms(fullHTML, clientId, supabaseUrl);
+          fullHTML = injectFavicon(fullHTML, faviconTag);
 
           await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/${spec.slug}.html`, injectNoindex(fullHTML));
           await supabase.storage.from("generated-sites").upload(
@@ -761,6 +774,37 @@ function injectNoindex(html: string): string {
   if (/<meta\s+charset=/i.test(html)) return html.replace(/(<meta\s+charset=[^>]+>)/i, `$1${tag}`);
   return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
 }
+
+// ── Favicon helpers ──────────────────────────────────────────────────
+// Priority: 1) intake.favicon_url, 2) intake.logo_url, 3) generated SVG initial.
+function buildFaviconHTML(opts: {
+  faviconUrl?: string;
+  logoUrl?: string;
+  businessName?: string;
+  primaryColor?: string;
+}): string {
+  const fav = (opts.faviconUrl || "").trim();
+  if (fav) return `<link rel="icon" href="${fav}" />`;
+  const logo = (opts.logoUrl || "").trim();
+  if (logo) return `<link rel="icon" href="${logo}" />`;
+  const initial = ((opts.businessName || "").trim().charAt(0) || "S").toUpperCase();
+  const rawColor = (opts.primaryColor || "").trim() || "#534AB7";
+  const color = /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(rawColor)
+    ? (rawColor.startsWith("#") ? rawColor : `#${rawColor}`)
+    : "#534AB7";
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${color}'/><text y='.9em' font-size='75' font-family='Arial,sans-serif' font-weight='bold' fill='white' text-anchor='middle' x='50' dominant-baseline='middle' dy='5'>${escapeHTML(initial)}</text></svg>`;
+  const href = `data:image/svg+xml,${svg.replace(/#/g, "%23").replace(/"/g, "%22")}`;
+  return `<link rel="icon" type="image/svg+xml" href="${href}" />`;
+}
+
+function injectFavicon(html: string, faviconTag: string): string {
+  if (!faviconTag) return html;
+  let out = html.replace(/<link[^>]+rel=["'](?:shortcut\s+)?icon["'][^>]*\/?>/gi, "");
+  const tag = `\n  ${faviconTag}`;
+  if (/<meta\s+charset=/i.test(out)) return out.replace(/(<meta\s+charset=[^>]+>)/i, `$1${tag}`);
+  return out.replace(/(<head[^>]*>)/i, `$1${tag}`);
+}
+
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const MAX_ATTEMPTS = 2;

@@ -200,7 +200,51 @@ export function StepBrand({ data, onChange, onUpload, uploading, plan }: Props) 
         )}
       </div>
 
-      {/* Brand Colors */}
+      {/* Favicon upload */}
+      <div className="space-y-2">
+        <Label className="text-base font-semibold">Favicon (optional)</Label>
+        <p className="text-sm text-muted-foreground">
+          The small icon that appears in browser tabs. If you don't upload one we'll automatically create one from your business initial and brand color.
+        </p>
+        {data.favicon_url ? (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded border bg-secondary p-2">
+              <img
+                src={data.favicon_url}
+                alt="Favicon preview"
+                width={32}
+                height={32}
+                className="h-8 w-8 object-contain rounded-sm bg-background"
+              />
+              <span className="text-xs text-muted-foreground">Browser tab preview</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => onChange({ favicon_url: undefined })}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = ".png,.ico,.svg,.jpg,.jpeg";
+              input.onchange = async (e) => {
+                const f = (e.target as HTMLInputElement).files?.[0];
+                if (!f) return;
+                const url = await onUpload(f, "favicon");
+                if (url) onChange({ favicon_url: url });
+              };
+              input.click();
+            }}
+          >
+            <Upload className="h-4 w-4" /> Upload favicon
+          </Button>
+        )}
+      </div>
+
       <div className="space-y-4">
         <Label className="text-base font-semibold">Brand Colors</Label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
