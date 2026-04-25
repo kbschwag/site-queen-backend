@@ -382,9 +382,13 @@ Return this exact JSON structure (every field required, no empty strings unless 
     }
 
     // ── Build LOGO_HTML and MAP_HTML ─────────────────────────────────────
-    const logoHTML = logoUrlResolved
+    // If logo exists, show ONLY the logo image (no business name text).
+    // If no logo, show business name text only (LOGO_HTML empty).
+    const hasLogo = !!logoUrlResolved;
+    const logoHTML = hasLogo
       ? `<img src="${logoUrlResolved}" alt="${businessName} logo" class="logo-img" />`
-      : `<div class="logo-icon"><svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`;
+      : "";
+    const businessNameInHeader = hasLogo ? "" : businessName;
 
     const mapEmbedUrl = intake.map_embed_url || "";
     const mapHTML = mapEmbedUrl
