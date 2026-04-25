@@ -112,8 +112,8 @@ serve(async (req) => {
     const tagline = intake.tagline || "";
     const domain = intake.domain || "";
 
-    const portfolioPhotos: string[] = Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : [];
-    const teamPhotos: string[] = Array.isArray(intake.team_photos) ? intake.team_photos : [];
+    const portfolioPhotos: string[] = (Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : []).filter(Boolean);
+    const teamPhotos: string[] = (Array.isArray(intake.team_photos) ? intake.team_photos : []).filter(Boolean);
     const services: any[] = Array.isArray(intake.services) ? intake.services : [];
     const awards: any[] = Array.isArray(intake.awards) ? intake.awards : [];
     const coupons: any[] = Array.isArray(intake.coupons) ? intake.coupons : [];
