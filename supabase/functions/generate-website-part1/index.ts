@@ -123,8 +123,46 @@ serve(async (req) => {
 
     const showFinancing = !!(callNotes as any)?.show_financing || !!intake.show_financing;
 
+    // ── Resolve photo slots ──────────────────────────────────────────────
+    // Priority: client uploads ALWAYS win. Stock only fills empty slots when allowed.
+    const allowStock = intake.use_stock_photos !== false; // default true
+    const firstServiceName = (services[0] && (typeof services[0] === "string" ? services[0] : services[0]?.name || services[0]?.title)) || "";
+    const stockTerms = buildStockSearchTerms(businessType, firstServiceName);
+
+    const heroCandidates = [intake.hero_photo_url, portfolioPhotos[0]].filter(Boolean) as string[];
+    const aboutCandidates = [teamPhotos[0], intake.owner_photo_url, portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+    const whyUsCandidates = [portfolioPhotos[2], portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+
+    let heroImageUrl = heroCandidates[0] || "";
+    let aboutImageUrl = aboutCandidates[0] || "";
+    let whyUsImageUrl = whyUsCandidates[0] || "";
+
+    if (allowStock) {
+      const needed: Array<"hero" | "about" | "whyus"> = [];
+      if (!heroImageUrl) needed.push("hero");
+      if (!aboutImageUrl) needed.push("about");
+      if (!whyUsImageUrl) needed.push("whyus");
+
+      if (needed.length > 0) {
+        const stockResults = await Promise.all(needed.map((slot) => {
+          const variant = slot === "hero" ? "wide hero" : slot === "about" ? "team working" : "professional";
+          return fetchUnsplashPhoto(stockTerms.map((t) => `${t} ${variant}`));
+        }));
+        needed.forEach((slot, i) => {
+          const url = stockResults[i] || "";
+          if (slot === "hero") heroImageUrl = url;
+          else if (slot === "about") aboutImageUrl = url;
+          else if (slot === "whyus") whyUsImageUrl = url;
+        });
+      }
+    }
+
+    const logoUrlResolved = intake.logo_url || "";
+    console.log(`[part1] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} logo:${logoUrlResolved ? "✓" : "✗"} (hero_upload=${!!intake.hero_photo_url}, portfolio=${portfolioPhotos.length}, team=${teamPhotos.length}, allowStock=${allowStock})`);
+
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+
 
     await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
 
