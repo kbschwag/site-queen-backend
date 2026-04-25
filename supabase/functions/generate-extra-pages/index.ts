@@ -231,8 +231,8 @@ serve(async (req) => {
     // ABOUT PAGE
     // ════════════════════════════════════════════════════════════════════
     try {
-      const { data: aboutFile } = await supabase.storage.from("templates").download(`${templateId}-about.html`);
-      if (!aboutFile) throw new Error(`Template not found: ${templateId}-about.html`);
+      const { data: aboutFile } = await supabase.storage.from("templates").download(`${templateId}/about.html`);
+      if (!aboutFile) throw new Error(`Template not found: ${templateId}/about.html`);
       let aboutHTML = await aboutFile.text();
 
       // Generate about-specific copy
