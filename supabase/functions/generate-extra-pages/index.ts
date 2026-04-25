@@ -850,3 +850,84 @@ function pickServiceImage(index: number, portfolioPhotos: string[], fallbacks: s
   return fallbacks.find((u) => !!u) || "";
 }
 
+// ── Universal custom-page helpers ────────────────────────────────────
+
+function slugify(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .substring(0, 60);
+}
+
+function extractShell(html: string): { styleBlock: string; headerHTML: string; footerHTML: string } {
+  // Capture the FIRST <style>...</style> block (and any topbar styles too — usually only one)
+  const styleMatch = html.match(/<style[^>]*>[\s\S]*?<\/style>/i);
+  const styleBlock = styleMatch ? styleMatch[0] : "";
+
+  // Header: prefer the first <header>...</header>; include any preceding topbar div if present
+  const headerMatch = html.match(/<header[\s\S]*?<\/header>/i);
+  let headerHTML = headerMatch ? headerMatch[0] : "";
+  // Try to also grab a topbar that immediately precedes the header
+  if (headerMatch) {
+    const before = html.substring(0, html.indexOf(headerMatch[0]));
+    const topbarMatch = before.match(/<div[^>]*class=["'][^"']*(?:topbar|top-bar|announcement-bar)[^"']*["'][^>]*>[\s\S]*?<\/div>\s*$/i);
+    if (topbarMatch) headerHTML = topbarMatch[0] + "\n" + headerHTML;
+  }
+
+  // Footer: last <footer>...</footer>
+  const footerMatches = [...html.matchAll(/<footer[\s\S]*?<\/footer>/gi)];
+  const footerHTML = footerMatches.length ? footerMatches[footerMatches.length - 1][0] : "";
+
+  return { styleBlock, headerHTML, footerHTML };
+}
+
+function listClassNames(styleBlock: string): string[] {
+  const classRegex = /\.([a-zA-Z_][a-zA-Z0-9_-]*)/g;
+  const set = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = classRegex.exec(styleBlock)) !== null) {
+    set.add("." + m[1]);
+  }
+  return [...set];
+}
+
+function assemblePage(opts: {
+  title: string;
+  description: string;
+  googleFontsUrl: string;
+  styleBlock: string;
+  headerHTML: string;
+  contentHTML: string;
+  footerHTML: string;
+  analyticsScript: string;
+}): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHTML(opts.title)}</title>
+  <meta name="description" content="${escapeHTML(opts.description)}" />
+  ${opts.googleFontsUrl ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="${opts.googleFontsUrl}" rel="stylesheet" />` : ""}
+  ${opts.styleBlock}
+</head>
+<body>
+${opts.headerHTML}
+${opts.contentHTML}
+${opts.footerHTML}
+${opts.analyticsScript}
+</body>
+</html>`;
+}
+
+function escapeHTML(s: string): string {
+  return (s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
