@@ -9,18 +9,12 @@ interface Props {
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const previewUrl = (slug: string) =>
-  `${SUPABASE_URL}/storage/v1/object/public/templates/${slug}-preview.png`;
+// Each template lives in its own folder in the `templates` storage bucket,
+// e.g. trades-hero/preview.png, feminine-bold/preview.png, etc.
+const previewUrl = (folder: string) =>
+  `${SUPABASE_URL}/storage/v1/object/public/templates/${folder}/preview.png`;
 
 const TEMPLATES = [
-  {
-    id: "professional",
-    name: "The Professional",
-    description: "Clean, minimal, trust-forward.",
-    bestFor: "Lawyers, accountants, consultants, financial advisors",
-    color: "from-slate-600 to-slate-800",
-    preview: previewUrl("professional"),
-  },
   {
     id: "trades",
     name: "The Trades Hero",
@@ -30,12 +24,20 @@ const TEMPLATES = [
     preview: previewUrl("trades-hero"),
   },
   {
-    id: "warm",
-    name: "The Warm Welcome",
-    description: "Soft, inviting, relationship-driven.",
-    bestFor: "Salons, spas, coaches, therapists, trainers",
-    color: "from-rose-400 to-pink-500",
-    preview: previewUrl("warm-welcome"),
+    id: "feminine",
+    name: "Feminine Bold",
+    description: "Confident, elegant, brand-forward design with a feminine edge.",
+    bestFor: "Beauty pros, boutiques, female-led brands, lifestyle services",
+    color: "from-pink-500 to-fuchsia-600",
+    preview: previewUrl("feminine-bold"),
+  },
+  {
+    id: "modern",
+    name: "The Modern Business",
+    description: "Versatile, contemporary, growth-focused.",
+    bestFor: "Any service business, general use",
+    color: "from-primary to-accent",
+    preview: previewUrl("modern-business"),
   },
   {
     id: "local",
@@ -46,12 +48,12 @@ const TEMPLATES = [
     preview: previewUrl("local-favorite"),
   },
   {
-    id: "modern",
-    name: "The Modern Business",
-    description: "Versatile, contemporary, growth-focused.",
-    bestFor: "Any service business, general use",
-    color: "from-primary to-accent",
-    preview: previewUrl("modern-business"),
+    id: "warm",
+    name: "The Warm Welcome",
+    description: "Soft, inviting, relationship-driven.",
+    bestFor: "Salons, spas, coaches, therapists, trainers",
+    color: "from-rose-400 to-pink-500",
+    preview: previewUrl("warm-welcome"),
   },
 ];
 
