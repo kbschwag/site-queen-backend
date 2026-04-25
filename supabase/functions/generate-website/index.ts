@@ -762,33 +762,43 @@ async function markFailed(supabase: any, clientId: string, message: string) {
   }
 }
 
-function getPhotoSearchTerms(client: any, intake: any): string[] {
-  const industry = (client?.business_type || client?.industry || "").toLowerCase();
-  const services = Array.isArray(intake?.services)
-    ? intake.services.map((s: any) => (typeof s === "string" ? s : s?.name || s?.title || "")).join(" ")
-    : "";
-  const context = `${industry} ${services}`.toLowerCase();
-  const photoTerms: Record<string, string[]> = {
-    plumb: ["plumber working", "pipe repair", "bathroom plumbing", "kitchen sink repair"],
-    electr: ["electrician working", "electrical panel", "wiring installation"],
-    hvac: ["hvac technician", "air conditioning unit", "heating system"],
-    roof: ["roofer working", "roof repair", "roofing contractor"],
-    landscape: ["landscaping garden", "lawn care", "garden maintenance"],
-    excavat: ["excavator working", "excavation site", "earthwork construction", "excavation equipment"],
-    construct: ["construction worker", "building construction", "contractor working"],
-    paint: ["house painter", "interior painting", "exterior painting"],
-    floor: ["flooring installation", "hardwood floors", "tile flooring"],
-    clean: ["house cleaning", "professional cleaning", "cleaning service"],
-  };
-  for (const [keyword, terms] of Object.entries(photoTerms)) {
-    if (context.includes(keyword)) return terms;
+// Build specific Unsplash search terms based on the client's business type and first service.
+// Mirrors the logic used by generate-website-part1 so stock photos are always context-specific.
+function buildStockSearchTerms(businessType: string, firstService: string): string[] {
+  const ctx = `${businessType || ""} ${firstService || ""}`.toLowerCase();
+  const map: Array<{ match: RegExp; terms: string[] }> = [
+    { match: /excavat|earthwork|grading/, terms: ["excavator digging site", "excavation construction site", "earthwork heavy equipment"] },
+    { match: /plumb/, terms: ["plumber pipe repair", "plumber working under sink", "bathroom plumbing service"] },
+    { match: /electric/, terms: ["electrician working", "electrical panel installation", "wiring residential"] },
+    { match: /hvac|heating|cooling|air condition/, terms: ["HVAC technician air conditioning", "HVAC repair service", "air conditioning unit installation"] },
+    { match: /roof/, terms: ["roofer working on roof", "roof repair contractor", "shingle roof installation"] },
+    { match: /landscap|lawn|yard|garden/, terms: ["landscaping lawn care", "professional landscaper working", "garden maintenance crew"] },
+    { match: /clean/, terms: ["professional cleaning service", "house cleaner working", "commercial cleaning crew"] },
+    { match: /paint/, terms: ["house painter working", "interior painting service", "exterior house painting"] },
+    { match: /floor/, terms: ["flooring installation", "hardwood floor installer", "tile flooring contractor"] },
+    { match: /construct|contract|build|remodel|renovat/, terms: ["construction contractor working", "home renovation crew", "general contractor jobsite"] },
+    { match: /salon|hair|beauty|spa/, terms: ["modern hair salon", "beauty salon interior", "spa treatment room"] },
+    { match: /restaurant|cafe|food|bakery/, terms: ["restaurant interior", "chef cooking kitchen", "cafe atmosphere"] },
+    { match: /fitness|gym|train/, terms: ["fitness training session", "gym workout", "personal trainer client"] },
+    { match: /photo/, terms: ["photographer working", "photography studio", "camera lens close up"] },
+    { match: /law|attorney|legal/, terms: ["modern law office", "attorney consultation", "legal documents desk"] },
+    { match: /dental|dentist/, terms: ["modern dental office", "dentist patient", "dental clinic"] },
+    { match: /vet|pet|animal/, terms: ["veterinarian with pet", "pet grooming", "happy dog at vet"] },
+    { match: /auto|mechanic|car repair/, terms: ["auto mechanic working", "car repair shop", "mechanic engine bay"] },
+    { match: /pest|exterminat/, terms: ["pest control technician", "exterminator working", "pest control service"] },
+    { match: /pool/, terms: ["pool maintenance", "pool cleaner working", "swimming pool service"] },
+    { match: /window/, terms: ["window installation", "window cleaner working", "professional window service"] },
+  ];
+  for (const { match, terms } of map) {
+    if (match.test(ctx)) return terms;
   }
-  return ["professional service", "contractor working", "small business professional"];
+  const safe = ctx.trim().replace(/\s+/g, " ").substring(0, 60);
+  return safe ? [safe, `${safe} professional service`, `professional ${businessType || "small business"}`] : ["professional small business service", "local business team"];
 }
 
-async function fetchUnsplashPhoto(searchTerms: string[], width = 800, height = 600) {
+async function fetchUnsplashPhotoUrl(searchTerms: string[]): Promise<string> {
   const key = Deno.env.get("UNSPLASH_ACCESS_KEY");
-  if (!key) return null;
+  if (!key) return "";
   for (const term of searchTerms) {
     try {
       const r = await fetch(
@@ -797,11 +807,18 @@ async function fetchUnsplashPhoto(searchTerms: string[], width = 800, height = 6
       );
       if (r.ok) {
         const p = await r.json();
-        return { url: `${p.urls.raw}&w=${width}&h=${height}&fit=crop&auto=format&q=80` };
+        if (p?.urls?.raw) return `${p.urls.raw}&w=1600&h=900&fit=crop&auto=format&q=80`;
       }
     } catch (e) {
       console.error(`[unsplash] error for "${term}":`, e);
     }
   }
-  return null;
+  return "";
+}
+
+// Service image picker — cycles through portfolio photos for slot N. Falls back to other resolved images so slots aren't empty.
+function pickServiceImage(index: number, portfolioPhotos: string[], fallbacks: string[]): string {
+  if (portfolioPhotos[index]) return portfolioPhotos[index];
+  if (portfolioPhotos.length > 0) return portfolioPhotos[index % portfolioPhotos.length];
+  return fallbacks.find((u) => !!u) || "";
 }
