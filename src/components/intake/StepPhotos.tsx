@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -64,6 +64,14 @@ export function StepPhotos({ data, onChange, onUploadMultiple, onUpload, rightsE
   const photoCount = countIntakePhotos(data);
   const hasAnyPhotos = photoCount > 0;
 
+  // Keep a ref to the latest data so async upload handlers append against
+  // the freshest array — prevents concurrent uploads from clobbering each
+  // other when two batches finish back-to-back.
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
   // If photos are removed back to zero, clear the rights confirmation
   useEffect(() => {
     if (!hasAnyPhotos && data.photo_rights_confirmed) {
@@ -87,6 +95,22 @@ export function StepPhotos({ data, onChange, onUploadMultiple, onUpload, rightsE
       }
     };
     input.click();
+  };
+
+  const appendTo = (
+    key: "portfolio_photos" | "team_photos" | "location_photos" | "extra_photos",
+    urls: string[],
+  ) => {
+    const current = (dataRef.current[key] as string[] | undefined) || [];
+    onChange({ [key]: [...current, ...urls] } as Partial<IntakeData>);
+  };
+
+  const removeFrom = (
+    key: "portfolio_photos" | "team_photos" | "location_photos" | "extra_photos",
+    idx: number,
+  ) => {
+    const current = (dataRef.current[key] as string[] | undefined) || [];
+    onChange({ [key]: current.filter((_, i) => i !== idx) } as Partial<IntakeData>);
   };
 
   return (
@@ -123,8 +147,8 @@ export function StepPhotos({ data, onChange, onUploadMultiple, onUpload, rightsE
         description="Photos of your work, services, products, or results (up to 20)"
         photos={data.portfolio_photos || []}
         maxPhotos={20}
-        onAdd={() => openPicker("portfolio", true, (urls) => onChange({ portfolio_photos: [...(data.portfolio_photos || []), ...urls] }))}
-        onRemove={(i) => onChange({ portfolio_photos: (data.portfolio_photos || []).filter((_, idx) => idx !== i) })}
+        onAdd={() => openPicker("portfolio", true, (urls) => appendTo("portfolio_photos", urls))}
+        onRemove={(i) => removeFrom("portfolio_photos", i)}
       />
 
       <PhotoSection
@@ -132,8 +156,8 @@ export function StepPhotos({ data, onChange, onUploadMultiple, onUpload, rightsE
         description="Photos of you and your team (up to 10)"
         photos={data.team_photos || []}
         maxPhotos={10}
-        onAdd={() => openPicker("team", true, (urls) => onChange({ team_photos: [...(data.team_photos || []), ...urls] }))}
-        onRemove={(i) => onChange({ team_photos: (data.team_photos || []).filter((_, idx) => idx !== i) })}
+        onAdd={() => openPicker("team", true, (urls) => appendTo("team_photos", urls))}
+        onRemove={(i) => removeFrom("team_photos", i)}
       />
 
       <PhotoSection
@@ -141,8 +165,8 @@ export function StepPhotos({ data, onChange, onUploadMultiple, onUpload, rightsE
         description="Your storefront, office, studio, or workspace (optional, up to 10)"
         photos={data.location_photos || []}
         maxPhotos={10}
-        onAdd={() => openPicker("location", true, (urls) => onChange({ location_photos: [...(data.location_photos || []), ...urls] }))}
-        onRemove={(i) => onChange({ location_photos: (data.location_photos || []).filter((_, idx) => idx !== i) })}
+        onAdd={() => openPicker("location", true, (urls) => appendTo("location_photos", urls))}
+        onRemove={(i) => removeFrom("location_photos", i)}
       />
 
       <PhotoSection
@@ -150,8 +174,8 @@ export function StepPhotos({ data, onChange, onUploadMultiple, onUpload, rightsE
         description="Any other photos you want us to have — we'll use the best ones (up to 30)"
         photos={data.extra_photos || []}
         maxPhotos={30}
-        onAdd={() => openPicker("extras", true, (urls) => onChange({ extra_photos: [...(data.extra_photos || []), ...urls] }))}
-        onRemove={(i) => onChange({ extra_photos: (data.extra_photos || []).filter((_, idx) => idx !== i) })}
+        onAdd={() => openPicker("extras", true, (urls) => appendTo("extra_photos", urls))}
+        onRemove={(i) => removeFrom("extra_photos", i)}
       />
 
       <div className="flex items-center gap-2">
