@@ -576,7 +576,7 @@ Return ONLY valid JSON. No markdown:
         name: "Contact",
         slug: "contact",
         source: "always",
-        description: `Contact page with: page hero (breadcrumb HOME › CONTACT, headline "Contact ${businessName}"); two-column layout. LEFT column: contact info — phone (${phone}) as a tel: link, email (${email || "n/a"}) as a mailto: link, service area (${intake.service_area || city}), business hours (${intake.business_hours ? JSON.stringify(intake.business_hours) : "by appointment"}). RIGHT column: contact form with fields — first name, last name, email, phone, service type dropdown populated with the real services [${serviceNames.join(", ") || "General Inquiry"}], message textarea, and a SUBMIT REQUEST button.`,
+        description: `Contact page. IMPORTANT: Do NOT use the dark full-bleed hero section with a giant headline that the homepage uses. Instead start with a simple, understated PAGE HEADER (same visual weight as the about page header) — a small breadcrumb "HOME › CONTACT", a clean page title "Contact ${businessName}", and a short one-sentence subtitle. Use existing CSS classes only (e.g. .page-header, .breadcrumb, .container, .section-title) — never the .hero or .hero-section classes. Below the header use a two-column layout. LEFT column: contact info — phone (${phone}) as a tel: link, email (${email || "n/a"}) as a mailto: link, service area (${intake.service_area || city}), business hours (${intake.business_hours ? JSON.stringify(intake.business_hours) : "by appointment"}). RIGHT column: contact form with fields — first name, last name, email, phone, service type dropdown populated with the real services [${serviceNames.join(", ") || "General Inquiry"}], message textarea, and a SUBMIT REQUEST button.`,
       });
 
       // Intake custom pages
@@ -641,7 +641,7 @@ RULES:
 - Do NOT use inline style="" attributes. Reuse classes from the CSS list above (e.g. .btn, .container, .section, .card, etc.).
 - Phone numbers as tel:${phoneRaw} links. Emails as mailto:${email} links.
 - Page must be mobile-responsive using existing classes only.
-- Include a page hero / breadcrumb (HOME › ${spec.name.toUpperCase()}) at the top.
+- Include a small, understated page header / breadcrumb (HOME › ${spec.name.toUpperCase()}) at the top — like the about page. Do NOT recreate the homepage's full dark hero section with a giant headline. Avoid .hero / .hero-section classes; use .page-header, .breadcrumb, .section-title or equivalent existing classes instead.
 - Every word should feel specific to this business — never generic filler.
 - Output raw HTML only. No markdown, no code blocks, no explanation.`;
 
