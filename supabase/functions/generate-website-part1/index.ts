@@ -480,6 +480,22 @@ Return this exact JSON structure:
       .upload(`${clientId}/deploy/index.html`, new Blob([html], { type: "text/html" }), { upsert: true, contentType: "text/html; charset=utf-8" });
     if (backupErr) throw new Error(`Failed to save deploy backup: ${backupErr.message}`);
 
+    // Persist resolved data for extra-pages to reuse (esp. photo decisions)
+    const copyDataPayload = {
+      businessName, businessType, city, state, phone, phoneRaw, email, address,
+      yearsInBusiness, googleRating, googleReviewCount, tagline, ownerName, ownerTitle,
+      logoUrl: logoUrlResolved, serviceNames, noTestimonials,
+      portfolioPhotos, teamPhotos,
+      heroImageUrl, aboutImageUrl, whyUsImageUrl,
+      stockTerms, allowStock,
+      copy,
+    };
+    await supabase.storage.from("generated-sites").upload(
+      `${clientId}/copy-data.json`,
+      new Blob([JSON.stringify(copyDataPayload)], { type: "application/json" }),
+      { upsert: true, contentType: "application/json" }
+    );
+
     const stagingURL = `${STAGING_BASE_URL}/${clientId}/index.html`;
 
     await supabase.from("sites").update({
