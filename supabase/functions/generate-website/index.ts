@@ -180,6 +180,7 @@ serve(async (req) => {
     const aboutStory = intake.about_story || "";
     const testimonials = Array.isArray(intake.testimonials) ? intake.testimonials : [];
     const faqItems = Array.isArray(intake.faq_items) ? intake.faq_items : [];
+    const noTestimonialsCopy = !!intake.no_testimonials;
 
     const serviceNames = services.slice(0, 8)
       .map((s: any) => typeof s === "string" ? s : s?.name || s?.title || "")
