@@ -929,11 +929,49 @@ ${opts.analyticsScript}
 </html>`;
 }
 
-function escapeHTML(s: string): string {
-  return (s || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+// ── Map helper — free Google Maps iframe embed (no API key required) ──
+type MapInput = {
+  locationType?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  serviceArea?: string;
+};
+function buildMapHTML(input: MapInput): { html: string; url: string } {
+  const type = (input.locationType || "").toLowerCase().trim();
+  const city = (input.city || "").trim();
+  const state = (input.state || "").trim();
+  const street = (input.streetAddress || "").trim();
+  const zip = (input.zip || "").trim();
+
+  if (type === "online" || type === "remote" || type === "virtual" || type === "none") {
+    return { html: "", url: "" };
+  }
+
+  let url = "";
+  if (type === "physical" && (street || city)) {
+    const q = [street, city, state, zip].filter(Boolean).join(", ");
+    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`;
+  } else if (type === "hybrid" && (street || city)) {
+    const q = [street, city, state].filter(Boolean).join(", ");
+    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`;
+  } else if (type === "mobile" && (city || state)) {
+    const q = [city, state].filter(Boolean).join(", ");
+    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
+  } else if (city || state) {
+    const q = [city, state].filter(Boolean).join(", ");
+    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
+  }
+
+  if (!url) {
+    return {
+      html: `<div class="map-placeholder"><p>📍 SERVING ${(input.serviceArea || city || "OUR AREA").toUpperCase()} &amp; SURROUNDING AREAS</p></div>`,
+      url: "",
+    };
+  }
+
+  const html = `<iframe class="map-iframe" src="${url}" width="100%" height="100%" style="border:0;min-height:400px;" allowfullscreen="" loading="lazy"></iframe>`;
+  return { html, url };
 }
 
