@@ -78,8 +78,16 @@ serve(async (req) => {
     const serviceNames: string[] = savedCopy.serviceNames || [];
     const noTestimonials = savedCopy.noTestimonials || !!intake.no_testimonials;
     const mapEmbedUrl = intake.map_embed_url || "";
-    const portfolioPhotos: string[] = savedCopy.portfolioPhotos || Array.isArray(intake.portfolio_photos) ? (savedCopy.portfolioPhotos || intake.portfolio_photos) : [];
-    const teamPhotos: string[] = savedCopy.teamPhotos || Array.isArray(intake.team_photos) ? (savedCopy.teamPhotos || intake.team_photos) : [];
+    const portfolioPhotos: string[] = (
+      Array.isArray(savedCopy.portfolioPhotos) ? savedCopy.portfolioPhotos
+      : Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos
+      : []
+    ).filter(Boolean);
+    const teamPhotos: string[] = (
+      Array.isArray(savedCopy.teamPhotos) ? savedCopy.teamPhotos
+      : Array.isArray(intake.team_photos) ? intake.team_photos
+      : []
+    ).filter(Boolean);
 
     // Previously generated homepage copy
     const homeCopy = savedCopy.copy || {};
