@@ -95,10 +95,20 @@ serve(async (req) => {
       modern: "modern-business",
     };
     const selectedTemplate = intake?.template_selected || (callNotes as any)?.template_selected || intake?.template_id;
-    const templateId = selectedTemplate ? (TEMPLATE_FILE_MAP[selectedTemplate] || selectedTemplate) : "trades-hero";
+    const requestedTemplateId = selectedTemplate ? (TEMPLATE_FILE_MAP[selectedTemplate] || selectedTemplate) : "trades-hero";
+    const FALLBACK_TEMPLATE = "trades-hero";
 
-    const { data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}.html`);
-    const { data: cssFile } = await supabase.storage.from("templates").download(`${templateId}.css`);
+    let templateId = requestedTemplateId;
+    let { data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}.html`);
+    let { data: cssFile } = await supabase.storage.from("templates").download(`${templateId}.css`);
+
+    if (!htmlFile && templateId !== FALLBACK_TEMPLATE) {
+      console.warn(`[generate] Template "${templateId}.html" not found in storage — falling back to "${FALLBACK_TEMPLATE}".`);
+      templateId = FALLBACK_TEMPLATE;
+      ({ data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}.html`));
+      ({ data: cssFile } = await supabase.storage.from("templates").download(`${templateId}.css`));
+    }
+
     if (!htmlFile) throw new Error(`Template not found: ${templateId}.html`);
 
     const templateHTML = await htmlFile.text();
