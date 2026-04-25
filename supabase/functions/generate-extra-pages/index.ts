@@ -78,8 +78,16 @@ serve(async (req) => {
     const serviceNames: string[] = savedCopy.serviceNames || [];
     const noTestimonials = savedCopy.noTestimonials || !!intake.no_testimonials;
     const mapEmbedUrl = intake.map_embed_url || "";
-    const portfolioPhotos: string[] = savedCopy.portfolioPhotos || Array.isArray(intake.portfolio_photos) ? (savedCopy.portfolioPhotos || intake.portfolio_photos) : [];
-    const teamPhotos: string[] = savedCopy.teamPhotos || Array.isArray(intake.team_photos) ? (savedCopy.teamPhotos || intake.team_photos) : [];
+    const portfolioPhotos: string[] = (
+      Array.isArray(savedCopy.portfolioPhotos) ? savedCopy.portfolioPhotos
+      : Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos
+      : []
+    ).filter(Boolean);
+    const teamPhotos: string[] = (
+      Array.isArray(savedCopy.teamPhotos) ? savedCopy.teamPhotos
+      : Array.isArray(intake.team_photos) ? intake.team_photos
+      : []
+    ).filter(Boolean);
 
     // Previously generated homepage copy
     const homeCopy = savedCopy.copy || {};
@@ -89,11 +97,51 @@ serve(async (req) => {
 
     // ── Template ID ──────────────────────────────────────────────────────
     const TEMPLATE_FILE_MAP: Record<string, string> = {
-      trades: "trades-hero", professional: "professional",
+      trades: "trades-hero", feminine: "feminine-bold",
       warm: "warm-welcome", local: "local-favorite", modern: "modern-business",
     };
     const selectedTemplate = (callNotes as any)?.template_selected || intake?.template_selected || intake?.template_id;
     const templateId = selectedTemplate ? (TEMPLATE_FILE_MAP[selectedTemplate] || selectedTemplate) : "trades-hero";
+
+    // ── Resolve photo slots (mirror part1 logic — uploads ALWAYS win) ────
+    const allowStock = savedCopy.allowStock !== undefined
+      ? !!savedCopy.allowStock
+      : (intake.use_stock_photos !== false);
+    const services: any[] = Array.isArray(intake.services) ? intake.services : [];
+    const firstServiceName = services[0]
+      ? (typeof services[0] === "string" ? services[0] : services[0]?.name || services[0]?.title || "")
+      : "";
+    const stockTerms: string[] = Array.isArray(savedCopy.stockTerms) && savedCopy.stockTerms.length
+      ? savedCopy.stockTerms
+      : buildStockSearchTerms(businessType, firstServiceName);
+
+    const heroCandidates = [intake.hero_photo_url, portfolioPhotos[0]].filter(Boolean) as string[];
+    const aboutCandidates = [teamPhotos[0], intake.owner_photo_url, portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+    const whyUsCandidates = [portfolioPhotos[2], portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+
+    let heroImageUrl = savedCopy.heroImageUrl || heroCandidates[0] || "";
+    let aboutImageUrl = savedCopy.aboutImageUrl || aboutCandidates[0] || "";
+    let whyUsImageUrl = savedCopy.whyUsImageUrl || whyUsCandidates[0] || "";
+
+    if (allowStock) {
+      const needed: Array<"hero" | "about" | "whyus"> = [];
+      if (!heroImageUrl) needed.push("hero");
+      if (!aboutImageUrl) needed.push("about");
+      if (!whyUsImageUrl) needed.push("whyus");
+      if (needed.length > 0) {
+        const stockResults = await Promise.all(needed.map((slot) => {
+          const variant = slot === "hero" ? "wide hero" : slot === "about" ? "team working" : "professional";
+          return fetchUnsplashPhoto(stockTerms.map((t) => `${t} ${variant}`));
+        }));
+        needed.forEach((slot, i) => {
+          const url = stockResults[i] || "";
+          if (slot === "hero") heroImageUrl = url;
+          else if (slot === "about") aboutImageUrl = url;
+          else if (slot === "whyus") whyUsImageUrl = url;
+        });
+      }
+    }
+    console.log(`[extra-pages] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} (portfolio=${portfolioPhotos.length}, team=${teamPhotos.length}, allowStock=${allowStock})`);
 
     // ── Logo HTML ────────────────────────────────────────────────────────
     const logoHTML = logoUrl
@@ -141,6 +189,18 @@ serve(async (req) => {
       "{{AREA_1}}": serviceAreas[0] ? (typeof serviceAreas[0] === "string" ? serviceAreas[0] : serviceAreas[0].name) : (homeCopy.AREA_1 || city),
       "{{AREA_2}}": serviceAreas[1] ? (typeof serviceAreas[1] === "string" ? serviceAreas[1] : serviceAreas[1].name) : (homeCopy.AREA_2 || ""),
       "{{AREA_3}}": serviceAreas[2] ? (typeof serviceAreas[2] === "string" ? serviceAreas[2] : serviceAreas[2].name) : (homeCopy.AREA_3 || ""),
+      // Images — uploads first, stock fills only empty slots
+      "{{HERO_IMAGE_URL}}": heroImageUrl,
+      "{{ABOUT_IMAGE_URL}}": aboutImageUrl,
+      "{{WHY_US_IMAGE_URL}}": whyUsImageUrl,
+      "{{LOGO_URL}}": logoUrl || "",
+      "{{SERVICE_1_IMAGE_URL}}": pickServiceImage(0, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{SERVICE_2_IMAGE_URL}}": pickServiceImage(1, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{SERVICE_3_IMAGE_URL}}": pickServiceImage(2, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{SERVICE_4_IMAGE_URL}}": pickServiceImage(3, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{SERVICE_5_IMAGE_URL}}": pickServiceImage(4, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{TRANSFORMATION_IMAGE_URL}}": portfolioPhotos[3] || portfolioPhotos[0] || aboutImageUrl,
+      "{{LEAD_MAGNET_IMAGE_URL}}": portfolioPhotos[4] || portfolioPhotos[0] || heroImageUrl,
     };
 
     // ── Analytics script ─────────────────────────────────────────────────
@@ -171,8 +231,8 @@ serve(async (req) => {
     // ABOUT PAGE
     // ════════════════════════════════════════════════════════════════════
     try {
-      const { data: aboutFile } = await supabase.storage.from("templates").download(`${templateId}-about.html`);
-      if (!aboutFile) throw new Error(`Template not found: ${templateId}-about.html`);
+      const { data: aboutFile } = await supabase.storage.from("templates").download(`${templateId}/about.html`);
+      if (!aboutFile) throw new Error(`Template not found: ${templateId}/about.html`);
       let aboutHTML = await aboutFile.text();
 
       // Generate about-specific copy
@@ -284,8 +344,8 @@ Return ONLY valid JSON. No markdown. No explanation:
     // SERVICES PAGE
     // ════════════════════════════════════════════════════════════════════
     try {
-      const { data: servicesFile } = await supabase.storage.from("templates").download(`${templateId}-services.html`);
-      if (!servicesFile) throw new Error(`Template not found: ${templateId}-services.html`);
+      const { data: servicesFile } = await supabase.storage.from("templates").download(`${templateId}/services.html`);
+      if (!servicesFile) throw new Error(`Template not found: ${templateId}/services.html`);
       let servicesHTML = await servicesFile.text();
 
       // Generate services-specific copy
@@ -660,3 +720,63 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
 function stripMarkdown(s: string): string {
   return s.replace(/^```(?:html|json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
 }
+
+// ── Photo helpers (mirror part1) ─────────────────────────────────────
+function buildStockSearchTerms(businessType: string, firstService: string): string[] {
+  const ctx = `${businessType || ""} ${firstService || ""}`.toLowerCase();
+  const map: Array<{ match: RegExp; terms: string[] }> = [
+    { match: /excavat|earthwork|grading/, terms: ["excavator digging site", "excavation construction site", "earthwork heavy equipment"] },
+    { match: /plumb/, terms: ["plumber pipe repair", "plumber working under sink", "bathroom plumbing service"] },
+    { match: /electric/, terms: ["electrician working", "electrical panel installation", "wiring residential"] },
+    { match: /hvac|heating|cooling|air condition/, terms: ["HVAC technician air conditioning", "HVAC repair service", "air conditioning unit installation"] },
+    { match: /roof/, terms: ["roofer working on roof", "roof repair contractor", "shingle roof installation"] },
+    { match: /landscap|lawn|yard|garden/, terms: ["landscaping lawn care", "professional landscaper working", "garden maintenance crew"] },
+    { match: /clean/, terms: ["professional cleaning service", "house cleaner working", "commercial cleaning crew"] },
+    { match: /paint/, terms: ["house painter working", "interior painting service", "exterior house painting"] },
+    { match: /floor/, terms: ["flooring installation", "hardwood floor installer", "tile flooring contractor"] },
+    { match: /construct|contract|build|remodel|renovat/, terms: ["construction contractor working", "home renovation crew", "general contractor jobsite"] },
+    { match: /salon|hair|beauty|spa/, terms: ["modern hair salon", "beauty salon interior", "spa treatment room"] },
+    { match: /restaurant|cafe|food|bakery/, terms: ["restaurant interior", "chef cooking kitchen", "cafe atmosphere"] },
+    { match: /fitness|gym|train/, terms: ["fitness training session", "gym workout", "personal trainer client"] },
+    { match: /photo/, terms: ["photographer working", "photography studio", "camera lens close up"] },
+    { match: /law|attorney|legal/, terms: ["modern law office", "attorney consultation", "legal documents desk"] },
+    { match: /dental|dentist/, terms: ["modern dental office", "dentist patient", "dental clinic"] },
+    { match: /vet|pet|animal/, terms: ["veterinarian with pet", "pet grooming", "happy dog at vet"] },
+    { match: /auto|mechanic|car repair/, terms: ["auto mechanic working", "car repair shop", "mechanic engine bay"] },
+    { match: /pest|exterminat/, terms: ["pest control technician", "exterminator working", "pest control service"] },
+    { match: /pool/, terms: ["pool maintenance", "pool cleaner working", "swimming pool service"] },
+    { match: /window/, terms: ["window installation", "window cleaner working", "professional window service"] },
+  ];
+  for (const { match, terms } of map) {
+    if (match.test(ctx)) return terms;
+  }
+  const safe = ctx.trim().replace(/\s+/g, " ").substring(0, 60);
+  return safe ? [safe, `${safe} professional service`, `professional ${businessType || "small business"}`] : ["professional small business service", "local business team"];
+}
+
+async function fetchUnsplashPhoto(searchTerms: string[]): Promise<string> {
+  const key = Deno.env.get("UNSPLASH_ACCESS_KEY");
+  if (!key) return "";
+  for (const term of searchTerms) {
+    try {
+      const r = await fetch(
+        `https://api.unsplash.com/photos/random?query=${encodeURIComponent(term)}&orientation=landscape`,
+        { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } },
+      );
+      if (r.ok) {
+        const p = await r.json();
+        if (p?.urls?.raw) return `${p.urls.raw}&w=1600&h=900&fit=crop&auto=format&q=80`;
+      }
+    } catch (e) {
+      console.error(`[unsplash] error for "${term}":`, e);
+    }
+  }
+  return "";
+}
+
+function pickServiceImage(index: number, portfolioPhotos: string[], fallbacks: string[]): string {
+  if (portfolioPhotos[index]) return portfolioPhotos[index];
+  if (portfolioPhotos.length > 0) return portfolioPhotos[index % portfolioPhotos.length];
+  return fallbacks.find((u) => !!u) || "";
+}
+

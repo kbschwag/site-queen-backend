@@ -112,8 +112,8 @@ serve(async (req) => {
     const tagline = intake.tagline || "";
     const domain = intake.domain || "";
 
-    const portfolioPhotos: string[] = Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : [];
-    const teamPhotos: string[] = Array.isArray(intake.team_photos) ? intake.team_photos : [];
+    const portfolioPhotos: string[] = (Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : []).filter(Boolean);
+    const teamPhotos: string[] = (Array.isArray(intake.team_photos) ? intake.team_photos : []).filter(Boolean);
     const services: any[] = Array.isArray(intake.services) ? intake.services : [];
     const awards: any[] = Array.isArray(intake.awards) ? intake.awards : [];
     const coupons: any[] = Array.isArray(intake.coupons) ? intake.coupons : [];
@@ -123,8 +123,46 @@ serve(async (req) => {
 
     const showFinancing = !!(callNotes as any)?.show_financing || !!intake.show_financing;
 
+    // ── Resolve photo slots ──────────────────────────────────────────────
+    // Priority: client uploads ALWAYS win. Stock only fills empty slots when allowed.
+    const allowStock = intake.use_stock_photos !== false; // default true
+    const firstServiceName = (services[0] && (typeof services[0] === "string" ? services[0] : services[0]?.name || services[0]?.title)) || "";
+    const stockTerms = buildStockSearchTerms(businessType, firstServiceName);
+
+    const heroCandidates = [intake.hero_photo_url, portfolioPhotos[0]].filter(Boolean) as string[];
+    const aboutCandidates = [teamPhotos[0], intake.owner_photo_url, portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+    const whyUsCandidates = [portfolioPhotos[2], portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+
+    let heroImageUrl = heroCandidates[0] || "";
+    let aboutImageUrl = aboutCandidates[0] || "";
+    let whyUsImageUrl = whyUsCandidates[0] || "";
+
+    if (allowStock) {
+      const needed: Array<"hero" | "about" | "whyus"> = [];
+      if (!heroImageUrl) needed.push("hero");
+      if (!aboutImageUrl) needed.push("about");
+      if (!whyUsImageUrl) needed.push("whyus");
+
+      if (needed.length > 0) {
+        const stockResults = await Promise.all(needed.map((slot) => {
+          const variant = slot === "hero" ? "wide hero" : slot === "about" ? "team working" : "professional";
+          return fetchUnsplashPhoto(stockTerms.map((t) => `${t} ${variant}`));
+        }));
+        needed.forEach((slot, i) => {
+          const url = stockResults[i] || "";
+          if (slot === "hero") heroImageUrl = url;
+          else if (slot === "about") aboutImageUrl = url;
+          else if (slot === "whyus") whyUsImageUrl = url;
+        });
+      }
+    }
+
+    const logoUrlResolved = intake.logo_url || "";
+    console.log(`[part1] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} logo:${logoUrlResolved ? "✓" : "✗"} (hero_upload=${!!intake.hero_photo_url}, portfolio=${portfolioPhotos.length}, team=${teamPhotos.length}, allowStock=${allowStock})`);
+
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+
 
     await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
 
@@ -385,7 +423,22 @@ Return this exact JSON structure:
       "{{FOOTER_TAGLINE}}": copy.FOOTER_TAGLINE || tagline || "",
       "{{BUSINESS_NAME_PART1}}": businessName,
       "{{BUSINESS_NAME_PART2}}": "",
+      // Images — client uploads first, stock fills only empty slots
+      "{{HERO_IMAGE_URL}}": heroImageUrl,
+      "{{ABOUT_IMAGE_URL}}": aboutImageUrl,
+      "{{WHY_US_IMAGE_URL}}": whyUsImageUrl,
+      "{{LOGO_URL}}": logoUrlResolved,
+      "{{LOGO_HTML}}": logoUrlResolved
+        ? `<img src="${logoUrlResolved}" alt="${businessName} logo" class="logo-img" />`
+        : `<div class="logo-icon"><svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`,
+      // Service images — cycle through any remaining portfolio photos for additional slots
+      "{{SERVICE_1_IMAGE_URL}}": pickServiceImage(0, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{SERVICE_2_IMAGE_URL}}": pickServiceImage(1, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{SERVICE_3_IMAGE_URL}}": pickServiceImage(2, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
+      "{{TRANSFORMATION_IMAGE_URL}}": portfolioPhotos[3] || portfolioPhotos[0] || aboutImageUrl,
+      "{{LEAD_MAGNET_IMAGE_URL}}": portfolioPhotos[4] || portfolioPhotos[0] || heroImageUrl,
     };
+
 
     for (const [key, value] of Object.entries(fill)) {
       html = html.split(key).join(value);
@@ -426,6 +479,22 @@ Return this exact JSON structure:
       .from("generated-sites")
       .upload(`${clientId}/deploy/index.html`, new Blob([html], { type: "text/html" }), { upsert: true, contentType: "text/html; charset=utf-8" });
     if (backupErr) throw new Error(`Failed to save deploy backup: ${backupErr.message}`);
+
+    // Persist resolved data for extra-pages to reuse (esp. photo decisions)
+    const copyDataPayload = {
+      businessName, businessType, city, state, phone, phoneRaw, email, address,
+      yearsInBusiness, googleRating, googleReviewCount, tagline, ownerName, ownerTitle,
+      logoUrl: logoUrlResolved, serviceNames, noTestimonials,
+      portfolioPhotos, teamPhotos,
+      heroImageUrl, aboutImageUrl, whyUsImageUrl,
+      stockTerms, allowStock,
+      copy,
+    };
+    await supabase.storage.from("generated-sites").upload(
+      `${clientId}/copy-data.json`,
+      new Blob([JSON.stringify(copyDataPayload)], { type: "application/json" }),
+      { upsert: true, contentType: "application/json" }
+    );
 
     const stagingURL = `${STAGING_BASE_URL}/${clientId}/index.html`;
 
@@ -526,3 +595,69 @@ async function markFailed(supabase: any, clientId: string, message: string) {
     console.error("[part1] failed to mark failure:", e);
   }
 }
+
+// ── Photo helpers ─────────────────────────────────────────────────────
+// Build specific Unsplash search terms based on the client's business type and first service.
+// e.g. excavation → "excavator digging site", plumbing → "plumber pipe repair"
+export function buildStockSearchTerms(businessType: string, firstService: string): string[] {
+  const ctx = `${businessType || ""} ${firstService || ""}`.toLowerCase();
+  const map: Array<{ match: RegExp; terms: string[] }> = [
+    { match: /excavat|earthwork|grading/, terms: ["excavator digging site", "excavation construction site", "earthwork heavy equipment"] },
+    { match: /plumb/, terms: ["plumber pipe repair", "plumber working under sink", "bathroom plumbing service"] },
+    { match: /electric/, terms: ["electrician working", "electrical panel installation", "wiring residential"] },
+    { match: /hvac|heating|cooling|air condition/, terms: ["HVAC technician air conditioning", "HVAC repair service", "air conditioning unit installation"] },
+    { match: /roof/, terms: ["roofer working on roof", "roof repair contractor", "shingle roof installation"] },
+    { match: /landscap|lawn|yard|garden/, terms: ["landscaping lawn care", "professional landscaper working", "garden maintenance crew"] },
+    { match: /clean/, terms: ["professional cleaning service", "house cleaner working", "commercial cleaning crew"] },
+    { match: /paint/, terms: ["house painter working", "interior painting service", "exterior house painting"] },
+    { match: /floor/, terms: ["flooring installation", "hardwood floor installer", "tile flooring contractor"] },
+    { match: /construct|contract|build|remodel|renovat/, terms: ["construction contractor working", "home renovation crew", "general contractor jobsite"] },
+    { match: /salon|hair|beauty|spa/, terms: ["modern hair salon", "beauty salon interior", "spa treatment room"] },
+    { match: /restaurant|cafe|food|bakery/, terms: ["restaurant interior", "chef cooking kitchen", "cafe atmosphere"] },
+    { match: /fitness|gym|train/, terms: ["fitness training session", "gym workout", "personal trainer client"] },
+    { match: /photo/, terms: ["photographer working", "photography studio", "camera lens close up"] },
+    { match: /law|attorney|legal/, terms: ["modern law office", "attorney consultation", "legal documents desk"] },
+    { match: /dental|dentist/, terms: ["modern dental office", "dentist patient", "dental clinic"] },
+    { match: /vet|pet|animal/, terms: ["veterinarian with pet", "pet grooming", "happy dog at vet"] },
+    { match: /auto|mechanic|car repair/, terms: ["auto mechanic working", "car repair shop", "mechanic engine bay"] },
+    { match: /pest|exterminat/, terms: ["pest control technician", "exterminator working", "pest control service"] },
+    { match: /pool/, terms: ["pool maintenance", "pool cleaner working", "swimming pool service"] },
+    { match: /window/, terms: ["window installation", "window cleaner working", "professional window service"] },
+  ];
+  for (const { match, terms } of map) {
+    if (match.test(ctx)) return terms;
+  }
+  // Fallback uses the actual context — still client-specific
+  const safe = ctx.trim().replace(/\s+/g, " ").substring(0, 60);
+  return safe ? [safe, `${safe} professional service`, `professional ${businessType || "small business"}`] : ["professional small business service", "local business team"];
+}
+
+export async function fetchUnsplashPhoto(searchTerms: string[]): Promise<string> {
+  const key = Deno.env.get("UNSPLASH_ACCESS_KEY");
+  if (!key) return "";
+  for (const term of searchTerms) {
+    try {
+      const r = await fetch(
+        `https://api.unsplash.com/photos/random?query=${encodeURIComponent(term)}&orientation=landscape`,
+        { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } },
+      );
+      if (r.ok) {
+        const p = await r.json();
+        if (p?.urls?.raw) return `${p.urls.raw}&w=1600&h=900&fit=crop&auto=format&q=80`;
+      }
+    } catch (e) {
+      console.error(`[unsplash] error for "${term}":`, e);
+    }
+  }
+  return "";
+}
+
+// Service image picker — cycles through portfolio photos for slot N. Falls back to other resolved images so slots aren't empty.
+export function pickServiceImage(index: number, portfolioPhotos: string[], fallbacks: string[]): string {
+  if (portfolioPhotos[index]) return portfolioPhotos[index];
+  // cycle through portfolio
+  if (portfolioPhotos.length > 0) return portfolioPhotos[index % portfolioPhotos.length];
+  // fall back to any non-empty resolved image (hero/about/whyus)
+  return fallbacks.find((u) => !!u) || "";
+}
+
