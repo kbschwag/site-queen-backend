@@ -641,7 +641,7 @@ RULES:
 - Do NOT use inline style="" attributes. Reuse classes from the CSS list above (e.g. .btn, .container, .section, .card, etc.).
 - Phone numbers as tel:${phoneRaw} links. Emails as mailto:${email} links.
 - Page must be mobile-responsive using existing classes only.
-- Include a page hero / breadcrumb (HOME › ${spec.name.toUpperCase()}) at the top.
+- Include a small, understated page header / breadcrumb (HOME › ${spec.name.toUpperCase()}) at the top — like the about page. Do NOT recreate the homepage's full dark hero section with a giant headline. Avoid .hero / .hero-section classes; use .page-header, .breadcrumb, .section-title or equivalent existing classes instead.
 - Every word should feel specific to this business — never generic filler.
 - Output raw HTML only. No markdown, no code blocks, no explanation.`;
 
