@@ -97,11 +97,51 @@ serve(async (req) => {
 
     // ── Template ID ──────────────────────────────────────────────────────
     const TEMPLATE_FILE_MAP: Record<string, string> = {
-      trades: "trades-hero", professional: "professional",
+      trades: "trades-hero", feminine: "feminine-bold",
       warm: "warm-welcome", local: "local-favorite", modern: "modern-business",
     };
     const selectedTemplate = (callNotes as any)?.template_selected || intake?.template_selected || intake?.template_id;
     const templateId = selectedTemplate ? (TEMPLATE_FILE_MAP[selectedTemplate] || selectedTemplate) : "trades-hero";
+
+    // ── Resolve photo slots (mirror part1 logic — uploads ALWAYS win) ────
+    const allowStock = savedCopy.allowStock !== undefined
+      ? !!savedCopy.allowStock
+      : (intake.use_stock_photos !== false);
+    const services: any[] = Array.isArray(intake.services) ? intake.services : [];
+    const firstServiceName = services[0]
+      ? (typeof services[0] === "string" ? services[0] : services[0]?.name || services[0]?.title || "")
+      : "";
+    const stockTerms: string[] = Array.isArray(savedCopy.stockTerms) && savedCopy.stockTerms.length
+      ? savedCopy.stockTerms
+      : buildStockSearchTerms(businessType, firstServiceName);
+
+    const heroCandidates = [intake.hero_photo_url, portfolioPhotos[0]].filter(Boolean) as string[];
+    const aboutCandidates = [teamPhotos[0], intake.owner_photo_url, portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+    const whyUsCandidates = [portfolioPhotos[2], portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
+
+    let heroImageUrl = savedCopy.heroImageUrl || heroCandidates[0] || "";
+    let aboutImageUrl = savedCopy.aboutImageUrl || aboutCandidates[0] || "";
+    let whyUsImageUrl = savedCopy.whyUsImageUrl || whyUsCandidates[0] || "";
+
+    if (allowStock) {
+      const needed: Array<"hero" | "about" | "whyus"> = [];
+      if (!heroImageUrl) needed.push("hero");
+      if (!aboutImageUrl) needed.push("about");
+      if (!whyUsImageUrl) needed.push("whyus");
+      if (needed.length > 0) {
+        const stockResults = await Promise.all(needed.map((slot) => {
+          const variant = slot === "hero" ? "wide hero" : slot === "about" ? "team working" : "professional";
+          return fetchUnsplashPhoto(stockTerms.map((t) => `${t} ${variant}`));
+        }));
+        needed.forEach((slot, i) => {
+          const url = stockResults[i] || "";
+          if (slot === "hero") heroImageUrl = url;
+          else if (slot === "about") aboutImageUrl = url;
+          else if (slot === "whyus") whyUsImageUrl = url;
+        });
+      }
+    }
+    console.log(`[extra-pages] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} (portfolio=${portfolioPhotos.length}, team=${teamPhotos.length}, allowStock=${allowStock})`);
 
     // ── Logo HTML ────────────────────────────────────────────────────────
     const logoHTML = logoUrl
