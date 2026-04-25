@@ -87,9 +87,13 @@ serve(async (req) => {
     } as any).eq("client_id", clientId);
 
     // ── Load template ────────────────────────────────────────────────────
+    // Each template lives in its own folder inside the `templates` bucket:
+    //   {templateId}/index.html   {templateId}/style.css
+    //   {templateId}/about.html   {templateId}/services.html
+    //   {templateId}/preview.png
     const TEMPLATE_FILE_MAP: Record<string, string> = {
       trades: "trades-hero",
-      professional: "professional",
+      feminine: "feminine-bold",
       warm: "warm-welcome",
       local: "local-favorite",
       modern: "modern-business",
@@ -99,17 +103,17 @@ serve(async (req) => {
     const FALLBACK_TEMPLATE = "trades-hero";
 
     let templateId = requestedTemplateId;
-    let { data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}.html`);
-    let { data: cssFile } = await supabase.storage.from("templates").download(`${templateId}.css`);
+    let { data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}/index.html`);
+    let { data: cssFile } = await supabase.storage.from("templates").download(`${templateId}/style.css`);
 
     if (!htmlFile && templateId !== FALLBACK_TEMPLATE) {
-      console.warn(`[generate] Template "${templateId}.html" not found in storage — falling back to "${FALLBACK_TEMPLATE}".`);
+      console.warn(`[generate] Template "${templateId}/index.html" not found in storage — falling back to "${FALLBACK_TEMPLATE}".`);
       templateId = FALLBACK_TEMPLATE;
-      ({ data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}.html`));
-      ({ data: cssFile } = await supabase.storage.from("templates").download(`${templateId}.css`));
+      ({ data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}/index.html`));
+      ({ data: cssFile } = await supabase.storage.from("templates").download(`${templateId}/style.css`));
     }
 
-    if (!htmlFile) throw new Error(`Template not found: ${templateId}.html`);
+    if (!htmlFile) throw new Error(`Template not found: ${templateId}/index.html`);
 
     const templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
