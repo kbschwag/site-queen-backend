@@ -659,7 +659,7 @@ RULES:
           }
 
           // Assemble: doctype + head with extracted style + header + content + footer + analytics
-          const fullHTML = assemblePage({
+          let fullHTML = assemblePage({
             title: `${spec.name} | ${businessName}`,
             description: `${spec.name} — ${businessName}, ${businessType} in ${city}, ${state}.`,
             googleFontsUrl: fonts.googleUrl,
@@ -669,6 +669,9 @@ RULES:
             footerHTML: shell.footerHTML,
             analyticsScript,
           });
+
+          // Wire any <form> on the page to handle-contact-form
+          fullHTML = wireContactForms(fullHTML, clientId, supabaseUrl);
 
           await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/${spec.slug}.html`, injectNoindex(fullHTML));
           await supabase.storage.from("generated-sites").upload(
