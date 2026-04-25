@@ -550,67 +550,137 @@ Return ONLY valid JSON. No markdown:
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // CONTACT PAGE (Claude generates — no template)
+    // UNIVERSAL CUSTOM PAGE GENERATOR
+    // Loads homepage from storage, extracts shell (style + header + footer),
+    // asks Claude only for the content section, then reassembles.
+    // Always builds: contact. Plus any client-requested or operator-agreed pages.
     // ════════════════════════════════════════════════════════════════════
     try {
-      const contactPrompt = `You are building the CONTACT page for ${businessName}, a ${businessType} in ${city}, ${state}. Build a complete, professional, mobile-responsive HTML page.
+      const { data: homeFile } = await supabase.storage
+        .from("generated-sites")
+        .download(`${clientId}/deploy/index.html`);
+      if (!homeFile) throw new Error("Homepage not found in storage — cannot build custom pages");
+      const homeHTML = await homeFile.text();
+
+      const shell = extractShell(homeHTML);
+      if (!shell.styleBlock || !shell.headerHTML || !shell.footerHTML) {
+        throw new Error(`Failed to extract shell — style:${!!shell.styleBlock} header:${!!shell.headerHTML} footer:${!!shell.footerHTML}`);
+      }
+
+      // Build the list of custom pages to generate
+      type CustomPageSpec = { name: string; description: string; slug: string; source: string };
+      const pageMap = new Map<string, CustomPageSpec>();
+
+      // Always include Contact
+      pageMap.set("contact", {
+        name: "Contact",
+        slug: "contact",
+        source: "always",
+        description: `Contact page with: page hero (breadcrumb HOME › CONTACT, headline "Contact ${businessName}"); two-column layout. LEFT column: contact info — phone (${phone}) as a tel: link, email (${email || "n/a"}) as a mailto: link, service area (${intake.service_area || city}), business hours (${intake.business_hours ? JSON.stringify(intake.business_hours) : "by appointment"}). RIGHT column: contact form with fields — first name, last name, email, phone, service type dropdown populated with the real services [${serviceNames.join(", ") || "General Inquiry"}], message textarea, and a SUBMIT REQUEST button.`,
+      });
+
+      // Intake custom pages
+      const intakeCustomPages: any[] = Array.isArray(intake.custom_pages) ? intake.custom_pages : [];
+      for (const p of intakeCustomPages) {
+        const name = (typeof p === "string" ? p : p?.name || p?.title || "").trim();
+        if (!name) continue;
+        const description = (typeof p === "object" ? (p?.description || p?.notes || "") : "") || `${name} page for ${businessName}`;
+        const slug = slugify(name);
+        if (!slug || pageMap.has(slug)) continue;
+        pageMap.set(slug, { name, slug, description, source: "intake" });
+      }
+
+      // Operator pages_agreed (override intake on overlap)
+      const pagesAgreed: any[] = Array.isArray((callNotes as any)?.pages_agreed) ? (callNotes as any).pages_agreed : [];
+      for (const p of pagesAgreed) {
+        const name = (typeof p === "string" ? p : p?.name || p?.title || "").trim();
+        if (!name) continue;
+        const description = (typeof p === "object" ? (p?.description || p?.notes || "") : "") || `${name} page for ${businessName}`;
+        const slug = slugify(name);
+        if (!slug) continue;
+        // Skip pages already produced by dedicated generators above
+        if (["about", "services", "index", "home"].includes(slug)) continue;
+        pageMap.set(slug, { name, slug, description, source: "operator" }); // override intake
+      }
+
+      console.log(`[extra-pages] Custom pages to build: ${[...pageMap.keys()].join(", ")}`);
+
+      for (const spec of pageMap.values()) {
+        try {
+          const customPrompt = `Build the content section for a ${spec.name.toUpperCase()} page for ${businessName}, a ${businessType} in ${city}, ${state}.
+
+Use ONLY the provided CSS classes — do not write any new CSS, do not add <style> tags, do not use inline style attributes. Use the provided header and footer exactly as-is. Only return the HTML that goes between the header and footer. All button styles, colors, fonts, inputs, and card styles are already defined in the CSS.
+
+PAGE BRIEF: ${spec.description}
 
 BUSINESS INFO:
+- Name: ${businessName}
+- Type: ${businessType}
+- City: ${city}, ${state}
 - Phone: ${phone}
 - Email: ${email}
-- Address: ${address || "mobile/service-area based — no fixed address"}
+- Address: ${address || "service-area based"}
 - Service area: ${intake.service_area || city}
-- Hours: ${intake.business_hours ? JSON.stringify(intake.business_hours) : "not provided"}
-- Services: ${serviceNames.join(", ")}
+- Services: ${serviceNames.join(", ") || "n/a"}
+- Hours: ${intake.business_hours ? JSON.stringify(intake.business_hours) : "by appointment"}
 
-DESIGN REQUIREMENTS:
-- Match this exact color scheme: primary/red = ${primaryColor}, accent/gold = ${accentColor}, dark = #0d1d3b
-- Use these fonts: heading = ${fonts.heading}, body = ${fonts.body}
-- Load from Google Fonts: ${fonts.googleUrl}
-- Same topbar, header, footer structure as the homepage
-- Navigation: Home → ./index.html, Services → ./services.html, About → ./about.html, Contact → ./contact.html (active)
-- Logo: ${logoHTML}
+EXISTING CSS CLASSES YOU MUST REUSE (extracted from the live site):
+${listClassNames(shell.styleBlock).slice(0, 200).join(", ")}
 
-CALL NOTES: ${callNotes ? JSON.stringify({ tone_of_voice: (callNotes as any).tone_of_voice, contact_preferences: (callNotes as any).contact_preferences, booking_url: (callNotes as any).booking_url }, null, 2) : "None"}
+HEADER (already on the page, do NOT include in your output):
+${shell.headerHTML.substring(0, 500)}...
 
-SECTIONS TO INCLUDE:
-1. Topbar with rating and phone
-2. Sticky header with logo, nav, and REQUEST SERVICE button
-3. Mobile menu (hamburger)
-4. Page hero — dark background, breadcrumb (HOME › CONTACT), page title "CONTACT {{BUSINESS_NAME}}"
-5. Main content — two column layout:
-   Left: contact info (phone as tel: link, email as mailto: link, service area, hours if available, service area tags)
-   Right: contact form (first name, last name, email, phone, service type dropdown with real services, message textarea, SUBMIT REQUEST button)
-6. Footer with logo, tagline, phone, address, service links, company links, newsletter signup
-7. Analytics script before </body>: ${analyticsScript}
+FOOTER (already on the page, do NOT include in your output):
+${shell.footerHTML.substring(0, 300)}...
+
+CALL NOTES TONE: ${callNotes ? JSON.stringify({ tone_of_voice: (callNotes as any).tone_of_voice, tone_custom: (callNotes as any).tone_custom, exact_phrases: (callNotes as any).exact_phrases }, null, 2) : "None"}
 
 RULES:
-- All CSS inlined in <style> tag in <head>
-- All JS inlined in <script> before </body>
-- Mobile responsive — works perfectly on all screen sizes
-- Phone numbers as tel: links
-- Emails as mailto: links
-- No external CSS or JS files
-- Return complete HTML from <!DOCTYPE html> to </html>
-- No markdown, no code blocks, raw HTML only`;
+- Return ONLY the inner content HTML — typically wrapped in <main>...</main> or a series of <section>...</section> blocks.
+- Do NOT include <!DOCTYPE>, <html>, <head>, <body>, <style>, the header, or the footer — those are already in place.
+- Do NOT use inline style="" attributes. Reuse classes from the CSS list above (e.g. .btn, .container, .section, .card, etc.).
+- Phone numbers as tel:${phoneRaw} links. Emails as mailto:${email} links.
+- Page must be mobile-responsive using existing classes only.
+- Include a page hero / breadcrumb (HOME › ${spec.name.toUpperCase()}) at the top.
+- Every word should feel specific to this business — never generic filler.
+- Output raw HTML only. No markdown, no code blocks, no explanation.`;
 
-      console.log(`[extra-pages] Generating contact page...`);
-      const contactResult = await callAI(ANTHROPIC_API_KEY, contactPrompt, "contact");
-      let contactHTML = stripMarkdown(contactResult.text);
-      if (!contactHTML.includes("<!DOCTYPE html>")) throw new Error("Contact page returned invalid HTML");
+          console.log(`[extra-pages] Generating ${spec.slug} page (${spec.source})...`);
+          const result = await callAI(ANTHROPIC_API_KEY, customPrompt, `page-${spec.slug}`);
+          let contentHTML = stripMarkdown(result.text);
+          if (!contentHTML || contentHTML.length < 100) {
+            throw new Error(`Claude returned insufficient content (${contentHTML.length} chars)`);
+          }
 
-      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/contact.html`, injectNoindex(contactHTML));
-      await supabase.storage.from("generated-sites").upload(
-        `${clientId}/deploy/contact.html`,
-        new Blob([contactHTML], { type: "text/html" }),
-        { upsert: true, contentType: "text/html; charset=utf-8" }
-      );
+          // Assemble: doctype + head with extracted style + header + content + footer + analytics
+          const fullHTML = assemblePage({
+            title: `${spec.name} | ${businessName}`,
+            description: `${spec.name} — ${businessName}, ${businessType} in ${city}, ${state}.`,
+            googleFontsUrl: fonts.googleUrl,
+            styleBlock: shell.styleBlock,
+            headerHTML: shell.headerHTML,
+            contentHTML,
+            footerHTML: shell.footerHTML,
+            analyticsScript,
+          });
 
-      generated.push("contact");
-      console.log(`[extra-pages] ✓ contact.html (${contactResult.outputTokens} tokens)`);
+          await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/${spec.slug}.html`, injectNoindex(fullHTML));
+          await supabase.storage.from("generated-sites").upload(
+            `${clientId}/deploy/${spec.slug}.html`,
+            new Blob([fullHTML], { type: "text/html" }),
+            { upsert: true, contentType: "text/html; charset=utf-8" }
+          );
+
+          generated.push(spec.slug);
+          console.log(`[extra-pages] ✓ ${spec.slug}.html (${result.outputTokens} tokens, source=${spec.source})`);
+        } catch (e: any) {
+          console.error(`[extra-pages] ✗ ${spec.slug} failed:`, e.message);
+          failed.push(`${spec.slug}: ${e.message}`);
+        }
+      }
     } catch (e: any) {
-      console.error("[extra-pages] ✗ contact failed:", e.message);
-      failed.push(`contact: ${e.message}`);
+      console.error("[extra-pages] ✗ universal page generator failed:", e.message);
+      failed.push(`custom-pages: ${e.message}`);
     }
 
     // ── Mark complete ────────────────────────────────────────────────────
@@ -778,5 +848,86 @@ function pickServiceImage(index: number, portfolioPhotos: string[], fallbacks: s
   if (portfolioPhotos[index]) return portfolioPhotos[index];
   if (portfolioPhotos.length > 0) return portfolioPhotos[index % portfolioPhotos.length];
   return fallbacks.find((u) => !!u) || "";
+}
+
+// ── Universal custom-page helpers ────────────────────────────────────
+
+function slugify(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .substring(0, 60);
+}
+
+function extractShell(html: string): { styleBlock: string; headerHTML: string; footerHTML: string } {
+  // Capture the FIRST <style>...</style> block (and any topbar styles too — usually only one)
+  const styleMatch = html.match(/<style[^>]*>[\s\S]*?<\/style>/i);
+  const styleBlock = styleMatch ? styleMatch[0] : "";
+
+  // Header: prefer the first <header>...</header>; include any preceding topbar div if present
+  const headerMatch = html.match(/<header[\s\S]*?<\/header>/i);
+  let headerHTML = headerMatch ? headerMatch[0] : "";
+  // Try to also grab a topbar that immediately precedes the header
+  if (headerMatch) {
+    const before = html.substring(0, html.indexOf(headerMatch[0]));
+    const topbarMatch = before.match(/<div[^>]*class=["'][^"']*(?:topbar|top-bar|announcement-bar)[^"']*["'][^>]*>[\s\S]*?<\/div>\s*$/i);
+    if (topbarMatch) headerHTML = topbarMatch[0] + "\n" + headerHTML;
+  }
+
+  // Footer: last <footer>...</footer>
+  const footerMatches = [...html.matchAll(/<footer[\s\S]*?<\/footer>/gi)];
+  const footerHTML = footerMatches.length ? footerMatches[footerMatches.length - 1][0] : "";
+
+  return { styleBlock, headerHTML, footerHTML };
+}
+
+function listClassNames(styleBlock: string): string[] {
+  const classRegex = /\.([a-zA-Z_][a-zA-Z0-9_-]*)/g;
+  const set = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = classRegex.exec(styleBlock)) !== null) {
+    set.add("." + m[1]);
+  }
+  return [...set];
+}
+
+function assemblePage(opts: {
+  title: string;
+  description: string;
+  googleFontsUrl: string;
+  styleBlock: string;
+  headerHTML: string;
+  contentHTML: string;
+  footerHTML: string;
+  analyticsScript: string;
+}): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHTML(opts.title)}</title>
+  <meta name="description" content="${escapeHTML(opts.description)}" />
+  ${opts.googleFontsUrl ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="${opts.googleFontsUrl}" rel="stylesheet" />` : ""}
+  ${opts.styleBlock}
+</head>
+<body>
+${opts.headerHTML}
+${opts.contentHTML}
+${opts.footerHTML}
+${opts.analyticsScript}
+</body>
+</html>`;
+}
+
+function escapeHTML(s: string): string {
+  return (s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
