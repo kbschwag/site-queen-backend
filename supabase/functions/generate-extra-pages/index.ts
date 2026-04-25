@@ -71,9 +71,11 @@ serve(async (req) => {
     ).filter(Boolean);
 
     // ── Determine template prefix ────────────────────────────────────────
+    // Each template lives in its own folder inside the `templates` bucket:
+    //   {templateId}/about.html, {templateId}/services.html, etc.
     const TEMPLATE_FILE_MAP: Record<string, string> = {
       trades: "trades-hero",
-      professional: "professional",
+      feminine: "feminine-bold",
       warm: "warm-welcome",
       local: "local-favorite",
       modern: "modern-business",
