@@ -70,9 +70,11 @@ serve(async (req) => {
     }
 
     // ── Load template ────────────────────────────────────────────────────
+    // Each template lives in its own folder inside the `templates` bucket:
+    //   {templateId}/index.html, {templateId}/style.css, etc.
     const TEMPLATE_FILE_MAP: Record<string, string> = {
       trades: "trades-hero",
-      professional: "professional",
+      feminine: "feminine-bold",
       warm: "warm-welcome",
       local: "local-favorite",
       modern: "modern-business",
@@ -87,8 +89,8 @@ serve(async (req) => {
       ? (TEMPLATE_FILE_MAP[selectedTemplate] || selectedTemplate)
       : "trades-hero";
 
-    const { data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}.html`);
-    if (!htmlFile) throw new Error(`Template not found: ${templateId}.html`);
+    const { data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}/index.html`);
+    if (!htmlFile) throw new Error(`Template not found: ${templateId}/index.html`);
     const templateHTML = await htmlFile.text();
 
     // ── Business data shortcuts ──────────────────────────────────────────
