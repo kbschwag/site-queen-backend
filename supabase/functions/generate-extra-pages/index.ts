@@ -541,6 +541,7 @@ Return ONLY valid JSON. No markdown:
       }
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");
+      servicesHTML = wireContactForms(servicesHTML, clientId, supabaseUrl);
 
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/services.html`, injectNoindex(servicesHTML));
       await supabase.storage.from("generated-sites").upload(
