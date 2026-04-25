@@ -149,6 +149,15 @@ serve(async (req) => {
       ? `<img src="${logoUrl}" alt="${businessName} logo" class="logo-img" />`
       : `<div class="logo-icon"><svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`;
 
+    // ── Favicon (uploaded → logo → generated SVG initial) ────────────────
+    const faviconTag = buildFaviconHTML({
+      faviconUrl,
+      logoUrl,
+      businessName,
+      primaryColor,
+    });
+
+
     // ── Map HTML ─────────────────────────────────────────────────────────
     const mapBuild = buildMapHTML({
       locationType: intake.location_type || intake.business_location_type || "",
