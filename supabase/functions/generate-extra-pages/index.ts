@@ -720,3 +720,63 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
 function stripMarkdown(s: string): string {
   return s.replace(/^```(?:html|json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
 }
+
+// ── Photo helpers (mirror part1) ─────────────────────────────────────
+function buildStockSearchTerms(businessType: string, firstService: string): string[] {
+  const ctx = `${businessType || ""} ${firstService || ""}`.toLowerCase();
+  const map: Array<{ match: RegExp; terms: string[] }> = [
+    { match: /excavat|earthwork|grading/, terms: ["excavator digging site", "excavation construction site", "earthwork heavy equipment"] },
+    { match: /plumb/, terms: ["plumber pipe repair", "plumber working under sink", "bathroom plumbing service"] },
+    { match: /electric/, terms: ["electrician working", "electrical panel installation", "wiring residential"] },
+    { match: /hvac|heating|cooling|air condition/, terms: ["HVAC technician air conditioning", "HVAC repair service", "air conditioning unit installation"] },
+    { match: /roof/, terms: ["roofer working on roof", "roof repair contractor", "shingle roof installation"] },
+    { match: /landscap|lawn|yard|garden/, terms: ["landscaping lawn care", "professional landscaper working", "garden maintenance crew"] },
+    { match: /clean/, terms: ["professional cleaning service", "house cleaner working", "commercial cleaning crew"] },
+    { match: /paint/, terms: ["house painter working", "interior painting service", "exterior house painting"] },
+    { match: /floor/, terms: ["flooring installation", "hardwood floor installer", "tile flooring contractor"] },
+    { match: /construct|contract|build|remodel|renovat/, terms: ["construction contractor working", "home renovation crew", "general contractor jobsite"] },
+    { match: /salon|hair|beauty|spa/, terms: ["modern hair salon", "beauty salon interior", "spa treatment room"] },
+    { match: /restaurant|cafe|food|bakery/, terms: ["restaurant interior", "chef cooking kitchen", "cafe atmosphere"] },
+    { match: /fitness|gym|train/, terms: ["fitness training session", "gym workout", "personal trainer client"] },
+    { match: /photo/, terms: ["photographer working", "photography studio", "camera lens close up"] },
+    { match: /law|attorney|legal/, terms: ["modern law office", "attorney consultation", "legal documents desk"] },
+    { match: /dental|dentist/, terms: ["modern dental office", "dentist patient", "dental clinic"] },
+    { match: /vet|pet|animal/, terms: ["veterinarian with pet", "pet grooming", "happy dog at vet"] },
+    { match: /auto|mechanic|car repair/, terms: ["auto mechanic working", "car repair shop", "mechanic engine bay"] },
+    { match: /pest|exterminat/, terms: ["pest control technician", "exterminator working", "pest control service"] },
+    { match: /pool/, terms: ["pool maintenance", "pool cleaner working", "swimming pool service"] },
+    { match: /window/, terms: ["window installation", "window cleaner working", "professional window service"] },
+  ];
+  for (const { match, terms } of map) {
+    if (match.test(ctx)) return terms;
+  }
+  const safe = ctx.trim().replace(/\s+/g, " ").substring(0, 60);
+  return safe ? [safe, `${safe} professional service`, `professional ${businessType || "small business"}`] : ["professional small business service", "local business team"];
+}
+
+async function fetchUnsplashPhoto(searchTerms: string[]): Promise<string> {
+  const key = Deno.env.get("UNSPLASH_ACCESS_KEY");
+  if (!key) return "";
+  for (const term of searchTerms) {
+    try {
+      const r = await fetch(
+        `https://api.unsplash.com/photos/random?query=${encodeURIComponent(term)}&orientation=landscape`,
+        { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } },
+      );
+      if (r.ok) {
+        const p = await r.json();
+        if (p?.urls?.raw) return `${p.urls.raw}&w=1600&h=900&fit=crop&auto=format&q=80`;
+      }
+    } catch (e) {
+      console.error(`[unsplash] error for "${term}":`, e);
+    }
+  }
+  return "";
+}
+
+function pickServiceImage(index: number, portfolioPhotos: string[], fallbacks: string[]): string {
+  if (portfolioPhotos[index]) return portfolioPhotos[index];
+  if (portfolioPhotos.length > 0) return portfolioPhotos[index % portfolioPhotos.length];
+  return fallbacks.find((u) => !!u) || "";
+}
+
