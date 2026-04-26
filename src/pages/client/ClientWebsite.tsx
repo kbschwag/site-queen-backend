@@ -373,12 +373,23 @@ export default function ClientWebsite() {
 
     return (
       <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
-        {/* Header banner — purple */}
-        <div className="bg-primary/10 border border-primary/20 rounded-xl p-5 text-center">
-          <h1 className="text-2xl font-bold mb-1">Your website is ready to preview ♛</h1>
-          <p className="text-sm text-muted-foreground">
-            Take your time reviewing it. When you're ready, choose one of the options below.
-          </p>
+        {/* Header banner — purple, with prominent Publish CTA */}
+        <div className="bg-primary/10 border border-primary/20 rounded-xl p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="text-center sm:text-left">
+              <h1 className="text-2xl font-bold mb-1">Your website is ready to preview ♛</h1>
+              <p className="text-sm text-muted-foreground">
+                Take your time reviewing it. When you're happy, hit Publish to take it live on your domain.
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowApproveModal(true)}
+              size="lg"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0"
+            >
+              <Rocket className="h-4 w-4" /> Publish my website
+            </Button>
+          </div>
         </div>
 
         {/* Status-specific banners */}
