@@ -197,6 +197,11 @@ export function InlineRevisionPanel({ clientId }: Props) {
       });
       if (error) throw new Error(error.message || "Edit failed");
       if ((data as any)?.error) throw new Error((data as any).error);
+      if ((data as any)?.queued && (data as any)?.job_id) {
+        setActiveJobId((data as any).job_id);
+        setStatusMsg("Applying changes in the background…");
+        return;
+      }
       setStatus("success");
       setStatusMsg("✓ Changes applied");
       setLastVersionTs((data as any)?.version_timestamp || null);
@@ -357,6 +362,13 @@ export function InlineRevisionPanel({ clientId }: Props) {
           </Button>
         </div>
       </div>
+
+      {status === "running" && statusMsg && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>{statusMsg}</span>
+        </div>
+      )}
 
       {status === "success" && (
         <div className="flex items-center gap-2 flex-wrap">
