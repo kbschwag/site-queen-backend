@@ -698,7 +698,15 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               </Tooltip>
             </TooltipProvider>
 
-            <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
+            <Button
+              variant={revisionPanelOpen ? "default" : "outline"}
+              onClick={() => setRevisionPanelOpen((v) => !v)}
+              className="gap-2 w-full"
+            >
+              <Wrench className="h-4 w-4" /> Revise Site
+            </Button>
+
+            {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
           </CardContent>
         </Card>
       )}
