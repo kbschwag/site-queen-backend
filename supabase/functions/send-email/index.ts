@@ -1241,7 +1241,7 @@ serve(async (req) => {
       ? (emailTemplate.subject as (d: any) => string)(templateData)
       : emailTemplate.subject;
 
-    const response = await fetch(`${GATEWAY_URL}/emails`, {
+    const sendEmail = (from: string) => fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1249,7 +1249,7 @@ serve(async (req) => {
         "X-Connection-Api-Key": RESEND_API_KEY,
       },
       body: JSON.stringify({
-        from: FROM_ADDRESS,
+        from,
         to: [to],
         ...(replyTo ? { reply_to: replyTo } : {}),
         subject,
@@ -1257,7 +1257,14 @@ serve(async (req) => {
       }),
     });
 
-    const result = await response.json();
+    let response = await sendEmail(FROM_ADDRESS);
+    let result = await response.json();
+
+    if (!response.ok && isDomainNotVerifiedError(result)) {
+      console.warn("Resend sender domain not verified; retrying with sandbox sender:", result);
+      response = await sendEmail(SANDBOX_FROM_ADDRESS);
+      result = await response.json();
+    }
 
     // Log the email
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1281,7 +1288,7 @@ serve(async (req) => {
         target_role: "operator",
       });
 
-      if (result?.statusCode === 403 && result?.message?.includes("testing emails")) {
+      if (isSandboxRecipientError(result)) {
         console.warn("Resend sandbox mode: email not delivered to", to);
         return new Response(JSON.stringify({ success: true, sandbox: true, warning: "Resend sandbox mode" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
