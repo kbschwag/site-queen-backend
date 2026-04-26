@@ -1089,6 +1089,63 @@ export type Database = {
         }
         Relationships: []
       }
+      quick_edit_jobs: {
+        Row: {
+          change_type: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          edited_files: string[]
+          error_message: string | null
+          id: string
+          instruction: string
+          operator_email: string | null
+          operator_id: string
+          pages: string
+          skipped_files: string[]
+          started_at: string | null
+          status: string
+          updated_at: string
+          version_timestamp: string | null
+        }
+        Insert: {
+          change_type?: string | null
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          edited_files?: string[]
+          error_message?: string | null
+          id?: string
+          instruction: string
+          operator_email?: string | null
+          operator_id: string
+          pages?: string
+          skipped_files?: string[]
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          version_timestamp?: string | null
+        }
+        Update: {
+          change_type?: string | null
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          edited_files?: string[]
+          error_message?: string | null
+          id?: string
+          instruction?: string
+          operator_email?: string | null
+          operator_id?: string
+          pages?: string
+          skipped_files?: string[]
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          version_timestamp?: string | null
+        }
+        Relationships: []
+      }
       rate_limits: {
         Row: {
           count: number | null

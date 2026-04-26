@@ -84,70 +84,42 @@ ${currentHtml}`;
   return { systemPrompt, userPrompt };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+function json(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
-  // Auth check
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+function runInBackground(task: Promise<unknown>) {
+  // @ts-ignore — EdgeRuntime is available in Supabase Edge runtime
+  if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any).waitUntil) {
+    // @ts-ignore
+    (EdgeRuntime as any).waitUntil(task);
+    return;
   }
+  task.catch((e) => console.error("[quick-edit] background task failed:", e));
+}
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+async function updateJob(supabase: any, jobId: string, patch: Record<string, unknown>) {
+  const { error } = await supabase.from("quick_edit_jobs").update(patch).eq("id", jobId);
+  if (error) console.error(`[quick-edit] failed to update job ${jobId}:`, error);
+}
 
-  if (!anthropicKey) {
-    return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const supabase = createClient(supabaseUrl, serviceKey);
-
-  const { data: { user: caller }, error: authErr } = await supabase.auth.getUser(
-    authHeader.replace("Bearer ", "")
-  );
-  if (authErr || !caller) {
-    return new Response(JSON.stringify({ error: "Invalid token" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // Verify caller is operator (admin or partner)
-  const [{ data: roleRow }, { data: profileRow }] = await Promise.all([
-    supabase.from("user_roles").select("role").eq("user_id", caller.id).eq("role", "admin").maybeSingle(),
-    supabase.from("profiles").select("role, email").eq("user_id", caller.id).maybeSingle(),
-  ]);
-  const isOperator = !!roleRow || profileRow?.role === "partner" || profileRow?.role === "admin";
-  if (!isOperator) {
-    return new Response(JSON.stringify({ error: "Operator access required" }), {
-      status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  let clientId: string | null = null;
-  let instruction = "";
-  let pages = "homepage";
+async function processQuickEditJob(params: {
+  supabase: any;
+  anthropicKey: string;
+  jobId: string;
+  clientId: string;
+  instruction: string;
+  pages: string;
+  callerId: string;
+  operatorEmail: string | null;
+}) {
+  const { supabase, anthropicKey, jobId, clientId, instruction, pages, callerId, operatorEmail } = params;
 
   try {
-    const body = await req.json();
-    clientId = body.client_id;
-    instruction = (body.instruction || "").toString().trim();
-    pages = (body.pages || "homepage").toString().trim().toLowerCase();
-
-    if (!clientId || !instruction) {
-      return new Response(JSON.stringify({ error: "client_id and instruction required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (instruction.length > 4000) {
-      return new Response(JSON.stringify({ error: "Instruction too long (max 4000 chars)" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    await updateJob(supabase, jobId, { status: "processing", started_at: new Date().toISOString() });
 
     const changeType = detectChangeType(instruction);
 
@@ -157,13 +129,11 @@ serve(async (req) => {
       filesToEdit = [...ALL_PAGE_FILES];
     } else {
       const file = PAGE_MAP[pages];
-      if (!file) {
-        return new Response(JSON.stringify({ error: `Invalid page: ${pages}` }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      if (!file) throw new Error(`Invalid page: ${pages}`);
       filesToEdit = [file];
     }
+
+    await updateJob(supabase, jobId, { change_type: changeType });
 
     // ─── Versioning: snapshot every existing deploy file before editing (parallel) ──
     const versionTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -198,7 +168,7 @@ serve(async (req) => {
       instruction,
       files_saved: filesSaved,
       restored: false,
-      created_by: caller.id,
+      created_by: callerId,
     });
 
     // ─── Edit each target file (parallel — keeps total time near a single call) ──
@@ -269,8 +239,8 @@ serve(async (req) => {
         );
       if (upErr) throw new Error(`Storage upload failed for ${pageFile}: ${upErr.message}`);
 
-      // Push to Hostinger staging in the background so it doesn't block the response.
-      const stagingPush = (async () => {
+      // Push to Hostinger staging in the background so a slow mirror does not hold the job open.
+      runInBackground((async () => {
         try {
           const stagingHtml = injectNoindex(updatedHtml);
           await uploadFileToHostingerFtp(
@@ -280,14 +250,7 @@ serve(async (req) => {
         } catch (e: any) {
           console.error(`[quick-edit] Hostinger staging push error for ${pageFile}:`, e);
         }
-      })();
-      // @ts-ignore — EdgeRuntime is available in Supabase Edge runtime
-      if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any).waitUntil) {
-        // @ts-ignore
-        (EdgeRuntime as any).waitUntil(stagingPush);
-      } else {
-        await stagingPush;
-      }
+      })());
 
       editedFiles.push(pageFile);
     };
@@ -295,11 +258,14 @@ serve(async (req) => {
     const results = await Promise.allSettled(filesToEdit.map(editOne));
 
     if (rateLimited) {
-      await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null,
+      await logEdit(supabase, clientId, callerId, operatorEmail,
         `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
-      return new Response(JSON.stringify({ error: "Rate limited — please wait a moment and try again." }), {
-        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      await updateJob(supabase, jobId, {
+        status: "failed",
+        error_message: "Rate limited — please wait a moment and try again.",
+        completed_at: new Date().toISOString(),
       });
+      return;
     }
 
     const failures = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
@@ -313,34 +279,127 @@ serve(async (req) => {
       .update({
         last_updated: new Date().toISOString(),
         operator_edit_count:
-          ((await supabase.from("sites").select("operator_edit_count").eq("client_id", clientId!).maybeSingle())
+          ((await supabase.from("sites").select("operator_edit_count").eq("client_id", clientId).maybeSingle())
             .data?.operator_edit_count ?? 0) + 1,
       } as any)
-      .eq("client_id", clientId!);
+      .eq("client_id", clientId);
 
     await logEdit(
-      supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null,
+      supabase, clientId, callerId, operatorEmail,
       `[${pages}, ${changeType}] ${instruction}`, "completed", null
     );
 
-    return new Response(JSON.stringify({
-      success: true,
-      version_timestamp: versionTimestamp,
+    await updateJob(supabase, jobId, {
+      status: "completed",
       change_type: changeType,
+      version_timestamp: versionTimestamp,
       edited_files: editedFiles,
       skipped_files: skippedFiles,
-    }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      error_message: failures.length > 0
+        ? failures.map((f) => (f.reason as any)?.message ?? String(f.reason)).join("; ")
+        : null,
+      completed_at: new Date().toISOString(),
     });
   } catch (e: any) {
-    console.error("quick-edit-html error:", e);
-    if (clientId) {
-      await logEdit(supabase, clientId, caller.id, caller.email ?? null,
-        `[${pages}] ${instruction}`, "failed", e.message ?? String(e));
-    }
-    return new Response(JSON.stringify({ error: e.message ?? "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    console.error("quick-edit-html background error:", e);
+    await logEdit(supabase, clientId, callerId, operatorEmail,
+      `[${pages}] ${instruction}`, "failed", e.message ?? String(e));
+    await updateJob(supabase, jobId, {
+      status: "failed",
+      error_message: e.message ?? String(e),
+      completed_at: new Date().toISOString(),
     });
+  }
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // Auth check
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+
+  if (!anthropicKey) {
+    return json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
+  }
+
+  const supabase = createClient(supabaseUrl, serviceKey);
+
+  const { data: { user: caller }, error: authErr } = await supabase.auth.getUser(
+    authHeader.replace("Bearer ", "")
+  );
+  if (authErr || !caller) {
+    return json({ error: "Invalid token" }, 401);
+  }
+
+  // Verify caller is operator (admin or partner)
+  const [{ data: roleRow }, { data: profileRow }] = await Promise.all([
+    supabase.from("user_roles").select("role").eq("user_id", caller.id).eq("role", "admin").maybeSingle(),
+    supabase.from("profiles").select("role, email").eq("user_id", caller.id).maybeSingle(),
+  ]);
+  const isOperator = !!roleRow || profileRow?.role === "partner" || profileRow?.role === "admin";
+  if (!isOperator) {
+    return json({ error: "Operator access required" }, 403);
+  }
+
+  try {
+    const body = await req.json();
+    const clientId = (body.client_id || "").toString().trim();
+    const instruction = (body.instruction || "").toString().trim();
+    const pages = (body.pages || "homepage").toString().trim().toLowerCase();
+
+    if (!clientId || !instruction) {
+      return json({ error: "client_id and instruction required" }, 400);
+    }
+    if (!/^[0-9a-fA-F-]{36}$/.test(clientId)) {
+      return json({ error: "Invalid client_id" }, 400);
+    }
+    if (instruction.length > 4000) {
+      return json({ error: "Instruction too long (max 4000 chars)" }, 400);
+    }
+    if (pages !== "all" && !PAGE_MAP[pages]) {
+      return json({ error: `Invalid page: ${pages}` }, 400);
+    }
+
+    const operatorEmail = profileRow?.email ?? caller.email ?? null;
+    const { data: job, error: jobErr } = await supabase
+      .from("quick_edit_jobs")
+      .insert({
+        client_id: clientId,
+        operator_id: caller.id,
+        operator_email: operatorEmail,
+        instruction,
+        pages,
+        status: "pending",
+      })
+      .select("id")
+      .single();
+
+    if (jobErr || !job?.id) {
+      throw new Error(jobErr?.message || "Unable to queue quick edit job");
+    }
+
+    runInBackground(processQuickEditJob({
+      supabase,
+      anthropicKey,
+      jobId: job.id,
+      clientId,
+      instruction,
+      pages,
+      callerId: caller.id,
+      operatorEmail,
+    }));
+
+    return json({ success: true, queued: true, job_id: job.id, status: "pending" });
+  } catch (e: any) {
+    console.error("quick-edit-html error:", e);
+    return json({ error: e.message ?? "Unknown error" }, 500);
   }
 });
 
