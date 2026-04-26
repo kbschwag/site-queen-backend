@@ -123,8 +123,22 @@ serve(async (req) => {
 
     if (!htmlFile) throw new Error(`Template not found: ${templateId}/index.html`);
 
-    const templateHTML = await htmlFile.text();
+    let templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
+
+    // ── Resolve client brand colors and inject into the homepage :root ──
+    // Mirrors the logic used by generate-extra-pages so the homepage matches
+    // the about/services pages. Falls back to the template's existing
+    // --red / --gold values when the client did not provide a color.
+    const templateRedMatch = templateHTML.match(/--red\s*:\s*([^;]+);/);
+    const templateGoldMatch = templateHTML.match(/--gold\s*:\s*([^;]+);/);
+    const templateRed = templateRedMatch ? templateRedMatch[1].trim() : "#cb2020";
+    const templateGold = templateGoldMatch ? templateGoldMatch[1].trim() : "#f6a823";
+    const primaryColorResolved = resolveBrandColor(intake.primary_color, templateRed);
+    const accentColorResolved = resolveBrandColor(intake.accent_color, templateGold);
+    templateHTML = injectBrandColorsIntoRoot(templateHTML, primaryColorResolved, accentColorResolved);
+    console.log(`[generate] Brand colors — primary=${primaryColorResolved} (template default ${templateRed}), accent=${accentColorResolved} (template default ${templateGold})`);
+
 
     // ── Business data shortcuts ──────────────────────────────────────────
     const businessName = (clientData as any)?.business_name || intake.business_name || "Business";
