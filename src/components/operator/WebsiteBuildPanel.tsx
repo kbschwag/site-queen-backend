@@ -637,15 +637,21 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               </div>
             )}
 
-            <div className="flex gap-2">
-              <Button onClick={() => handleShareWithClient(true)} disabled={sharing} className="gap-2 flex-1" variant="outline">
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={() => handleShareWithClient(true)} disabled={sharing} className="gap-2 flex-1 min-w-[180px]" variant="outline">
                 {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Reshare staging
               </Button>
-              <Button variant="outline" onClick={handleManualReview} className="gap-2">
+              <Button
+                variant={revisionPanelOpen ? "default" : "outline"}
+                onClick={() => setRevisionPanelOpen((v) => !v)}
+                className="gap-2"
+              >
                 <Wrench className="h-4 w-4" /> I'll work on it
               </Button>
             </div>
+
+            {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
 
             <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
