@@ -17,7 +17,6 @@ import { toast } from "sonner";
 import {
   Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles, ImageIcon, Mail, Pencil, Phone, RefreshCw,
 } from "lucide-react";
-import { QuickEditPanel } from "./QuickEditPanel";
 import { InlineRevisionPanel } from "./InlineRevisionPanel";
 import { FailureCard } from "./GenerationFailureCard";
 import { CodeEditorModal } from "./CodeEditorModal";
