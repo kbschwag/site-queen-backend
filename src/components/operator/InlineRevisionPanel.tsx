@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,7 @@ export function InlineRevisionPanel({ clientId }: Props) {
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [lastVersionTs, setLastVersionTs] = useState<string | null>(null);
   const [restoringTs, setRestoringTs] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   const [uploading, setUploading] = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
@@ -85,6 +86,40 @@ export function InlineRevisionPanel({ clientId }: Props) {
       return (data as any[]) || [];
     },
   });
+
+  const { data: activeJob } = useQuery({
+    queryKey: ["quick-edit-job", activeJobId],
+    enabled: !!activeJobId && status === "running",
+    refetchInterval: !!activeJobId && status === "running" ? 3000 : false,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("quick_edit_jobs" as any)
+        .select("id, status, version_timestamp, error_message")
+        .eq("id", activeJobId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as any;
+    },
+  });
+
+  useEffect(() => {
+    if (!activeJob) return;
+    if (activeJob.status === "completed") {
+      setStatus("success");
+      setStatusMsg("✓ Changes applied");
+      setLastVersionTs(activeJob.version_timestamp || null);
+      setInstruction("");
+      setUploadedUrl(null);
+      setUploadedName(null);
+      setActiveJobId(null);
+      queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+      refetchVersions();
+    } else if (activeJob.status === "failed") {
+      setStatus("error");
+      setStatusMsg(activeJob.error_message || "Edit failed");
+      setActiveJobId(null);
+    }
+  }, [activeJob, clientId, queryClient, refetchVersions]);
 
   const handleFilePick = () => fileInputRef.current?.click();
 
