@@ -50,6 +50,7 @@ const IMAGE_SLOT_OPTIONS = [
   { value: "service-5", label: "Service Photo 5" },
   { value: "service-6", label: "Service Photo 6" },
   { value: "logo", label: "Logo" },
+  { value: "other", label: "Other (see instructions)" },
 ];
 
 const slotLabel = (val: string) =>
@@ -136,11 +137,21 @@ export function InlineRevisionPanel({ clientId }: Props) {
     // Build final instruction. Photo replacement instruction takes precedence/prepends.
     let finalInstruction = text;
     if (uploadedUrl) {
-      const photoInstruction =
-        imageSlot === "favicon"
-          ? `Replace the favicon in the <head> with this new image URL: ${uploadedUrl} — find the <link rel='icon'> tag and update its href attribute to the new URL.`
-          : `Replace the ${slotLabel(imageSlot)} with this new image URL: ${uploadedUrl}`;
-      finalInstruction = text ? `${photoInstruction}\n\n${text}` : photoInstruction;
+      let photoInstruction = "";
+      if (imageSlot === "favicon") {
+        photoInstruction = `Replace the favicon in the <head> with this new image URL: ${uploadedUrl} — find the <link rel='icon'> tag and update its href attribute to the new URL.`;
+      } else if (imageSlot === "other") {
+        photoInstruction = "";
+      } else {
+        photoInstruction = `Replace the ${slotLabel(imageSlot)} with this new image URL: ${uploadedUrl}`;
+      }
+      if (photoInstruction) {
+        finalInstruction = text ? `${photoInstruction}\n\n${text}` : photoInstruction;
+      } else {
+        finalInstruction = text
+          ? `${text}\n\nUploaded image URL: ${uploadedUrl}`
+          : `Uploaded image URL: ${uploadedUrl}`;
+      }
     }
 
     setStatus("running");
