@@ -1160,6 +1160,39 @@ export type Database = {
           },
         ]
       }
+      site_versions: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          files_saved: string[] | null
+          id: string
+          instruction: string | null
+          restored: boolean | null
+          timestamp: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          files_saved?: string[] | null
+          id?: string
+          instruction?: string | null
+          restored?: boolean | null
+          timestamp: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          files_saved?: string[] | null
+          id?: string
+          instruction?: string | null
+          restored?: boolean | null
+          timestamp?: string
+        }
+        Relationships: []
+      }
       sites: {
         Row: {
           brand_vibe: string | null

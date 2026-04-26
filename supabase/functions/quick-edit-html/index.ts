@@ -9,6 +9,14 @@ const corsHeaders = {
 
 const MODEL = "claude-sonnet-4-20250514";
 
+const PAGE_MAP: Record<string, string> = {
+  homepage: "index.html",
+  about: "about.html",
+  services: "services.html",
+  contact: "contact.html",
+};
+const ALL_PAGE_FILES = Object.values(PAGE_MAP);
+
 // Inject a noindex meta tag for staging copies pushed to Hostinger.
 function injectNoindex(html: string): string {
   if (/name=["']robots["']/i.test(html)) return html;
@@ -20,6 +28,60 @@ function injectNoindex(html: string): string {
     return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
   }
   return html;
+}
+
+function detectChangeType(instruction: string): string {
+  const lower = instruction.toLowerCase();
+  if (lower.match(/color|navy|red|gold|blue|green|font|css|style|background|#[0-9a-f]{3,6}/i)) {
+    return "css_variable";
+  }
+  if (lower.match(/headline|title|text|copy|wording|say|change.*to|replace|update.*section|about|tagline/i)) {
+    return "copy";
+  }
+  if (lower.match(/remove|hide|delete|add|move|section|show|footer|header|nav/i)) {
+    return "section";
+  }
+  return "general";
+}
+
+function buildPrompt(instruction: string, changeType: string, currentHtml: string) {
+  const systemPrompt = `You are a precise HTML editor for SiteQueen websites.
+You make ONLY the specific changes requested — nothing else.
+Return ONLY raw complete HTML. No markdown, no explanation, no code blocks.`;
+
+  const userPrompt = `
+CHANGE TYPE: ${changeType}
+INSTRUCTION: ${instruction}
+
+${changeType === "css_variable" ? `
+IMPORTANT: This is a CSS variable change. Find the :root { } block and update the relevant CSS variable there.
+Do NOT change individual element styles — only update the CSS variable in :root.
+All elements using that variable will update automatically.
+Example: changing navy → find "--navy: #0d1d3b" and change the hex value.
+` : ""}
+
+${changeType === "copy" ? `
+IMPORTANT: This is a copy/text change. Find the specific text mentioned and update only that text.
+Do not change any CSS, structure, or other copy.
+` : ""}
+
+${changeType === "section" ? `
+IMPORTANT: This is a section change. Find the specific HTML section and modify only that section.
+Keep all CSS, other sections, and scripts exactly as they are.
+` : ""}
+
+RULES:
+- Make ONLY the requested change
+- Do not change anything else
+- Keep all CSS classes and IDs exactly as they are
+- Keep the analytics script intact
+- Keep all href and src attributes intact unless specifically asked to change them
+- Return the complete updated HTML
+
+CURRENT HTML:
+${currentHtml}`;
+
+  return { systemPrompt, userPrompt };
 }
 
 serve(async (req) => {
@@ -68,13 +130,13 @@ serve(async (req) => {
 
   let clientId: string | null = null;
   let instruction = "";
-  let page = "index.html";
+  let pages = "homepage";
 
   try {
     const body = await req.json();
     clientId = body.client_id;
     instruction = (body.instruction || "").toString().trim();
-    page = (body.page || "index.html").toString().trim();
+    pages = (body.pages || "homepage").toString().trim().toLowerCase();
 
     if (!clientId || !instruction) {
       return new Response(JSON.stringify({ error: "client_id and instruction required" }), {
@@ -87,54 +149,79 @@ serve(async (req) => {
       });
     }
 
-    // Determine which file(s) to edit. "all" → every HTML file present in the deploy folder.
-    const ALLOWED_PAGES = new Set(["index.html", "about.html", "services.html", "contact.html"]);
-    let pagesToEdit: string[] = [];
-    if (page === "all") {
-      const { data: list } = await supabase.storage
-        .from("generated-sites")
-        .list(`${clientId}/deploy`, { limit: 100 });
-      pagesToEdit = (list || [])
-        .map((f: any) => f.name)
-        .filter((n: string) => ALLOWED_PAGES.has(n));
-      if (pagesToEdit.length === 0) pagesToEdit = ["index.html"];
+    const changeType = detectChangeType(instruction);
+
+    // Determine which files to edit. CSS variable changes always cascade to all pages.
+    let filesToEdit: string[];
+    if (pages === "all" || changeType === "css_variable") {
+      filesToEdit = [...ALL_PAGE_FILES];
     } else {
-      if (!ALLOWED_PAGES.has(page)) {
-        return new Response(JSON.stringify({ error: `Invalid page: ${page}` }), {
+      const file = PAGE_MAP[pages];
+      if (!file) {
+        return new Response(JSON.stringify({ error: `Invalid page: ${pages}` }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      pagesToEdit = [page];
+      filesToEdit = [file];
     }
 
-    for (const pageFile of pagesToEdit) {
-      // Download current clean HTML from the deploy backup folder.
+    // ─── Versioning: snapshot every existing deploy file before editing ────────
+    const versionTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filesSaved: string[] = [];
+    for (const fname of ALL_PAGE_FILES) {
+      const { data: existing } = await supabase.storage
+        .from("generated-sites")
+        .download(`${clientId}/deploy/${fname}`);
+      if (!existing) continue; // skip files that don't exist
+      const bytes = new Uint8Array(await existing.arrayBuffer());
+      const { error: snapErr } = await supabase.storage
+        .from("generated-sites")
+        .upload(
+          `${clientId}/versions/${versionTimestamp}/${fname}`,
+          new Blob([bytes], { type: "text/html" }),
+          { upsert: true, contentType: "text/html" }
+        );
+      if (snapErr) {
+        console.error(`[quick-edit] snapshot failed for ${fname}:`, snapErr);
+        continue;
+      }
+      filesSaved.push(fname);
+    }
+
+    if (filesSaved.length === 0) {
+      throw new Error("No deployed files found to edit — has the site been generated?");
+    }
+
+    await supabase.from("site_versions").insert({
+      client_id: clientId,
+      timestamp: versionTimestamp,
+      instruction,
+      files_saved: filesSaved,
+      restored: false,
+      created_by: caller.id,
+    });
+
+    // ─── Edit each target file ────────────────────────────────────────────────
+    const editedFiles: string[] = [];
+    const skippedFiles: string[] = [];
+
+    for (const pageFile of filesToEdit) {
+      // Only edit files that actually exist
+      if (!filesSaved.includes(pageFile)) {
+        skippedFiles.push(pageFile);
+        continue;
+      }
+
       const { data: file, error: dlErr } = await supabase.storage
         .from("generated-sites")
         .download(`${clientId}/deploy/${pageFile}`);
       if (dlErr || !file) {
-        if (page === "all") {
-          console.warn(`[quick-edit] skipping missing ${pageFile}`);
-          continue;
-        }
-        throw new Error(`Could not load ${pageFile} — has the site been generated?`);
+        skippedFiles.push(pageFile);
+        continue;
       }
 
       const currentHtml = await file.text();
-
-      const aiPrompt = `You are editing an existing website HTML file (${pageFile}). Here is the current HTML:
-
-${currentHtml}
-
-Make ONLY these specific changes:
-${instruction}
-
-Rules:
-- Only change what was explicitly requested
-- Do not change anything else including structure, other sections, or styling
-- Keep all {{PLACEHOLDER}} values that haven't been filled yet intact
-- Keep the SiteQueen analytics script intact
-- Return ONLY the complete updated HTML — no explanation, no markdown, just the raw HTML`;
+      const { systemPrompt, userPrompt } = buildPrompt(instruction, changeType, currentHtml);
 
       const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -146,24 +233,26 @@ Rules:
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 16000,
-          messages: [{ role: "user", content: aiPrompt }],
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
         }),
       });
 
       if (aiRes.status === 429) {
-        await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null, instruction, "failed", "Rate limited (429)");
+        await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null,
+          `[${pageFile}] ${instruction}`, "failed", "Rate limited (429)");
         return new Response(JSON.stringify({ error: "Rate limited — please wait a moment and try again." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (!aiRes.ok) {
         const txt = await aiRes.text();
-        throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 200)}`);
+        throw new Error(`Anthropic API error ${aiRes.status} on ${pageFile}: ${txt.slice(0, 200)}`);
       }
 
       const aiJson = await aiRes.json();
       let updatedHtml: string = aiJson?.content?.[0]?.text ?? "";
-      if (!updatedHtml) throw new Error("AI returned empty content");
+      if (!updatedHtml) throw new Error(`AI returned empty content for ${pageFile}`);
 
       // Strip any accidental markdown fences
       updatedHtml = updatedHtml
@@ -175,16 +264,17 @@ Rules:
         throw new Error(`AI output for ${pageFile} does not look like a complete HTML document`);
       }
 
-      // 1) Save clean copy back to the deploy backup folder
+      // Save clean copy back to deploy folder
       const { error: upErr } = await supabase.storage
         .from("generated-sites")
-        .upload(`${clientId}/deploy/${pageFile}`, new Blob([updatedHtml], { type: "text/html" }), {
-          upsert: true,
-          contentType: "text/html",
-        });
-      if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+        .upload(
+          `${clientId}/deploy/${pageFile}`,
+          new Blob([updatedHtml], { type: "text/html" }),
+          { upsert: true, contentType: "text/html" }
+        );
+      if (upErr) throw new Error(`Storage upload failed for ${pageFile}: ${upErr.message}`);
 
-      // 2) Push staging copy (with noindex) straight to Hostinger
+      // Push staging copy (with noindex) to Hostinger
       try {
         const stagingHtml = injectNoindex(updatedHtml);
         await uploadFileToHostingerFtp(
@@ -194,6 +284,8 @@ Rules:
       } catch (e: any) {
         console.error(`[quick-edit] Hostinger staging push error for ${pageFile}:`, e);
       }
+
+      editedFiles.push(pageFile);
     }
 
     // Update sites metadata
@@ -201,22 +293,31 @@ Rules:
       .from("sites")
       .update({
         last_updated: new Date().toISOString(),
-        operator_edit_count: ((await supabase.from("sites").select("operator_edit_count").eq("client_id", clientId!).maybeSingle()).data?.operator_edit_count ?? 0) + 1,
+        operator_edit_count:
+          ((await supabase.from("sites").select("operator_edit_count").eq("client_id", clientId!).maybeSingle())
+            .data?.operator_edit_count ?? 0) + 1,
       } as any)
       .eq("client_id", clientId!);
 
+    await logEdit(
+      supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null,
+      `[${pages}, ${changeType}] ${instruction}`, "completed", null
+    );
 
-    // Log edit (prefix with page so the operator can see scope in history)
-    const loggedInstruction = `[${page}] ${instruction}`;
-    await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null, loggedInstruction, "completed", null);
-
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({
+      success: true,
+      version_timestamp: versionTimestamp,
+      change_type: changeType,
+      edited_files: editedFiles,
+      skipped_files: skippedFiles,
+    }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
     console.error("quick-edit-html error:", e);
     if (clientId) {
-      await logEdit(supabase, clientId, caller.id, caller.email ?? null, `[${page}] ${instruction}`, "failed", e.message ?? String(e));
+      await logEdit(supabase, clientId, caller.id, caller.email ?? null,
+        `[${pages}] ${instruction}`, "failed", e.message ?? String(e));
     }
     return new Response(JSON.stringify({ error: e.message ?? "Unknown error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
