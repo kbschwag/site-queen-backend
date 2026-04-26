@@ -645,13 +645,11 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
                 onClick={() => setRevisionPanelOpen((v) => !v)}
                 className="gap-2"
               >
-                <Wrench className="h-4 w-4" /> I'll work on it
+                <Wrench className="h-4 w-4" /> Revise Site
               </Button>
             </div>
 
             {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
-
-            <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
         </Card>
       )}
