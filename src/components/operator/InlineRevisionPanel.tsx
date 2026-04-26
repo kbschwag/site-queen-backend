@@ -50,6 +50,7 @@ const IMAGE_SLOT_OPTIONS = [
   { value: "service-5", label: "Service Photo 5" },
   { value: "service-6", label: "Service Photo 6" },
   { value: "logo", label: "Logo" },
+  { value: "other", label: "Other (see instructions)" },
 ];
 
 const slotLabel = (val: string) =>
