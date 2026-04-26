@@ -18,6 +18,7 @@ import {
   Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles, ImageIcon, Mail, Pencil, Phone, RefreshCw,
 } from "lucide-react";
 import { QuickEditPanel } from "./QuickEditPanel";
+import { InlineRevisionPanel } from "./InlineRevisionPanel";
 import { FailureCard } from "./GenerationFailureCard";
 import { CodeEditorModal } from "./CodeEditorModal";
 import { useFileUpload } from "@/hooks/useFileUpload";
@@ -46,6 +47,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedClientId, setAdvancedClientId] = useState("");
   const [advancedTriggering, setAdvancedTriggering] = useState(false);
+  const [revisionPanelOpen, setRevisionPanelOpen] = useState(false);
 
   const { data: clientData } = useQuery({
     queryKey: ["operator-client-deploy-status", clientId],
@@ -576,14 +578,19 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </CardHeader>
           <CardContent className="space-y-3">
             <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={500} />
-            <div className="flex gap-2">
-              <Button onClick={() => setShowShareModal(true)} disabled={sharing} className="gap-2 flex-1">
-                <Send className="h-4 w-4" /> Share with client for review
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={() => setShowShareModal(true)} disabled={sharing} className="gap-2 flex-1 min-w-[180px]">
+                <Send className="h-4 w-4" /> Send to client
               </Button>
-              <Button variant="outline" onClick={handleManualReview} className="gap-2">
+              <Button
+                variant={revisionPanelOpen ? "default" : "outline"}
+                onClick={() => setRevisionPanelOpen((v) => !v)}
+                className="gap-2"
+              >
                 <Wrench className="h-4 w-4" /> I'll work on it
               </Button>
             </div>
+            {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
             <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
         </Card>
@@ -630,15 +637,21 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               </div>
             )}
 
-            <div className="flex gap-2">
-              <Button onClick={() => handleShareWithClient(true)} disabled={sharing} className="gap-2 flex-1" variant="outline">
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={() => handleShareWithClient(true)} disabled={sharing} className="gap-2 flex-1 min-w-[180px]" variant="outline">
                 {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Reshare staging
               </Button>
-              <Button variant="outline" onClick={handleManualReview} className="gap-2">
+              <Button
+                variant={revisionPanelOpen ? "default" : "outline"}
+                onClick={() => setRevisionPanelOpen((v) => !v)}
+                className="gap-2"
+              >
                 <Wrench className="h-4 w-4" /> I'll work on it
               </Button>
             </div>
+
+            {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
 
             <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
