@@ -512,13 +512,13 @@ export default function ClientWebsite() {
           Your website will be reviewed by our team before going live. We'll notify you the moment it's up. ♛
         </p>
 
-        {/* Approve confirmation modal */}
+        {/* Publish confirmation modal */}
         <Dialog open={showApproveModal} onOpenChange={setShowApproveModal}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Are you sure everything looks great?</DialogTitle>
+              <DialogTitle>Ready to publish your website? ♛</DialogTitle>
               <DialogDescription>
-                Tick each item to confirm — once approved, we'll get your site queued up to go live.
+                Tick each item to confirm — once published, we'll take your site live on your domain.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-2">
@@ -545,8 +545,8 @@ export default function ClientWebsite() {
                 disabled={!allChecked || approveWebsite.isPending}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
               >
-                {approveWebsite.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Confirm approval ♛
+                {approveWebsite.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                Publish my website ♛
               </Button>
             </DialogFooter>
           </DialogContent>
