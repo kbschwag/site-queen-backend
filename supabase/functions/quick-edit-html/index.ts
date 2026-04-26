@@ -269,14 +269,24 @@ serve(async (req) => {
         );
       if (upErr) throw new Error(`Storage upload failed for ${pageFile}: ${upErr.message}`);
 
-      try {
-        const stagingHtml = injectNoindex(updatedHtml);
-        await uploadFileToHostingerFtp(
-          `/public_html/${clientId}/${pageFile}`,
-          stagingHtml,
-        );
-      } catch (e: any) {
-        console.error(`[quick-edit] Hostinger staging push error for ${pageFile}:`, e);
+      // Push to Hostinger staging in the background so it doesn't block the response.
+      const stagingPush = (async () => {
+        try {
+          const stagingHtml = injectNoindex(updatedHtml);
+          await uploadFileToHostingerFtp(
+            `/public_html/${clientId}/${pageFile}`,
+            stagingHtml,
+          );
+        } catch (e: any) {
+          console.error(`[quick-edit] Hostinger staging push error for ${pageFile}:`, e);
+        }
+      })();
+      // @ts-ignore — EdgeRuntime is available in Supabase Edge runtime
+      if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any).waitUntil) {
+        // @ts-ignore
+        (EdgeRuntime as any).waitUntil(stagingPush);
+      } else {
+        await stagingPush;
       }
 
       editedFiles.push(pageFile);
