@@ -713,6 +713,8 @@ HARD RULES — VIOLATING ANY OF THESE MEANS THE PAGE WILL BE REJECTED:
 
 3. FORMS & UI ELEMENTS — Never represent form fields, buttons, dropdowns, or other UI as bullet lists or plain text. Always use real HTML elements: <form>, <input>, <select>, <option>, <textarea>, <button>, <label>. If the page needs a contact form, the inputs MUST have these exact name attributes (the platform wires them to the backend): name="name" (text, required), name="phone" (tel, required), name="email" (email, required), name="service" (a <select> populated with real options from the services list above), name="message" (textarea, required), and a <button type="submit">. Do NOT add an action attribute, onsubmit handler, or hidden inputs — the platform injects those automatically.
 
+3a. FORM ELEMENT STYLING — ALL form elements — <input>, <select>, AND <textarea> — must use the same CSS class: class="form-input". Never apply inline styles to form elements. Never use a different class for textarea vs input. The .form-input class is already defined in the extracted stylesheet and handles all styling consistently. Just use <textarea class="form-input" ...> the same way you use <input class="form-input" ...>.
+
 4. NO INLINE STYLES. Zero style="" attributes. Zero <style> blocks. Reuse only the classes listed above.
 
 5. PHONE & EMAIL — Render phone numbers as <a href="${phoneTel || "tel:"}">${phone}</a>${emailMailto ? ` and emails as <a href="${emailMailto}">${email}</a>` : ""}. No bare text.
