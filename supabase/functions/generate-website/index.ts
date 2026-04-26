@@ -257,6 +257,8 @@ BUSINESS INFO:
 - Google review count: ${googleReviewCount || "not provided"}
 - Services: ${serviceNames.join(", ") || "not provided"}
 - Tagline: ${tagline || "not provided"}
+- Client-provided service areas (use these exact names FIRST for AREA_1..N before generating more):
+${clientServiceAreaList}
 
 CALL NOTES (highest priority — follow exactly):
 ${callNotes ? JSON.stringify({
