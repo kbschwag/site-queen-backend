@@ -977,6 +977,40 @@ function slugify(s: string): string {
     .substring(0, 60);
 }
 
+// Returns formatted hours lines ONLY when real values exist; returns "" otherwise.
+// Accepts either a string ("Mon-Fri 9-5"), an array, or a per-day object map.
+function formatBusinessHours(input: any): string {
+  if (!input) return "";
+  if (typeof input === "string") {
+    const t = input.trim();
+    return t ? `  ${t}` : "";
+  }
+  if (Array.isArray(input)) {
+    const lines = input.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean);
+    return lines.length ? lines.map((l) => `  ${l}`).join("\n") : "";
+  }
+  if (typeof input === "object") {
+    const dayOrder = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+    const lines: string[] = [];
+    for (const day of dayOrder) {
+      const v = (input as any)[day] ?? (input as any)[day.charAt(0).toUpperCase() + day.slice(1)];
+      if (!v) continue;
+      if (typeof v === "string") {
+        const t = v.trim();
+        if (t) lines.push(`  ${day.charAt(0).toUpperCase() + day.slice(1)}: ${t}`);
+      } else if (typeof v === "object") {
+        if (v.closed === true) {
+          lines.push(`  ${day.charAt(0).toUpperCase() + day.slice(1)}: Closed`);
+        } else if (v.open && v.close) {
+          lines.push(`  ${day.charAt(0).toUpperCase() + day.slice(1)}: ${v.open} – ${v.close}`);
+        }
+      }
+    }
+    return lines.length ? lines.join("\n") : "";
+  }
+  return "";
+}
+
 function extractShell(html: string): { styleBlock: string; headerHTML: string; footerHTML: string } {
   // Capture the FIRST <style>...</style> block (and any topbar styles too — usually only one)
   const styleMatch = html.match(/<style[^>]*>[\s\S]*?<\/style>/i);
