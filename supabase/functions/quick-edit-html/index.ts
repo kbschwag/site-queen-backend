@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "google/gemini-2.5-flash";
+const MODEL = "claude-sonnet-4-20250514";
 
 // Inject a noindex meta tag for staging copies pushed to Hostinger.
 function injectNoindex(html: string): string {
