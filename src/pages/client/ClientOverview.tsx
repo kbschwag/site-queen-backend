@@ -108,16 +108,23 @@ export default function ClientOverview() {
   const creditsUsed = monthlyAllowance - Math.min(creditsBalance, monthlyAllowance);
   const creditsPercent = monthlyAllowance > 0 ? (creditsUsed / monthlyAllowance) * 100 : 0;
 
+  // Staging review covers all statuses where the client should preview/approve the site
+  const stagingReviewStatuses = ["shared", "awaiting_client_review", "pre_launch_revision", "revision_call_scheduled"];
+  const inStagingReview = stagingReviewStatuses.includes(generationStatus) && !!site?.staging_url;
+  const isApproved = ["client_approved", "approved"].includes(generationStatus);
+
   // Determine CTA
   let ctaText = "Complete your website brief →";
   let ctaAction = () => navigate("/dashboard/website");
   if (!intakeCompleted) {
     ctaText = "Complete your website brief →";
-  } else if (generationStatus === "shared" && site?.staging_url) {
-    ctaText = "Preview your website →";
   } else if (siteIsLive) {
     ctaText = "Visit your website →";
     ctaAction = () => window.open(site?.deploy_url || previewUrl || "#", "_blank");
+  } else if (inStagingReview) {
+    ctaText = "Preview your website →";
+  } else if (isApproved) {
+    ctaText = "Approved — going live soon →";
   } else {
     ctaText = "Your site is being built — check status →";
   }
@@ -129,7 +136,11 @@ export default function ClientOverview() {
   const siteStatusLabel = siteIsLive
     ? "Live"
     : intakeCompleted
-      ? generationStatus === "shared" ? "Ready for review" : "Building"
+      ? inStagingReview
+        ? "Ready for review"
+        : isApproved
+          ? "Approved"
+          : "Building"
       : "Onboarding";
 
   return (
