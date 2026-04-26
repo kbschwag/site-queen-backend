@@ -165,14 +165,14 @@ serve(async (req) => {
       filesToEdit = [file];
     }
 
-    // ─── Versioning: snapshot every existing deploy file before editing ────────
+    // ─── Versioning: snapshot every existing deploy file before editing (parallel) ──
     const versionTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filesSaved: string[] = [];
-    for (const fname of ALL_PAGE_FILES) {
+    await Promise.all(ALL_PAGE_FILES.map(async (fname) => {
       const { data: existing } = await supabase.storage
         .from("generated-sites")
         .download(`${clientId}/deploy/${fname}`);
-      if (!existing) continue; // skip files that don't exist
+      if (!existing) return;
       const bytes = new Uint8Array(await existing.arrayBuffer());
       const { error: snapErr } = await supabase.storage
         .from("generated-sites")
@@ -183,10 +183,10 @@ serve(async (req) => {
         );
       if (snapErr) {
         console.error(`[quick-edit] snapshot failed for ${fname}:`, snapErr);
-        continue;
+        return;
       }
       filesSaved.push(fname);
-    }
+    }));
 
     if (filesSaved.length === 0) {
       throw new Error("No deployed files found to edit — has the site been generated?");
