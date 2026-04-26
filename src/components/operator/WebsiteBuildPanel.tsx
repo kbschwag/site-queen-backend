@@ -17,7 +17,6 @@ import { toast } from "sonner";
 import {
   Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles, ImageIcon, Mail, Pencil, Phone, RefreshCw,
 } from "lucide-react";
-import { QuickEditPanel } from "./QuickEditPanel";
 import { InlineRevisionPanel } from "./InlineRevisionPanel";
 import { FailureCard } from "./GenerationFailureCard";
 import { CodeEditorModal } from "./CodeEditorModal";
@@ -587,11 +586,10 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
                 onClick={() => setRevisionPanelOpen((v) => !v)}
                 className="gap-2"
               >
-                <Wrench className="h-4 w-4" /> I'll work on it
+                <Wrench className="h-4 w-4" /> Revise Site
               </Button>
             </div>
             {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
-            <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
         </Card>
       )}
@@ -647,13 +645,11 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
                 onClick={() => setRevisionPanelOpen((v) => !v)}
                 className="gap-2"
               >
-                <Wrench className="h-4 w-4" /> I'll work on it
+                <Wrench className="h-4 w-4" /> Revise Site
               </Button>
             </div>
 
             {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
-
-            <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
         </Card>
       )}
@@ -702,7 +698,15 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               </Tooltip>
             </TooltipProvider>
 
-            <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
+            <Button
+              variant={revisionPanelOpen ? "default" : "outline"}
+              onClick={() => setRevisionPanelOpen((v) => !v)}
+              className="gap-2 w-full"
+            >
+              <Wrench className="h-4 w-4" /> Revise Site
+            </Button>
+
+            {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
           </CardContent>
         </Card>
       )}
