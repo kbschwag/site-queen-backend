@@ -201,15 +201,15 @@ serve(async (req) => {
       created_by: caller.id,
     });
 
-    // ─── Edit each target file ────────────────────────────────────────────────
+    // ─── Edit each target file (parallel — keeps total time near a single call) ──
     const editedFiles: string[] = [];
     const skippedFiles: string[] = [];
+    let rateLimited = false;
 
-    for (const pageFile of filesToEdit) {
-      // Only edit files that actually exist
+    const editOne = async (pageFile: string): Promise<void> => {
       if (!filesSaved.includes(pageFile)) {
         skippedFiles.push(pageFile);
-        continue;
+        return;
       }
 
       const { data: file, error: dlErr } = await supabase.storage
@@ -217,7 +217,7 @@ serve(async (req) => {
         .download(`${clientId}/deploy/${pageFile}`);
       if (dlErr || !file) {
         skippedFiles.push(pageFile);
-        continue;
+        return;
       }
 
       const currentHtml = await file.text();
@@ -239,11 +239,8 @@ serve(async (req) => {
       });
 
       if (aiRes.status === 429) {
-        await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null,
-          `[${pageFile}] ${instruction}`, "failed", "Rate limited (429)");
-        return new Response(JSON.stringify({ error: "Rate limited — please wait a moment and try again." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        rateLimited = true;
+        throw new Error(`Rate limited on ${pageFile}`);
       }
       if (!aiRes.ok) {
         const txt = await aiRes.text();
@@ -254,7 +251,6 @@ serve(async (req) => {
       let updatedHtml: string = aiJson?.content?.[0]?.text ?? "";
       if (!updatedHtml) throw new Error(`AI returned empty content for ${pageFile}`);
 
-      // Strip any accidental markdown fences
       updatedHtml = updatedHtml
         .replace(/^```(?:html)?\s*\n?/i, "")
         .replace(/\n?```\s*$/i, "")
@@ -264,7 +260,6 @@ serve(async (req) => {
         throw new Error(`AI output for ${pageFile} does not look like a complete HTML document`);
       }
 
-      // Save clean copy back to deploy folder
       const { error: upErr } = await supabase.storage
         .from("generated-sites")
         .upload(
@@ -274,7 +269,6 @@ serve(async (req) => {
         );
       if (upErr) throw new Error(`Storage upload failed for ${pageFile}: ${upErr.message}`);
 
-      // Push staging copy (with noindex) to Hostinger
       try {
         const stagingHtml = injectNoindex(updatedHtml);
         await uploadFileToHostingerFtp(
@@ -286,6 +280,21 @@ serve(async (req) => {
       }
 
       editedFiles.push(pageFile);
+    };
+
+    const results = await Promise.allSettled(filesToEdit.map(editOne));
+
+    if (rateLimited) {
+      await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null,
+        `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
+      return new Response(JSON.stringify({ error: "Rate limited — please wait a moment and try again." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const failures = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+    if (failures.length > 0 && editedFiles.length === 0) {
+      throw new Error(failures.map((f) => (f.reason as any)?.message ?? String(f.reason)).join("; "));
     }
 
     // Update sites metadata
