@@ -327,7 +327,8 @@ export default function ClientWebsite() {
   }
 
   // STATE 3: Building
-  if (client.site_status === "building" && generationStatus !== "shared" && generationStatus !== "approved") {
+  const stagingReviewStatuses = ["shared", "awaiting_client_review", "pre_launch_revision", "revision_call_scheduled", "client_approved", "approved"];
+  if (client.site_status === "building" && !stagingReviewStatuses.includes(generationStatus) && !siteIsLive) {
     const tips = [
       "Prepare your social media announcement",
       "Gather any extra photos you'd like to add later",
