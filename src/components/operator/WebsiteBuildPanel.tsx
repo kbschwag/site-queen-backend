@@ -47,6 +47,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedClientId, setAdvancedClientId] = useState("");
   const [advancedTriggering, setAdvancedTriggering] = useState(false);
+  const [revisionPanelOpen, setRevisionPanelOpen] = useState(false);
 
   const { data: clientData } = useQuery({
     queryKey: ["operator-client-deploy-status", clientId],
