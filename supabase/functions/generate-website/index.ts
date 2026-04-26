@@ -688,7 +688,7 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
       faviconUrl: intake.favicon_url || "",
       logoUrl: logoUrlResolved,
       businessName,
-      primaryColor: intake.primary_color || "",
+      primaryColor: primaryColorResolved,
     });
     html = injectFavicon(html, faviconTag);
 
