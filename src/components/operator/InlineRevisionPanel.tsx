@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, CheckCircle2, AlertCircle, History } from "lucide-react";
+import { Loader2, Send, CheckCircle2, AlertCircle, History, Undo2, RotateCcw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Props {
@@ -21,29 +21,31 @@ interface Props {
 type Status = "idle" | "running" | "success" | "error";
 
 const PAGE_OPTIONS = [
-  { value: "index.html", label: "Homepage" },
-  { value: "about.html", label: "About" },
-  { value: "services.html", label: "Services" },
-  { value: "contact.html", label: "Contact" },
-  { value: "all", label: "All pages" },
+  { value: "homepage", label: "Homepage" },
+  { value: "about", label: "About" },
+  { value: "services", label: "Services" },
+  { value: "contact", label: "Contact" },
+  { value: "all", label: "All Pages" },
 ];
 
 export function InlineRevisionPanel({ clientId }: Props) {
   const queryClient = useQueryClient();
   const [instruction, setInstruction] = useState("");
-  const [page, setPage] = useState<string>("index.html");
+  const [pages, setPages] = useState<string>("homepage");
   const [status, setStatus] = useState<Status>("idle");
   const [statusMsg, setStatusMsg] = useState<string>("");
+  const [lastVersionTs, setLastVersionTs] = useState<string | null>(null);
+  const [restoringTs, setRestoringTs] = useState<string | null>(null);
 
-  const { data: history = [], refetch: refetchHistory } = useQuery({
-    queryKey: ["operator-edits-history", clientId],
+  const { data: versions = [], refetch: refetchVersions } = useQuery({
+    queryKey: ["site-versions", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("operator_edits" as any)
-        .select("id, instruction, status, created_at, error_message")
+        .from("site_versions" as any)
+        .select("id, timestamp, instruction, files_saved, restored, created_at")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false })
-        .limit(3);
+        .limit(5);
       if (error) throw error;
       return (data as any[]) || [];
     },
@@ -56,18 +58,40 @@ export function InlineRevisionPanel({ clientId }: Props) {
     setStatusMsg("");
     try {
       const { data, error } = await supabase.functions.invoke("quick-edit-html", {
-        body: { client_id: clientId, instruction: text, page },
+        body: { client_id: clientId, instruction: text, pages },
       });
       if (error) throw new Error(error.message || "Edit failed");
       if ((data as any)?.error) throw new Error((data as any).error);
       setStatus("success");
       setStatusMsg("✓ Changes applied");
+      setLastVersionTs((data as any)?.version_timestamp || null);
       setInstruction("");
       queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
-      refetchHistory();
+      refetchVersions();
     } catch (e: any) {
       setStatus("error");
       setStatusMsg(e?.message || "Edit failed");
+    }
+  };
+
+  const handleRestore = async (timestamp: string) => {
+    setRestoringTs(timestamp);
+    try {
+      const { data, error } = await supabase.functions.invoke("restore-version", {
+        body: { client_id: clientId, timestamp },
+      });
+      if (error) throw new Error(error.message || "Restore failed");
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setStatus("success");
+      setStatusMsg(`✓ Restored version from ${timestamp}`);
+      setLastVersionTs(null);
+      queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+      refetchVersions();
+    } catch (e: any) {
+      setStatus("error");
+      setStatusMsg(e?.message || "Restore failed");
+    } finally {
+      setRestoringTs(null);
     }
   };
 
@@ -80,8 +104,9 @@ export function InlineRevisionPanel({ clientId }: Props) {
 
       <div className="flex gap-2 flex-col sm:flex-row">
         <div className="flex-1">
+          <label className="text-xs text-muted-foreground mb-1 block">What would you like to change?</label>
           <Textarea
-            placeholder="Describe the change — e.g. 'Change the hero headline to Phoenix's Most Trusted Plumber'"
+            placeholder="Describe the change — e.g. 'Change the hero headline to Phoenix's Most Trusted Plumber' or 'Make the navy color #001a4d'"
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
             rows={4}
@@ -92,7 +117,7 @@ export function InlineRevisionPanel({ clientId }: Props) {
         <div className="sm:w-44 flex flex-col gap-2">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Which page?</label>
-            <Select value={page} onValueChange={setPage} disabled={status === "running"}>
+            <Select value={pages} onValueChange={setPages} disabled={status === "running"}>
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -112,15 +137,33 @@ export function InlineRevisionPanel({ clientId }: Props) {
             {status === "running" ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Applying...</>
             ) : (
-              <><Send className="h-4 w-4" /> Apply</>
+              <><Send className="h-4 w-4" /> Apply Revision</>
             )}
           </Button>
         </div>
       </div>
 
       {status === "success" && (
-        <div className="flex items-center gap-2 text-xs text-emerald-700">
-          <CheckCircle2 className="h-3.5 w-3.5" /> {statusMsg}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="flex items-center gap-2 text-xs text-emerald-700">
+            <CheckCircle2 className="h-3.5 w-3.5" /> {statusMsg}
+          </span>
+          {lastVersionTs && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 h-7 text-xs"
+              onClick={() => handleRestore(lastVersionTs)}
+              disabled={!!restoringTs}
+            >
+              {restoringTs === lastVersionTs ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Undo2 className="h-3 w-3" />
+              )}
+              Undo last change
+            </Button>
+          )}
         </div>
       )}
       {status === "error" && (
@@ -130,30 +173,43 @@ export function InlineRevisionPanel({ clientId }: Props) {
         </div>
       )}
 
-      {history.length > 0 && (
-        <div className="pt-2 border-t border-border/50 space-y-1.5">
+      {versions.length > 0 && (
+        <div className="pt-2 border-t border-border/50 space-y-2">
           <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <History className="h-3 w-3" /> Recent edits
+            <History className="h-3 w-3" /> Version history (last 5)
           </div>
           <ul className="space-y-1.5">
-            {history.map((h: any) => (
-              <li key={h.id} className="text-xs flex items-start gap-2">
-                <Badge
-                  variant="outline"
-                  className={
-                    h.status === "completed"
-                      ? "bg-emerald-500/10 text-emerald-700 border-emerald-200 text-[10px] shrink-0"
-                      : "bg-destructive/10 text-destructive border-destructive/20 text-[10px] shrink-0"
-                  }
+            {versions.map((v: any) => (
+              <li key={v.id} className="flex items-start gap-2 text-xs bg-background/60 rounded p-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {v.restored && (
+                      <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-200">
+                        restored
+                      </Badge>
+                    )}
+                    <span className="text-muted-foreground">
+                      {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}
+                    </span>
+                  </div>
+                  <p className="truncate mt-0.5" title={v.instruction || ""}>
+                    {v.instruction || "(no instruction)"}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1 h-7 text-[11px] shrink-0"
+                  onClick={() => handleRestore(v.timestamp)}
+                  disabled={!!restoringTs}
                 >
-                  {h.status === "completed" ? "✓" : "✗"}
-                </Badge>
-                <span className="flex-1 truncate" title={h.instruction}>
-                  {h.instruction}
-                </span>
-                <span className="text-muted-foreground shrink-0">
-                  {formatDistanceToNow(new Date(h.created_at), { addSuffix: true })}
-                </span>
+                  {restoringTs === v.timestamp ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3 w-3" />
+                  )}
+                  Restore
+                </Button>
               </li>
             ))}
           </ul>
