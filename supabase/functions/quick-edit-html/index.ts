@@ -216,7 +216,7 @@ Rules:
   } catch (e: any) {
     console.error("quick-edit-html error:", e);
     if (clientId) {
-      await logEdit(supabase, clientId, caller.id, caller.email ?? null, instruction, "failed", e.message ?? String(e));
+      await logEdit(supabase, clientId, caller.id, caller.email ?? null, `[${page}] ${instruction}`, "failed", e.message ?? String(e));
     }
     return new Response(JSON.stringify({ error: e.message ?? "Unknown error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
