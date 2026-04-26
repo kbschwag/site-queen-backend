@@ -136,7 +136,10 @@ export function InlineRevisionPanel({ clientId }: Props) {
     // Build final instruction. Photo replacement instruction takes precedence/prepends.
     let finalInstruction = text;
     if (uploadedUrl) {
-      const photoInstruction = `Replace the ${slotLabel(imageSlot)} with this new image URL: ${uploadedUrl}`;
+      const photoInstruction =
+        imageSlot === "favicon"
+          ? `Replace the favicon in the <head> with this new image URL: ${uploadedUrl} — find the <link rel='icon'> tag and update its href attribute to the new URL.`
+          : `Replace the ${slotLabel(imageSlot)} with this new image URL: ${uploadedUrl}`;
       finalInstruction = text ? `${photoInstruction}\n\n${text}` : photoInstruction;
     }
 
