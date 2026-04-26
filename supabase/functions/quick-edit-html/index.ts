@@ -109,18 +109,17 @@ Rules:
 - Keep the SiteQueen analytics script intact
 - Return ONLY the complete updated HTML — no explanation, no markdown, just the raw HTML`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableKey}`,
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: MODEL,
-        messages: [
-          { role: "system", content: "You are a precise HTML editor. Return only raw HTML, no markdown fences." },
-          { role: "user", content: aiPrompt },
-        ],
+        max_tokens: 16000,
+        messages: [{ role: "user", content: aiPrompt }],
       }),
     });
 
@@ -130,19 +129,13 @@ Rules:
         status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (aiRes.status === 402) {
-      await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null, instruction, "failed", "Credits exhausted (402)");
-      return new Response(JSON.stringify({ error: "AI credits exhausted — top up Lovable AI usage." }), {
-        status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
     if (!aiRes.ok) {
       const txt = await aiRes.text();
-      throw new Error(`AI gateway error ${aiRes.status}: ${txt.slice(0, 200)}`);
+      throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 200)}`);
     }
 
     const aiJson = await aiRes.json();
-    let updatedHtml: string = aiJson?.choices?.[0]?.message?.content ?? "";
+    let updatedHtml: string = aiJson?.content?.[0]?.text ?? "";
     if (!updatedHtml) throw new Error("AI returned empty content");
 
     // Strip any accidental markdown fences
