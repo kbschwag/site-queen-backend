@@ -571,18 +571,51 @@ Return ONLY valid JSON. No markdown:
 
     // ════════════════════════════════════════════════════════════════════
     // UNIVERSAL CUSTOM PAGE GENERATOR
-    // Loads homepage from storage, extracts shell (style + header + footer),
-    // asks Claude only for the content section, then reassembles.
+    // CSS comes from the ABOUT page (correct simple page-hero style).
+    // Header + footer come from the HOMEPAGE (always correct).
+    // Asks Claude only for the content section, then reassembles.
     // Always builds: contact. Plus any client-requested or operator-agreed pages.
     // ════════════════════════════════════════════════════════════════════
     try {
+      // 1) Header + footer come from the homepage (these are always correct)
       const { data: homeFile } = await supabase.storage
         .from("generated-sites")
         .download(`${clientId}/deploy/index.html`);
       if (!homeFile) throw new Error("Homepage not found in storage — cannot build custom pages");
       const homeHTML = await homeFile.text();
+      const homeShell = extractShell(homeHTML);
 
-      const shell = extractShell(homeHTML);
+      // 2) CSS comes from the ABOUT page (correct simple page-hero style — NOT homepage's full hero).
+      //    Fall back to the raw template's about.html if the client's about hasn't been generated yet.
+      let aboutStyleBlock = "";
+      try {
+        const { data: clientAboutFile } = await supabase.storage
+          .from("generated-sites")
+          .download(`${clientId}/deploy/about.html`);
+        if (clientAboutFile) {
+          const aboutHTMLForCSS = await clientAboutFile.text();
+          aboutStyleBlock = extractShell(aboutHTMLForCSS).styleBlock;
+          console.log(`[extra-pages] Pulled CSS from client about.html (${aboutStyleBlock.length} chars)`);
+        }
+      } catch (e) {
+        console.warn("[extra-pages] Could not load client about.html, will fall back to template:", (e as any)?.message);
+      }
+      if (!aboutStyleBlock) {
+        const { data: templateAboutFile } = await supabase.storage
+          .from("templates")
+          .download(`${templateId}/about.html`);
+        if (templateAboutFile) {
+          const tplHTML = await templateAboutFile.text();
+          aboutStyleBlock = extractShell(tplHTML).styleBlock;
+          console.log(`[extra-pages] Pulled CSS from template about.html (${aboutStyleBlock.length} chars)`);
+        }
+      }
+
+      const shell = {
+        styleBlock: aboutStyleBlock,
+        headerHTML: homeShell.headerHTML,
+        footerHTML: homeShell.footerHTML,
+      };
       if (!shell.styleBlock || !shell.headerHTML || !shell.footerHTML) {
         throw new Error(`Failed to extract shell — style:${!!shell.styleBlock} header:${!!shell.headerHTML} footer:${!!shell.footerHTML}`);
       }
