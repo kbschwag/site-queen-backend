@@ -827,7 +827,41 @@ function injectNoindex(html: string): string {
   return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
 }
 
-// ── Favicon helpers ──────────────────────────────────────────────────
+// ── Brand color helpers (mirror generate-extra-pages) ──────────────────
+// Resolves a client-provided color to a clean #rrggbb / #rgb string,
+// or returns the provided fallback (template default) when missing/invalid.
+function resolveBrandColor(input: unknown, fallback: string): string {
+  if (typeof input !== "string") return fallback;
+  const raw = input.trim();
+  if (!raw) return fallback;
+  if (/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw)) return raw;
+  if (/^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw)) return `#${raw}`;
+  // Allow hsl()/rgb() functional notation as-is (browsers accept it in CSS vars)
+  if (/^(hsl|rgb)a?\s*\(/i.test(raw)) return raw;
+  return fallback;
+}
+
+// Replaces --red and --gold inside the FIRST :root { ... } block of the
+// homepage template with the resolved client brand colors. Other tokens
+// (--navy, --white, --gray, fonts, etc.) are preserved exactly as the
+// template defines them.
+function injectBrandColorsIntoRoot(html: string, primaryColor: string, accentColor: string): string {
+  return html.replace(/:root\s*\{([\s\S]*?)\}/, (match, body: string) => {
+    let out = body;
+    if (/--red\s*:/i.test(out)) {
+      out = out.replace(/(--red\s*:\s*)([^;]+)(;)/i, `$1${primaryColor}$3`);
+    } else {
+      out = `${out.replace(/\s*$/, "")}\n  --red: ${primaryColor};\n`;
+    }
+    if (/--gold\s*:/i.test(out)) {
+      out = out.replace(/(--gold\s*:\s*)([^;]+)(;)/i, `$1${accentColor}$3`);
+    } else {
+      out = `${out.replace(/\s*$/, "")}\n  --gold: ${accentColor};\n`;
+    }
+    return `:root {${out}}`;
+  });
+}
+
 // Priority: 1) intake.favicon_url, 2) intake.logo_url, 3) generated SVG initial.
 export function buildFaviconHTML(opts: {
   faviconUrl?: string;
