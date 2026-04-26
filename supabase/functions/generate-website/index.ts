@@ -718,6 +718,8 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
       portfolioPhotos, teamPhotos,
       heroImageUrl, aboutImageUrl, whyUsImageUrl,
       stockTerms, allowStock,
+      primaryColor: primaryColorResolved,
+      accentColor: accentColorResolved,
       copy,
     };
     await supabase.storage.from("generated-sites").upload(
