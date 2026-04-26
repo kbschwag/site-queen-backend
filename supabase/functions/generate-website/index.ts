@@ -123,8 +123,22 @@ serve(async (req) => {
 
     if (!htmlFile) throw new Error(`Template not found: ${templateId}/index.html`);
 
-    const templateHTML = await htmlFile.text();
+    let templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
+
+    // ── Resolve client brand colors and inject into the homepage :root ──
+    // Mirrors the logic used by generate-extra-pages so the homepage matches
+    // the about/services pages. Falls back to the template's existing
+    // --red / --gold values when the client did not provide a color.
+    const templateRedMatch = templateHTML.match(/--red\s*:\s*([^;]+);/);
+    const templateGoldMatch = templateHTML.match(/--gold\s*:\s*([^;]+);/);
+    const templateRed = templateRedMatch ? templateRedMatch[1].trim() : "#cb2020";
+    const templateGold = templateGoldMatch ? templateGoldMatch[1].trim() : "#f6a823";
+    const primaryColorResolved = resolveBrandColor(intake.primary_color, templateRed);
+    const accentColorResolved = resolveBrandColor(intake.accent_color, templateGold);
+    templateHTML = injectBrandColorsIntoRoot(templateHTML, primaryColorResolved, accentColorResolved);
+    console.log(`[generate] Brand colors — primary=${primaryColorResolved} (template default ${templateRed}), accent=${accentColorResolved} (template default ${templateGold})`);
+
 
     // ── Business data shortcuts ──────────────────────────────────────────
     const businessName = (clientData as any)?.business_name || intake.business_name || "Business";
@@ -674,7 +688,7 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
       faviconUrl: intake.favicon_url || "",
       logoUrl: logoUrlResolved,
       businessName,
-      primaryColor: intake.primary_color || "",
+      primaryColor: primaryColorResolved,
     });
     html = injectFavicon(html, faviconTag);
 
@@ -704,6 +718,8 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
       portfolioPhotos, teamPhotos,
       heroImageUrl, aboutImageUrl, whyUsImageUrl,
       stockTerms, allowStock,
+      primaryColor: primaryColorResolved,
+      accentColor: accentColorResolved,
       copy,
     };
     await supabase.storage.from("generated-sites").upload(
@@ -811,7 +827,41 @@ function injectNoindex(html: string): string {
   return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
 }
 
-// ── Favicon helpers ──────────────────────────────────────────────────
+// ── Brand color helpers (mirror generate-extra-pages) ──────────────────
+// Resolves a client-provided color to a clean #rrggbb / #rgb string,
+// or returns the provided fallback (template default) when missing/invalid.
+function resolveBrandColor(input: unknown, fallback: string): string {
+  if (typeof input !== "string") return fallback;
+  const raw = input.trim();
+  if (!raw) return fallback;
+  if (/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw)) return raw;
+  if (/^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw)) return `#${raw}`;
+  // Allow hsl()/rgb() functional notation as-is (browsers accept it in CSS vars)
+  if (/^(hsl|rgb)a?\s*\(/i.test(raw)) return raw;
+  return fallback;
+}
+
+// Replaces --red and --gold inside the FIRST :root { ... } block of the
+// homepage template with the resolved client brand colors. Other tokens
+// (--navy, --white, --gray, fonts, etc.) are preserved exactly as the
+// template defines them.
+function injectBrandColorsIntoRoot(html: string, primaryColor: string, accentColor: string): string {
+  return html.replace(/:root\s*\{([\s\S]*?)\}/, (match, body: string) => {
+    let out = body;
+    if (/--red\s*:/i.test(out)) {
+      out = out.replace(/(--red\s*:\s*)([^;]+)(;)/i, `$1${primaryColor}$3`);
+    } else {
+      out = `${out.replace(/\s*$/, "")}\n  --red: ${primaryColor};\n`;
+    }
+    if (/--gold\s*:/i.test(out)) {
+      out = out.replace(/(--gold\s*:\s*)([^;]+)(;)/i, `$1${accentColor}$3`);
+    } else {
+      out = `${out.replace(/\s*$/, "")}\n  --gold: ${accentColor};\n`;
+    }
+    return `:root {${out}}`;
+  });
+}
+
 // Priority: 1) intake.favicon_url, 2) intake.logo_url, 3) generated SVG initial.
 export function buildFaviconHTML(opts: {
   faviconUrl?: string;
