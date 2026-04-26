@@ -8,6 +8,7 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
 const FROM_ADDRESS = "SiteQueen <hello@sitequeen.ai>";
+const SANDBOX_FROM_ADDRESS = "SiteQueen <onboarding@resend.dev>";
 
 const BRAND_PURPLE = "#534AB7";
 const DARK_TEXT = "#1a1a2e";
@@ -51,6 +52,16 @@ const OPERATOR_URL = "https://site-queen-backend.lovable.app/operator";
 const CAL_URL = "https://calendly.com/sitequeenai/30min";
 
 const fn = (d: any) => d.first_name || (d.name || "").split(" ")[0] || "there";
+
+const isDomainNotVerifiedError = (result: any) =>
+  result?.statusCode === 403 &&
+  typeof result?.message === "string" &&
+  result.message.toLowerCase().includes("domain is not verified");
+
+const isSandboxRecipientError = (result: any) =>
+  result?.statusCode === 403 &&
+  typeof result?.message === "string" &&
+  result.message.includes("testing emails");
 
 type TemplateConfig = {
   subject: string | ((d: any) => string);
@@ -1230,7 +1241,7 @@ serve(async (req) => {
       ? (emailTemplate.subject as (d: any) => string)(templateData)
       : emailTemplate.subject;
 
-    const response = await fetch(`${GATEWAY_URL}/emails`, {
+    const sendEmail = (from: string) => fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1238,7 +1249,7 @@ serve(async (req) => {
         "X-Connection-Api-Key": RESEND_API_KEY,
       },
       body: JSON.stringify({
-        from: FROM_ADDRESS,
+        from,
         to: [to],
         ...(replyTo ? { reply_to: replyTo } : {}),
         subject,
@@ -1246,7 +1257,14 @@ serve(async (req) => {
       }),
     });
 
-    const result = await response.json();
+    let response = await sendEmail(FROM_ADDRESS);
+    let result = await response.json();
+
+    if (!response.ok && isDomainNotVerifiedError(result)) {
+      console.warn("Resend sender domain not verified; retrying with sandbox sender:", result);
+      response = await sendEmail(SANDBOX_FROM_ADDRESS);
+      result = await response.json();
+    }
 
     // Log the email
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1270,7 +1288,7 @@ serve(async (req) => {
         target_role: "operator",
       });
 
-      if (result?.statusCode === 403 && result?.message?.includes("testing emails")) {
+      if (isSandboxRecipientError(result)) {
         console.warn("Resend sandbox mode: email not delivered to", to);
         return new Response(JSON.stringify({ success: true, sandbox: true, warning: "Resend sandbox mode" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
