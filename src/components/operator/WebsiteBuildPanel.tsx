@@ -578,14 +578,19 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
           </CardHeader>
           <CardContent className="space-y-3">
             <SitePreviewFrame clientId={clientId} stagingUrl={stagingUrl} height={500} />
-            <div className="flex gap-2">
-              <Button onClick={() => setShowShareModal(true)} disabled={sharing} className="gap-2 flex-1">
-                <Send className="h-4 w-4" /> Share with client for review
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={() => setShowShareModal(true)} disabled={sharing} className="gap-2 flex-1 min-w-[180px]">
+                <Send className="h-4 w-4" /> Send to client
               </Button>
-              <Button variant="outline" onClick={handleManualReview} className="gap-2">
+              <Button
+                variant={revisionPanelOpen ? "default" : "outline"}
+                onClick={() => setRevisionPanelOpen((v) => !v)}
+                className="gap-2"
+              >
                 <Wrench className="h-4 w-4" /> I'll work on it
               </Button>
             </div>
+            {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
             <QuickEditPanel clientId={clientId} onEditComplete={() => queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] })} />
           </CardContent>
         </Card>
