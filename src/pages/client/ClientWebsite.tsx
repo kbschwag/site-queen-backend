@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   Crown, ArrowRight, Sparkles, Loader2, CheckCircle2, Send, ExternalLink, Share2, Copy, Eye, ImageIcon,
-  Pencil, Phone,
+  Pencil, Phone, Rocket,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
@@ -235,7 +235,7 @@ export default function ClientWebsite() {
       }
     },
     onSuccess: () => {
-      toast.success("Your approval has been received ♛");
+      toast.success("Publish request received — we'll take it live shortly ♛");
       setShowApproveModal(false);
       queryClient.invalidateQueries({ queryKey: ["my-site"] });
     },
@@ -373,12 +373,23 @@ export default function ClientWebsite() {
 
     return (
       <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
-        {/* Header banner — purple */}
-        <div className="bg-primary/10 border border-primary/20 rounded-xl p-5 text-center">
-          <h1 className="text-2xl font-bold mb-1">Your website is ready to preview ♛</h1>
-          <p className="text-sm text-muted-foreground">
-            Take your time reviewing it. When you're ready, choose one of the options below.
-          </p>
+        {/* Header banner — purple, with prominent Publish CTA */}
+        <div className="bg-primary/10 border border-primary/20 rounded-xl p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="text-center sm:text-left">
+              <h1 className="text-2xl font-bold mb-1">Your website is ready to preview ♛</h1>
+              <p className="text-sm text-muted-foreground">
+                Take your time reviewing it. When you're happy, hit Publish to take it live on your domain.
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowApproveModal(true)}
+              size="lg"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0"
+            >
+              <Rocket className="h-4 w-4" /> Publish my website
+            </Button>
+          </div>
         </div>
 
         {/* Status-specific banners */}
@@ -402,19 +413,19 @@ export default function ClientWebsite() {
 
         {/* Three option cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Option 1 — Approve */}
+          {/* Option 1 — Publish */}
           <Card className="border-l-4 border-l-emerald-500">
             <CardHeader className="pb-3">
               <div className="text-2xl mb-1">✓</div>
               <CardTitle className="text-lg">Looks perfect ♛</CardTitle>
-              <CardDescription>Happy with everything? Let us know and we'll get it live.</CardDescription>
+              <CardDescription>Happy with everything? Publish to take it live on your domain.</CardDescription>
             </CardHeader>
             <CardContent>
               <Button
                 onClick={() => setShowApproveModal(true)}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
               >
-                <CheckCircle2 className="h-4 w-4" /> Approve my website
+                <Rocket className="h-4 w-4" /> Publish my website
               </Button>
             </CardContent>
           </Card>
@@ -498,16 +509,16 @@ export default function ClientWebsite() {
 
         {/* Important note */}
         <p className="text-center text-xs text-muted-foreground italic">
-          Your website will be reviewed by our team before going live. We'll notify you the moment it's up. ♛
+          Once you publish, our team does a final check before pushing your site live to your domain. We'll notify you the moment it's up. ♛
         </p>
 
-        {/* Approve confirmation modal */}
+        {/* Publish confirmation modal */}
         <Dialog open={showApproveModal} onOpenChange={setShowApproveModal}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Are you sure everything looks great?</DialogTitle>
+              <DialogTitle>Ready to publish your website? ♛</DialogTitle>
               <DialogDescription>
-                Tick each item to confirm — once approved, we'll get your site queued up to go live.
+                Tick each item to confirm — once published, we'll take your site live on your domain.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-2">
@@ -534,8 +545,8 @@ export default function ClientWebsite() {
                 disabled={!allChecked || approveWebsite.isPending}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
               >
-                {approveWebsite.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Confirm approval ♛
+                {approveWebsite.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                Publish my website ♛
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -544,14 +555,14 @@ export default function ClientWebsite() {
     );
   }
 
-  // STATE 4b: Approved, waiting to go live
+  // STATE 4b: Published, waiting to go live
   if ((generationStatus === "client_approved" || generationStatus === "approved") && !siteIsLive) {
     return (
       <div className="max-w-xl mx-auto text-center py-12 animate-in fade-in duration-300">
-        <CheckCircle2 className="h-16 w-16 text-emerald-500 mx-auto mb-6" />
-        <h1 className="text-2xl font-bold mb-3">You approved your site ♛</h1>
+        <Rocket className="h-16 w-16 text-emerald-500 mx-auto mb-6" />
+        <h1 className="text-2xl font-bold mb-3">You published your site ♛</h1>
         <p className="text-muted-foreground">
-          We'll make it live shortly. You'll get a notification when it's ready.
+          We're pushing it live to your domain now. You'll get a notification the moment it's up.
         </p>
       </div>
     );
