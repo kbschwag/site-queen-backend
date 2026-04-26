@@ -68,11 +68,13 @@ serve(async (req) => {
 
   let clientId: string | null = null;
   let instruction = "";
+  let page = "index.html";
 
   try {
     const body = await req.json();
     clientId = body.client_id;
     instruction = (body.instruction || "").toString().trim();
+    page = (body.page || "index.html").toString().trim();
 
     if (!clientId || !instruction) {
       return new Response(JSON.stringify({ error: "client_id and instruction required" }), {
@@ -85,17 +87,42 @@ serve(async (req) => {
       });
     }
 
-    // Download current clean HTML from the deploy backup folder.
-    // (Staging copies live on Hostinger; deploy/ is the source of truth.)
-    const { data: file, error: dlErr } = await supabase.storage
-      .from("generated-sites")
-      .download(`${clientId}/deploy/index.html`);
-    if (dlErr || !file) throw new Error("Could not load site HTML — has the site been generated?");
+    // Determine which file(s) to edit. "all" → every HTML file present in the deploy folder.
+    const ALLOWED_PAGES = new Set(["index.html", "about.html", "services.html", "contact.html"]);
+    let pagesToEdit: string[] = [];
+    if (page === "all") {
+      const { data: list } = await supabase.storage
+        .from("generated-sites")
+        .list(`${clientId}/deploy`, { limit: 100 });
+      pagesToEdit = (list || [])
+        .map((f: any) => f.name)
+        .filter((n: string) => ALLOWED_PAGES.has(n));
+      if (pagesToEdit.length === 0) pagesToEdit = ["index.html"];
+    } else {
+      if (!ALLOWED_PAGES.has(page)) {
+        return new Response(JSON.stringify({ error: `Invalid page: ${page}` }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      pagesToEdit = [page];
+    }
 
-    const currentHtml = await file.text();
+    for (const pageFile of pagesToEdit) {
+      // Download current clean HTML from the deploy backup folder.
+      const { data: file, error: dlErr } = await supabase.storage
+        .from("generated-sites")
+        .download(`${clientId}/deploy/${pageFile}`);
+      if (dlErr || !file) {
+        if (page === "all") {
+          console.warn(`[quick-edit] skipping missing ${pageFile}`);
+          continue;
+        }
+        throw new Error(`Could not load ${pageFile} — has the site been generated?`);
+      }
 
-    // Call Lovable AI Gateway
-    const aiPrompt = `You are editing an existing website HTML file. Here is the current HTML:
+      const currentHtml = await file.text();
+
+      const aiPrompt = `You are editing an existing website HTML file (${pageFile}). Here is the current HTML:
 
 ${currentHtml}
 
@@ -109,64 +136,64 @@ Rules:
 - Keep the SiteQueen analytics script intact
 - Return ONLY the complete updated HTML — no explanation, no markdown, just the raw HTML`;
 
-    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 16000,
-        messages: [{ role: "user", content: aiPrompt }],
-      }),
-    });
-
-    if (aiRes.status === 429) {
-      await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null, instruction, "failed", "Rate limited (429)");
-      return new Response(JSON.stringify({ error: "Rate limited — please wait a moment and try again." }), {
-        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 16000,
+          messages: [{ role: "user", content: aiPrompt }],
+        }),
       });
-    }
-    if (!aiRes.ok) {
-      const txt = await aiRes.text();
-      throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 200)}`);
-    }
 
-    const aiJson = await aiRes.json();
-    let updatedHtml: string = aiJson?.content?.[0]?.text ?? "";
-    if (!updatedHtml) throw new Error("AI returned empty content");
+      if (aiRes.status === 429) {
+        await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null, instruction, "failed", "Rate limited (429)");
+        return new Response(JSON.stringify({ error: "Rate limited — please wait a moment and try again." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!aiRes.ok) {
+        const txt = await aiRes.text();
+        throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 200)}`);
+      }
 
-    // Strip any accidental markdown fences
-    updatedHtml = updatedHtml
-      .replace(/^```(?:html)?\s*\n?/i, "")
-      .replace(/\n?```\s*$/i, "")
-      .trim();
+      const aiJson = await aiRes.json();
+      let updatedHtml: string = aiJson?.content?.[0]?.text ?? "";
+      if (!updatedHtml) throw new Error("AI returned empty content");
 
-    if (updatedHtml.length < 200 || !/<\/html>/i.test(updatedHtml)) {
-      throw new Error("AI output does not look like a complete HTML document");
-    }
+      // Strip any accidental markdown fences
+      updatedHtml = updatedHtml
+        .replace(/^```(?:html)?\s*\n?/i, "")
+        .replace(/\n?```\s*$/i, "")
+        .trim();
 
-    // 1) Save clean copy back to the deploy backup folder
-    const { error: upErr } = await supabase.storage
-      .from("generated-sites")
-      .upload(`${clientId}/deploy/index.html`, new Blob([updatedHtml], { type: "text/html" }), {
-        upsert: true,
-        contentType: "text/html",
-      });
-    if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+      if (updatedHtml.length < 200 || !/<\/html>/i.test(updatedHtml)) {
+        throw new Error(`AI output for ${pageFile} does not look like a complete HTML document`);
+      }
 
-    // 2) Push staging copy (with noindex) straight to Hostinger so the
-    //    operator + client preview iframes show the change immediately.
-    try {
-      const stagingHtml = injectNoindex(updatedHtml);
-      await uploadFileToHostingerFtp(
-        `/public_html/${clientId}/index.html`,
-        stagingHtml,
-      );
-    } catch (e: any) {
-      console.error("[quick-edit] Hostinger staging push error:", e);
+      // 1) Save clean copy back to the deploy backup folder
+      const { error: upErr } = await supabase.storage
+        .from("generated-sites")
+        .upload(`${clientId}/deploy/${pageFile}`, new Blob([updatedHtml], { type: "text/html" }), {
+          upsert: true,
+          contentType: "text/html",
+        });
+      if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+
+      // 2) Push staging copy (with noindex) straight to Hostinger
+      try {
+        const stagingHtml = injectNoindex(updatedHtml);
+        await uploadFileToHostingerFtp(
+          `/public_html/${clientId}/${pageFile}`,
+          stagingHtml,
+        );
+      } catch (e: any) {
+        console.error(`[quick-edit] Hostinger staging push error for ${pageFile}:`, e);
+      }
     }
 
     // Update sites metadata
