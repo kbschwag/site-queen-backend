@@ -260,6 +260,19 @@ BUSINESS INFO:
 - Client-provided service areas (use these exact names FIRST for AREA_1..N before generating more):
 ${clientServiceAreaList}
 
+═══════════════════════════════════════════════════════════
+SERVICE AREAS — GEOGRAPHIC GROUNDING (read carefully)
+═══════════════════════════════════════════════════════════
+The business is located in ${city || "(city not provided)"}, ${state || "(state not provided)"}.
+All service areas must be REAL cities and towns within reasonable driving distance of ${city}, ${state} specifically — NOT the state in general, NOT a different metro area in the same state, NOT a famous city elsewhere in the state if it isn't actually nearby.
+
+HARD RULES:
+1. Do NOT guess or assume the region. Use ONLY the provided city "${city}" and state "${state}" to determine nearby locations. If you are unsure which cities are actually near ${city}, ${state}, pick fewer real ones rather than inventing or guessing.
+2. If the client provided service areas above, use those EXACT names verbatim FIRST (in the order given) to fill AREA_1, AREA_2, … and only generate additional names to fill the remaining slots. Any generated additions must also be real towns geographically near ${city}, ${state}.
+3. Every AREA_* value must be a real, recognizable place name — never a generic descriptor like "Local Communities", "Surrounding Areas", "Rural Properties", "Nearby Towns", "The Greater Region", or "Outlying Districts".
+4. AREA_1 should normally be "${city || "the home city"}" itself unless the client list above starts with a different city.
+═══════════════════════════════════════════════════════════
+
 CALL NOTES (highest priority — follow exactly):
 ${callNotes ? JSON.stringify({
   their_story: (callNotes as any).their_story,
