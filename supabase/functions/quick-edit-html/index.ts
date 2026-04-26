@@ -206,8 +206,9 @@ Rules:
       .eq("client_id", clientId!);
 
 
-    // Log edit
-    await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null, instruction, "completed", null);
+    // Log edit (prefix with page so the operator can see scope in history)
+    const loggedInstruction = `[${page}] ${instruction}`;
+    await logEdit(supabase, clientId!, caller.id, profileRow?.email ?? caller.email ?? null, loggedInstruction, "completed", null);
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
