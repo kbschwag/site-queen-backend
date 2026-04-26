@@ -222,6 +222,16 @@ serve(async (req) => {
       typeof s === "string" ? s : s?.name || s?.title || ""
     ).filter(Boolean);
 
+    // Client-provided service-area names (intake.service_areas[]) — these are
+    // injected into the prompt so Claude uses them verbatim before generating
+    // any additional nearby cities.
+    const clientServiceAreaNames: string[] = serviceAreas
+      .map((a: any) => (typeof a === "string" ? a : (a?.name || a?.city || a?.title || "")).toString().trim())
+      .filter(Boolean);
+    const clientServiceAreaList = clientServiceAreaNames.length
+      ? clientServiceAreaNames.map((n, i) => `  ${i + 1}. ${n}`).join("\n")
+      : "(none provided — generate 8 real nearby cities/towns)";
+
     const copyPrompt = `You are a professional copywriter for SiteQueen. Generate website copy for a ${businessType} business. Return ONLY valid JSON — no markdown, no explanation, no code blocks. Start with { and end with }.
 
 CRITICAL: Every field in this JSON must be filled. Empty strings are never acceptable unless the client has explicitly opted out of that section (like no_testimonials). If the client didn't provide information for a field, generate something specific and relevant based on everything you know about this business — their type, services, location, story, and tone. A trades contractor in Utah gets different content than a spa in Miami. Never use generic placeholder text. Every word should feel like it was written specifically for this business.
