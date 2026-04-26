@@ -658,45 +658,72 @@ Return ONLY valid JSON. No markdown:
 
       console.log(`[extra-pages] Custom pages to build: ${[...pageMap.keys()].join(", ")}`);
 
+      // Pre-compute the available class list once — Claude must reuse these exactly.
+      const availableClasses = listClassNames(shell.styleBlock).slice(0, 250);
+      const classListStr = availableClasses.join(", ");
+      // Only include real business hours — otherwise omit entirely (no "by appointment" lies)
+      const hoursStr = formatBusinessHours(intake.business_hours);
+      const resolvedServiceArea = (intake.service_area && String(intake.service_area).trim())
+        || (city ? `${city}, ${state} & Surrounding Areas` : "");
+      const phoneTel = phoneRaw ? `tel:${phoneRaw}` : "";
+      const emailMailto = email ? `mailto:${email}` : "";
+
       for (const spec of pageMap.values()) {
         try {
-          const customPrompt = `Build the content section for a ${spec.name.toUpperCase()} page for ${businessName}, a ${businessType} in ${city}, ${state}.
+          const customPrompt = `You are building the inner CONTENT SECTION for a ${spec.name.toUpperCase()} page on the website of ${businessName}, a ${businessType} in ${city}, ${state}.
 
-Use ONLY the provided CSS classes — do not write any new CSS, do not add <style> tags, do not use inline style attributes. Use the provided header and footer exactly as-is. Only return the HTML that goes between the header and footer. All button styles, colors, fonts, inputs, and card styles are already defined in the CSS.
+You may use ONLY the existing CSS classes from the provided stylesheet — do not write any new CSS, do not add <style> tags, do not use inline style="" attributes, do not invent class names. The stylesheet, header, and footer are already on the page; you must NOT include any of them in your output.
 
-PAGE BRIEF: ${spec.description}
+═══════════════════════════════════════════════════════════
+AVAILABLE CSS CLASSES (the ONLY classes you may use):
+${classListStr}
+═══════════════════════════════════════════════════════════
 
-BUSINESS INFO:
-- Name: ${businessName}
-- Type: ${businessType}
-- City: ${city}, ${state}
-- Phone: ${phone}
-- Email: ${email}
-- Address: ${address || "service-area based"}
-- Service area: ${intake.service_area || city}
-- Services: ${serviceNames.join(", ") || "n/a"}
-- Hours: ${intake.business_hours ? JSON.stringify(intake.business_hours) : "by appointment"}
+Before generating, mentally identify which of those classes you will use for: page hero, container, sections, columns/grid, cards, buttons, form fields, headings, links, lists. Only use classes that appear in the list above.
 
-EXISTING CSS CLASSES YOU MUST REUSE (extracted from the live site):
-${listClassNames(shell.styleBlock).slice(0, 200).join(", ")}
+PAGE BRIEF:
+${spec.description}
 
-HEADER (already on the page, do NOT include in your output):
-${shell.headerHTML.substring(0, 500)}...
-
-FOOTER (already on the page, do NOT include in your output):
-${shell.footerHTML.substring(0, 300)}...
+BUSINESS DATA (use real values, never invent):
+- Business name: ${businessName}
+- Business type: ${businessType}
+- City / state: ${city}, ${state}
+- Phone: ${phone}${phoneTel ? `  (link: ${phoneTel})` : ""}
+- Email: ${email || "(none provided — omit any email reference)"}${emailMailto ? `  (link: ${emailMailto})` : ""}
+- Address: ${address || "(no fixed address — service-area business)"}
+- Service area: ${resolvedServiceArea}
+- Services: ${serviceNames.join(", ") || "(none provided)"}
+${hoursStr ? `- Business hours:\n${hoursStr}` : "- Business hours: NOT provided — do not invent hours, do not write \"by appointment\" unless explicitly stated. Omit any hours block entirely."}
+${logoUrl ? `- Logo URL (already shown in header — do NOT re-use in content): ${logoUrl}` : ""}
+- Brand primary color: ${primaryColor} (already applied via existing CSS)
+- Brand accent color: ${accentColor} (already applied via existing CSS)
 
 CALL NOTES TONE: ${callNotes ? JSON.stringify({ tone_of_voice: (callNotes as any).tone_of_voice, tone_custom: (callNotes as any).tone_custom, exact_phrases: (callNotes as any).exact_phrases }, null, 2) : "None"}
 
-RULES:
-- Return ONLY the inner content HTML — typically wrapped in <main>...</main> or a series of <section>...</section> blocks.
-- Do NOT include <!DOCTYPE>, <html>, <head>, <body>, <style>, the header, or the footer — those are already in place.
-- Do NOT use inline style="" attributes. Reuse classes from the CSS list above (e.g. .btn, .container, .section, .card, etc.).
-- Phone numbers as tel:${phoneRaw} links. Emails as mailto:${email} links.
-- Page must be mobile-responsive using existing classes only.
-- Include a small, understated page header / breadcrumb (HOME › ${spec.name.toUpperCase()}) at the top — like the about page. Do NOT recreate the homepage's full dark hero section with a giant headline. Avoid .hero / .hero-section classes; use .page-header, .breadcrumb, .section-title or equivalent existing classes instead.
-- Every word should feel specific to this business — never generic filler.
-- Output raw HTML only. No markdown, no code blocks, no explanation.`;
+═══════════════════════════════════════════════════════════
+HARD RULES — VIOLATING ANY OF THESE MEANS THE PAGE WILL BE REJECTED:
+═══════════════════════════════════════════════════════════
+1. PAGE HERO STYLE — Start the page with a small, understated PAGE HEADER (the same lightweight style as the about page header). It must use the .page-hero class (or .page-header if .page-hero is unavailable in the class list above) on a simple dark background with NO background image, NO full-screen takeover, and NO contact form inside it. Structure inside the hero, in this order:
+     • Breadcrumb: <nav class="breadcrumb">…</nav> containing "HOME" linking to index.html, a separator (›), then the current page name (${spec.name.toUpperCase()}).
+     • Page title: a single <h1> with just the page name or "${spec.name} — ${businessName}".
+     • Optional one-sentence subtitle below the title.
+   NEVER use .hero or .hero-section classes. NEVER copy the homepage's giant headline + form hero. NEVER add background-image inline styles to the hero.
+
+2. NO PLACEHOLDER TEXT. Never write text like "form fields here", "[insert content]", "[your text]", "Lorem ipsum", "TODO", or anything similar. Generate complete, real, working HTML for everything.
+
+3. FORMS & UI ELEMENTS — Never represent form fields, buttons, dropdowns, or other UI as bullet lists or plain text. Always use real HTML elements: <form>, <input>, <select>, <option>, <textarea>, <button>, <label>. If the page needs a contact form, the inputs MUST have these exact name attributes (the platform wires them to the backend): name="name" (text, required), name="phone" (tel, required), name="email" (email, required), name="service" (a <select> populated with real options from the services list above), name="message" (textarea, required), and a <button type="submit">. Do NOT add an action attribute, onsubmit handler, or hidden inputs — the platform injects those automatically.
+
+4. NO INLINE STYLES. Zero style="" attributes. Zero <style> blocks. Reuse only the classes listed above.
+
+5. PHONE & EMAIL — Render phone numbers as <a href="${phoneTel || "tel:"}">${phone}</a>${emailMailto ? ` and emails as <a href="${emailMailto}">${email}</a>` : ""}. No bare text.
+
+6. INTERNAL LINKS — Link to other pages with relative URLs: index.html, about.html, services.html, contact.html.
+
+7. NO HEADER / FOOTER / DOCTYPE in your output. Return ONLY the inner content (typically a <main> wrapper or a sequence of <section> blocks). Mobile-responsive via existing classes only.
+
+8. SPECIFICITY — Every line must be specific to ${businessName} in ${city}. No generic filler.
+
+OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
 
           console.log(`[extra-pages] Generating ${spec.slug} page (${spec.source})...`);
           const result = await callAI(ANTHROPIC_API_KEY, customPrompt, `page-${spec.slug}`);
