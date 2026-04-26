@@ -995,18 +995,20 @@ function buildMapHTML(input: MapInput): { html: string; url: string } {
     return { html: "", url: "" };
   }
 
+  // A fixed-location business: storefront / physical / hybrid → pin the address
+  const isFixedLocation =
+    type === "storefront" || type === "physical" || type === "hybrid";
+
   let url = "";
-  if (type === "physical" && (street || city)) {
+  if (isFixedLocation && (street || city)) {
     const q = [street, city, state, zip].filter(Boolean).join(", ");
     url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`;
-  } else if (type === "hybrid" && (street || city)) {
-    const q = [street, city, state].filter(Boolean).join(", ");
-    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`;
-  } else if (type === "mobile" && (city || state)) {
+  } else if ((type === "mobile" || !type) && (city || state)) {
+    // Mobile / service-area / unknown → city+state with a wider zoom
     const q = [city, state].filter(Boolean).join(", ");
     url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
   } else if (city || state) {
-    // Fallback — missing/unrecognised location_type
+    // Final safety fallback for any other type — still render a map
     const q = [city, state].filter(Boolean).join(", ");
     url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
   }
@@ -1018,7 +1020,7 @@ function buildMapHTML(input: MapInput): { html: string; url: string } {
     };
   }
 
-  const html = `<iframe class="map-iframe" src="${url}" width="100%" height="100%" style="border:0;min-height:400px;" allowfullscreen="" loading="lazy"></iframe>`;
+  const html = `<iframe class="map-iframe" src="${url}" width="100%" height="100%" style="border:0;min-height:400px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
   return { html, url };
 }
 
