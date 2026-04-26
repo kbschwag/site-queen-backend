@@ -39,6 +39,7 @@ const PAGE_OPTIONS = [
 ];
 
 const IMAGE_SLOT_OPTIONS = [
+  { value: "favicon", label: "Favicon" },
   { value: "hero", label: "Hero Image" },
   { value: "about", label: "About / Owner Photo" },
   { value: "why-us", label: "Why Us Photo" },
