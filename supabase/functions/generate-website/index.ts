@@ -222,6 +222,16 @@ serve(async (req) => {
       typeof s === "string" ? s : s?.name || s?.title || ""
     ).filter(Boolean);
 
+    // Client-provided service-area names (intake.service_areas[]) — these are
+    // injected into the prompt so Claude uses them verbatim before generating
+    // any additional nearby cities.
+    const clientServiceAreaNames: string[] = serviceAreas
+      .map((a: any) => (typeof a === "string" ? a : (a?.name || a?.city || a?.title || "")).toString().trim())
+      .filter(Boolean);
+    const clientServiceAreaList = clientServiceAreaNames.length
+      ? clientServiceAreaNames.map((n, i) => `  ${i + 1}. ${n}`).join("\n")
+      : "(none provided — generate 8 real nearby cities/towns)";
+
     const copyPrompt = `You are a professional copywriter for SiteQueen. Generate website copy for a ${businessType} business. Return ONLY valid JSON — no markdown, no explanation, no code blocks. Start with { and end with }.
 
 CRITICAL: Every field in this JSON must be filled. Empty strings are never acceptable unless the client has explicitly opted out of that section (like no_testimonials). If the client didn't provide information for a field, generate something specific and relevant based on everything you know about this business — their type, services, location, story, and tone. A trades contractor in Utah gets different content than a spa in Miami. Never use generic placeholder text. Every word should feel like it was written specifically for this business.
@@ -247,6 +257,8 @@ BUSINESS INFO:
 - Google review count: ${googleReviewCount || "not provided"}
 - Services: ${serviceNames.join(", ") || "not provided"}
 - Tagline: ${tagline || "not provided"}
+- Client-provided service areas (use these exact names FIRST for AREA_1..N before generating more):
+${clientServiceAreaList}
 
 CALL NOTES (highest priority — follow exactly):
 ${callNotes ? JSON.stringify({
@@ -332,14 +344,14 @@ Return this exact JSON structure (every field required, no empty strings unless 
   "FINANCING_HEADLINE": "financing headline appropriate to this business type",
   "FINANCING_SUBTEXT": "financing offer details appropriate to this business type",
   "SERVICE_AREAS_HEADLINE": "4-6 words all caps",
-  "AREA_1": "${city}",
-  "AREA_2": "real nearby city or town around ${city}, ${state}",
-  "AREA_3": "real nearby city or town around ${city}, ${state} (distinct)",
-  "AREA_4": "real nearby city or town around ${city}, ${state} (distinct)",
-  "AREA_5": "real nearby city or town around ${city}, ${state} (distinct)",
-  "AREA_6": "real nearby city or town around ${city}, ${state} (distinct)",
-  "AREA_7": "real nearby city or town around ${city}, ${state} (distinct)",
-  "AREA_8": "real nearby city or town around ${city}, ${state} (distinct)",
+  "AREA_1": "REAL city or town name — must be an actual place near ${city}, ${state}. NEVER generic phrases like 'Local Communities', 'Surrounding Areas', 'Rural Properties', 'Nearby Towns'. If the client provided service areas above, use those names verbatim FIRST in order; only generate additional ones once the client list is exhausted.",
+  "AREA_2": "REAL city or town name geographically near ${city}, ${state} (distinct). Research actual nearby cities — for example, in northern Utah real options include Salt Lake City, Provo, Ogden, West Valley City, Sandy, Layton, Orem, Draper. NEVER generic descriptions.",
+  "AREA_3": "REAL nearby city or town (distinct) — actual place name only, never a category.",
+  "AREA_4": "REAL nearby city or town (distinct) — actual place name only.",
+  "AREA_5": "REAL nearby city or town (distinct) — actual place name only.",
+  "AREA_6": "REAL nearby city or town (distinct) — actual place name only.",
+  "AREA_7": "REAL nearby city or town (distinct) — actual place name only.",
+  "AREA_8": "REAL nearby city or town (distinct) — actual place name only.",
   "AWARD_1": "relevant industry certification, license, or recognition typical for a ${businessType} business",
   "AWARD_2": "different relevant industry certification or recognition for a ${businessType} business",
   "AWARD_3": "different relevant industry certification or recognition for a ${businessType} business",
@@ -995,18 +1007,20 @@ function buildMapHTML(input: MapInput): { html: string; url: string } {
     return { html: "", url: "" };
   }
 
+  // A fixed-location business: storefront / physical / hybrid → pin the address
+  const isFixedLocation =
+    type === "storefront" || type === "physical" || type === "hybrid";
+
   let url = "";
-  if (type === "physical" && (street || city)) {
+  if (isFixedLocation && (street || city)) {
     const q = [street, city, state, zip].filter(Boolean).join(", ");
     url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`;
-  } else if (type === "hybrid" && (street || city)) {
-    const q = [street, city, state].filter(Boolean).join(", ");
-    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`;
-  } else if (type === "mobile" && (city || state)) {
+  } else if ((type === "mobile" || !type) && (city || state)) {
+    // Mobile / service-area / unknown → city+state with a wider zoom
     const q = [city, state].filter(Boolean).join(", ");
     url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
   } else if (city || state) {
-    // Fallback — missing/unrecognised location_type
+    // Final safety fallback for any other type — still render a map
     const q = [city, state].filter(Boolean).join(", ");
     url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
   }
@@ -1018,7 +1032,7 @@ function buildMapHTML(input: MapInput): { html: string; url: string } {
     };
   }
 
-  const html = `<iframe class="map-iframe" src="${url}" width="100%" height="100%" style="border:0;min-height:400px;" allowfullscreen="" loading="lazy"></iframe>`;
+  const html = `<iframe class="map-iframe" src="${url}" width="100%" height="100%" style="border:0;min-height:400px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
   return { html, url };
 }
 
