@@ -1,0 +1,2 @@
+ALTER TABLE public.clients DROP CONSTRAINT IF EXISTS clients_plan_check;
+ALTER TABLE public.clients ADD CONSTRAINT clients_plan_check CHECK (plan = ANY (ARRAY['starter'::text, 'growth'::text, 'pro'::text, 'testing'::text, 'beta'::text]));
