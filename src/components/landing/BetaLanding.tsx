@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Check, Crown, Sparkles, Heart } from "lucide-react";
-import heroImg from "@/assets/website-queen-hero.jpg";
+
 
 const benefits = [
   "Professional website built completely free in ~48 hours — fully done-for-you, no DIY.",
