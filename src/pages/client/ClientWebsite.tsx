@@ -136,7 +136,7 @@ export default function ClientWebsite() {
         client_id: client.id,
         request_text: feedbackText,
         change_type: "Pre-launch feedback",
-        status: "submitted",
+        status: "pending",
         is_pre_launch: true,
         credits_cost: 0,
         attachment_url: attachmentUrl,
