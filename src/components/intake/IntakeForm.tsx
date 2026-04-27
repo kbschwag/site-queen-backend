@@ -14,7 +14,7 @@ import { useIntakeForm } from "@/hooks/useIntakeForm";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Crown, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Crown, Loader2, HelpCircle } from "lucide-react";
 import { TOTAL_STEPS } from "./types";
 import type { IntakeData } from "./types";
 import { countIntakePhotos } from "@/lib/photo-utils";
@@ -200,6 +200,18 @@ export function IntakeForm({ clientId, userId, plan, businessName, onComplete }:
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <div className="w-full border-b bg-card/50 px-4 py-2 flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          asChild
+          className="gap-2"
+        >
+          <a href="https://calendly.com/sitequeenai/discovery" target="_blank" rel="noreferrer">
+            <HelpCircle className="h-4 w-4" /> Need help? Schedule a call
+          </a>
+        </Button>
+      </div>
       <IntakeProgressBar
         currentStep={currentStep}
         completedSteps={intakeData.completed_steps || []}
