@@ -555,14 +555,14 @@ export default function ClientWebsite() {
     );
   }
 
-  // STATE 4b: Published, waiting to go live
+  // STATE 4b: Approved, waiting for operator to publish
   if ((generationStatus === "client_approved" || generationStatus === "approved") && !siteIsLive) {
     return (
       <div className="max-w-xl mx-auto text-center py-12 animate-in fade-in duration-300">
-        <Rocket className="h-16 w-16 text-emerald-500 mx-auto mb-6" />
-        <h1 className="text-2xl font-bold mb-3">You published your site ♛</h1>
+        <CheckCircle2 className="h-16 w-16 text-emerald-500 mx-auto mb-6" />
+        <h1 className="text-2xl font-bold mb-3">You approved your site ♛</h1>
         <p className="text-muted-foreground">
-          We're pushing it live to your domain now. You'll get a notification the moment it's up.
+          Our team is doing the final checks and will publish it to your domain shortly. You'll get a notification the moment it's live.
         </p>
       </div>
     );
