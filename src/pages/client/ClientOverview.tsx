@@ -124,7 +124,7 @@ export default function ClientOverview() {
   } else if (inStagingReview) {
     ctaText = "Preview your website →";
   } else if (isApproved) {
-    ctaText = "Approved — going live soon →";
+    ctaText = "Approved — publishing soon →";
   } else {
     ctaText = "Your site is being built — check status →";
   }
