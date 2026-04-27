@@ -413,19 +413,19 @@ export default function ClientWebsite() {
 
         {/* Three option cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Option 1 — Publish */}
+          {/* Option 1 — Approve */}
           <Card className="border-l-4 border-l-emerald-500">
             <CardHeader className="pb-3">
               <div className="text-2xl mb-1">✓</div>
               <CardTitle className="text-lg">Looks perfect ♛</CardTitle>
-              <CardDescription>Happy with everything? Publish to take it live on your domain.</CardDescription>
+              <CardDescription>Happy with everything? Approve it and our team will publish it to your domain.</CardDescription>
             </CardHeader>
             <CardContent>
               <Button
                 onClick={() => setShowApproveModal(true)}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
               >
-                <Rocket className="h-4 w-4" /> Publish my website
+                <CheckCircle2 className="h-4 w-4" /> Approve my website
               </Button>
             </CardContent>
           </Card>
