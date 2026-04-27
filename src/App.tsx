@@ -51,14 +51,13 @@ const App = () => (
         <AuthProvider>
           <Routes>
             {/* Marketing site (public, brand-scoped layout) */}
+            <Route path="/" element={<Index />} />
             <Route element={<MarketingLayout />}>
-              <Route path="/" element={<MarketingHome />} />
               <Route path="/apply" element={<Apply />} />
               <Route path="/help" element={<MarketingHelp />} />
+              <Route path="/old-home" element={<MarketingHome />} />
             </Route>
 
-            {/* Public */}
-            <Route path="/old-home" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
