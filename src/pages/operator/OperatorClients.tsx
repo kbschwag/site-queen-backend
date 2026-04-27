@@ -104,7 +104,7 @@ export default function OperatorClients() {
   };
 
   const planLabel = (plan: string) => {
-    const map: Record<string, string> = { starter: "Starter — $79", growth: "Growth — $129", pro: "Pro — $199" };
+    const map: Record<string, string> = { starter: "Starter — $79", growth: "Growth — $129", pro: "Pro — $199", testing: "Testing — $0", beta: "Beta — $39" };
     return map[plan] || plan;
   };
 
