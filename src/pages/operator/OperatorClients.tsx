@@ -104,7 +104,7 @@ export default function OperatorClients() {
   };
 
   const planLabel = (plan: string) => {
-    const map: Record<string, string> = { starter: "Starter — $79", growth: "Growth — $129", pro: "Pro — $199" };
+    const map: Record<string, string> = { starter: "Starter — $79", growth: "Growth — $129", pro: "Pro — $199", testing: "Testing — $0", beta: "Beta — $39" };
     return map[plan] || plan;
   };
 
@@ -116,6 +116,8 @@ export default function OperatorClients() {
         starter: { monthly: 10, rollover: 20 },
         growth: { monthly: 30, rollover: 60 },
         pro: { monthly: 100, rollover: 200 },
+        testing: { monthly: 100, rollover: 200 },
+        beta: { monthly: 100, rollover: 200 },
       };
       const cfg = creditConfig[value] || creditConfig.starter;
       updateData.credits_monthly_allowance = cfg.monthly;
@@ -288,9 +290,11 @@ export default function OperatorClients() {
                       <Select value={selected.plan} onValueChange={(v) => handleUpdateField(selected.id, "plan", v)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="starter">Starter</SelectItem>
-                          <SelectItem value="growth">Growth</SelectItem>
-                          <SelectItem value="pro">Pro</SelectItem>
+                          <SelectItem value="starter">Starter — $79</SelectItem>
+                          <SelectItem value="growth">Growth — $129</SelectItem>
+                          <SelectItem value="pro">Pro — $199</SelectItem>
+                          <SelectItem value="testing">Testing — $0 (internal)</SelectItem>
+                          <SelectItem value="beta">Beta — $39 (internal)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
