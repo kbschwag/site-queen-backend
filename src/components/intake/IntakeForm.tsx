@@ -14,7 +14,7 @@ import { useIntakeForm } from "@/hooks/useIntakeForm";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Crown, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Crown, Loader2, HelpCircle } from "lucide-react";
 import { TOTAL_STEPS } from "./types";
 import type { IntakeData } from "./types";
 import { countIntakePhotos } from "@/lib/photo-utils";
