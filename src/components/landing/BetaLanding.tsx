@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Check, Crown, Sparkles, Heart } from "lucide-react";
-import heroImg from "@/assets/website-queen-hero.jpg";
+
 
 const benefits = [
   "Professional website built completely free in ~48 hours — fully done-for-you, no DIY.",
@@ -49,46 +49,34 @@ export function BetaLanding() {
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="container mx-auto px-4 py-12 md:py-20 grid md:grid-cols-2 gap-10 lg:gap-16 items-center">
-          <div className="order-2 md:order-1 text-center md:text-left">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#D4B896]/40 bg-[#F5E9D6]/50 px-3 py-1 text-xs font-medium text-[#8A6A2E] mb-5">
-              <Sparkles className="h-3.5 w-3.5" />
-              Beta launch — limited spots
-            </div>
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-medium leading-tight tracking-tight text-[#2C1F3D]">
-              You're one of the first.
-            </h1>
-            <p className="mt-5 text-lg text-[#5B4B7A] leading-relaxed max-w-lg mx-auto md:mx-0">
-              Join SiteQueen as a Beta Tester and get a professional website
-              built for free + special founder pricing.
-            </p>
-            <div className="mt-8 flex flex-col items-center md:items-start gap-3">
-              <Button
-                asChild
-                size="lg"
-                className="rounded-full bg-[#7C5DB8] hover:bg-[#6A4DA6] text-white text-base px-8 py-6 shadow-lg shadow-[#7C5DB8]/20 ring-1 ring-[#D4B896]/40"
-              >
-                <Link to="/apply">
-                  Apply to Become a Beta Tester
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
-              <p className="text-xs text-[#8A7AA0]">
-                Limited to 8 serious small business owners
-              </p>
-            </div>
+        <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-[#E9D5F5]/50 blur-3xl" />
+        <div className="absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-[#F5E9D6]/50 blur-3xl" />
+        <div className="container mx-auto px-4 py-16 md:py-24 text-center relative">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#D4B896]/40 bg-[#F5E9D6]/50 px-3 py-1 text-xs font-medium text-[#8A6A2E] mb-5">
+            <Sparkles className="h-3.5 w-3.5" />
+            Beta launch — limited spots
           </div>
-          <div className="order-1 md:order-2 relative">
-            <div className="absolute -inset-4 bg-gradient-to-br from-[#E9D5F5] via-[#F5E9D6] to-transparent rounded-[2rem] blur-2xl opacity-60" />
-            <div className="relative rounded-[2rem] overflow-hidden ring-1 ring-[#D4B896]/30 shadow-xl shadow-[#7C5DB8]/10">
-              <img
-                src={heroImg}
-                alt="The Website Queen in her home office"
-                width={1536}
-                height={1024}
-                className="w-full h-auto object-cover"
-              />
-            </div>
+          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-medium leading-tight tracking-tight text-[#2C1F3D]">
+            You're one of the first.
+          </h1>
+          <p className="mt-5 text-lg text-[#5B4B7A] leading-relaxed max-w-xl mx-auto">
+            Join SiteQueen as a Beta Tester and get a professional website
+            built for free + special founder pricing.
+          </p>
+          <div className="mt-8 flex flex-col items-center gap-3">
+            <Button
+              asChild
+              size="lg"
+              className="rounded-full bg-[#7C5DB8] hover:bg-[#6A4DA6] text-white text-base px-8 py-6 shadow-lg shadow-[#7C5DB8]/20 ring-1 ring-[#D4B896]/40"
+            >
+              <Link to="/apply">
+                Apply to Become a Beta Tester
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+            <p className="text-xs text-[#8A7AA0]">
+              Limited to 8 serious small business owners
+            </p>
           </div>
         </div>
       </section>
