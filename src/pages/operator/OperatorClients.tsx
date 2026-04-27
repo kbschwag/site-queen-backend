@@ -116,6 +116,8 @@ export default function OperatorClients() {
         starter: { monthly: 10, rollover: 20 },
         growth: { monthly: 30, rollover: 60 },
         pro: { monthly: 100, rollover: 200 },
+        testing: { monthly: 100, rollover: 200 },
+        beta: { monthly: 100, rollover: 200 },
       };
       const cfg = creditConfig[value] || creditConfig.starter;
       updateData.credits_monthly_allowance = cfg.monthly;
