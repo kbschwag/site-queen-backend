@@ -235,7 +235,7 @@ export default function ClientWebsite() {
       }
     },
     onSuccess: () => {
-      toast.success("Publish request received — we'll take it live shortly ♛");
+      toast.success("Approval received — we'll publish your site shortly ♛");
       setShowApproveModal(false);
       queryClient.invalidateQueries({ queryKey: ["my-site"] });
     },
