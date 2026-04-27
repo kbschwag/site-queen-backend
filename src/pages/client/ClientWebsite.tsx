@@ -509,7 +509,7 @@ export default function ClientWebsite() {
 
         {/* Important note */}
         <p className="text-center text-xs text-muted-foreground italic">
-          Once you publish, our team does a final check before pushing your site live to your domain. We'll notify you the moment it's up. ♛
+          Once you approve, our team does a final check before publishing your site live to your domain. We'll notify you the moment it's up. ♛
         </p>
 
         {/* Publish confirmation modal */}
