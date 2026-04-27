@@ -290,9 +290,11 @@ export default function OperatorClients() {
                       <Select value={selected.plan} onValueChange={(v) => handleUpdateField(selected.id, "plan", v)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="starter">Starter</SelectItem>
-                          <SelectItem value="growth">Growth</SelectItem>
-                          <SelectItem value="pro">Pro</SelectItem>
+                          <SelectItem value="starter">Starter — $79</SelectItem>
+                          <SelectItem value="growth">Growth — $129</SelectItem>
+                          <SelectItem value="pro">Pro — $199</SelectItem>
+                          <SelectItem value="testing">Testing — $0 (internal)</SelectItem>
+                          <SelectItem value="beta">Beta — $39 (internal)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
