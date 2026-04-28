@@ -65,10 +65,23 @@ serve(async (req) => {
       generation_error: null,
     } as any).eq("client_id", clientId);
 
-    // ── Fetch data ───────────────────────────────────────────────────────
-    const { data: siteData, error: siteError } = await supabase
-      .from("sites").select("*").eq("client_id", clientId).single();
-    if (siteError || !siteData) throw new Error("Site record not found");
+    // ── Fetch data (auto-create sites row if missing) ───────────────────
+    let { data: siteData, error: siteError } = await supabase
+      .from("sites").select("*").eq("client_id", clientId).maybeSingle();
+    if (!siteData) {
+      console.warn(`[generate] No sites row for client ${clientId} — creating one.`);
+      const { data: inserted, error: insertErr } = await supabase
+        .from("sites")
+        .insert({ client_id: clientId, intake_data: {} } as any)
+        .select("*")
+        .single();
+      if (insertErr || !inserted) {
+        throw new Error(`Failed to create site record: ${insertErr?.message || "unknown error"}`);
+      }
+      siteData = inserted;
+    } else if (siteError) {
+      throw new Error("Site record not found");
+    }
 
     const { data: clientData } = await supabase
       .from("clients").select("*").eq("id", clientId).single();
