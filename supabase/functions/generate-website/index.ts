@@ -9,6 +9,8 @@ const corsHeaders = {
 
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
+const LOVABLE_AI_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const LOVABLE_AI_MODEL = "google/gemini-3-flash-preview";
 const TIMEOUT_MS = 600_000; // 10 minutes per Claude call
 
 const STAGING_BASE_URL = "https://staging.sitequeen.ai";
@@ -225,8 +227,10 @@ serve(async (req) => {
     const logoUrlResolved = intake.logo_url || ""; // never replaced with stock
     console.log(`[generate] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} logo:${logoUrlResolved ? "✓" : "✗"} (hero_upload=${!!intake.hero_photo_url}, portfolio=${portfolioPhotos.length}, team=${teamPhotos.length}, allowStock=${allowStock})`);
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
+    if (!ANTHROPIC_API_KEY && !Deno.env.get("LOVABLE_API_KEY")) {
+      throw new Error("No AI provider configured");
+    }
 
     await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
 
