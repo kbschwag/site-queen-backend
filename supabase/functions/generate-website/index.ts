@@ -9,6 +9,8 @@ const corsHeaders = {
 
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-4-20250514";
+const LOVABLE_AI_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const LOVABLE_AI_MODEL = "google/gemini-3-flash-preview";
 const TIMEOUT_MS = 600_000; // 10 minutes per Claude call
 
 const STAGING_BASE_URL = "https://staging.sitequeen.ai";
@@ -225,8 +227,10 @@ serve(async (req) => {
     const logoUrlResolved = intake.logo_url || ""; // never replaced with stock
     console.log(`[generate] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} logo:${logoUrlResolved ? "✓" : "✗"} (hero_upload=${!!intake.hero_photo_url}, portfolio=${portfolioPhotos.length}, team=${teamPhotos.length}, allowStock=${allowStock})`);
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
+    if (!ANTHROPIC_API_KEY && !Deno.env.get("LOVABLE_API_KEY")) {
+      throw new Error("No AI provider configured");
+    }
 
     await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
 
@@ -939,6 +943,13 @@ export function injectFavicon(html: string, faviconTag: string): string {
 
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey) {
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    console.warn(`[${label}] Anthropic key unavailable — using Lovable AI fallback.`);
+    return callLovableAI(LOVABLE_API_KEY, content, label);
+  }
+
   const MAX_ATTEMPTS = 2;
   let lastErr: Error | null = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -966,7 +977,12 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
           await new Promise((res) => setTimeout(res, 3000 * attempt));
           continue;
         }
-        throw new Error(`Claude ${label} failed: ${r.status} — ${errText.substring(0, 300)}`);
+        const message = `Claude ${label} failed: ${r.status} — ${errText.substring(0, 300)}`;
+        if (LOVABLE_API_KEY && isAnthropicCreditError(r.status, errText)) {
+          console.warn(`[${label}] Anthropic credits unavailable — using Lovable AI fallback.`);
+          return callLovableAI(LOVABLE_API_KEY, content, label);
+        }
+        throw new Error(message);
       }
       const data = await r.json();
       const text = Array.isArray(data.content)
@@ -983,6 +999,51 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
     }
   }
   throw lastErr || new Error(`Claude failed: ${label}`);
+}
+
+function isAnthropicCreditError(status: number, errText: string): boolean {
+  const lower = errText.toLowerCase();
+  return status === 400 && (
+    lower.includes("credit balance is too low") ||
+    lower.includes("purchase credits") ||
+    lower.includes("plans & billing")
+  );
+}
+
+async function callLovableAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch(LOVABLE_AI_ENDPOINT, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: LOVABLE_AI_MODEL,
+        messages: [{ role: "user", content }],
+      }),
+    });
+    clearTimeout(timeout);
+
+    if (!r.ok) {
+      const errText = await r.text();
+      if (r.status === 429) throw new Error(`Lovable AI rate limit reached while generating ${label}. Please try again in a minute.`);
+      if (r.status === 402) throw new Error(`Lovable AI credits are exhausted while generating ${label}. Please add AI balance in Lovable.`);
+      throw new Error(`Lovable AI ${label} failed: ${r.status} — ${errText.substring(0, 300)}`);
+    }
+
+    const data = await r.json();
+    const text = data.choices?.[0]?.message?.content || "";
+    return { text, outputTokens: data.usage?.completion_tokens || data.usage?.output_tokens || 0 };
+  } catch (err: any) {
+    clearTimeout(timeout);
+    throw err.name === "AbortError"
+      ? new Error(`Lovable AI ${label} timed out after ${TIMEOUT_MS / 1000}s`)
+      : err;
+  }
 }
 
 function stripMarkdown(s: string): string {
