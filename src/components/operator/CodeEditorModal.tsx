@@ -82,15 +82,71 @@ function loadCodeMirror(): Promise<void> {
   return cdnLoadPromise;
 }
 
+function friendlyPageName(filename: string): string {
+  const lower = filename.toLowerCase();
+  const map: Record<string, string> = {
+    "index.html": "Homepage",
+    "about.html": "About",
+    "services.html": "Services",
+    "contact.html": "Contact",
+  };
+  if (map[lower]) return map[lower];
+  const base = filename.replace(/\.html$/i, "");
+  return base
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [pages, setPages] = useState<string[]>([]);
+  const [activePage, setActivePage] = useState<string | null>(null);
+
   const htmlHostRef = useRef<HTMLDivElement | null>(null);
   const htmlEditorRef = useRef<any>(null);
 
-  // Init CodeMirror + load file
+  // Load list of pages from deploy/ when opening
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.storage
+          .from("generated-sites")
+          .list(`${clientId}/deploy`, { limit: 100 });
+        if (error) throw error;
+        const html = (data || [])
+          .map((f) => f.name)
+          .filter((n) => n.toLowerCase().endsWith(".html"))
+          .sort((a, b) =>
+            a.toLowerCase() === "index.html"
+              ? -1
+              : b.toLowerCase() === "index.html"
+                ? 1
+                : a.localeCompare(b),
+          );
+        if (cancelled) return;
+        setPages(html);
+        setActivePage(html[0] ?? null);
+      } catch (e) {
+        console.error("Failed to list pages:", e);
+        if (!cancelled) {
+          setPages([]);
+          setActivePage(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, clientId]);
+
+  // Init CodeMirror + load active page content
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -102,13 +158,14 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
         const CM = (window as any).CodeMirror;
         if (!CM) throw new Error("CodeMirror failed to load");
 
-        const htmlRes = await supabase.storage
-          .from("generated-sites")
-          .download(`${clientId}/deploy/index.html`);
-
-        if (cancelled) return;
-
-        const htmlContent = htmlRes.data ? await htmlRes.data.text() : STARTER_HTML;
+        let htmlContent = STARTER_HTML;
+        if (activePage) {
+          const htmlRes = await supabase.storage
+            .from("generated-sites")
+            .download(`${clientId}/deploy/${activePage}`);
+          if (cancelled) return;
+          if (htmlRes.data) htmlContent = await htmlRes.data.text();
+        }
 
         await new Promise((r) => setTimeout(r, 0));
         if (cancelled) return;
@@ -139,7 +196,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
     return () => {
       cancelled = true;
     };
-  }, [open, clientId]);
+  }, [open, clientId, activePage]);
 
   useEffect(() => {
     if (open) return;
@@ -147,21 +204,24 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
   }, [open]);
 
   const handleSave = async () => {
-    if (!htmlEditorRef.current) return;
+    if (!htmlEditorRef.current || !activePage) return;
     setSaving(true);
     try {
       const htmlContent = htmlEditorRef.current.getValue();
       const htmlBlob = new Blob([htmlContent], { type: "text/html" });
 
-      // 1) Save clean copy to deploy/ backup folder
+      // 1) Save clean copy to deploy/ backup folder using exact filename
       const { error: upErr } = await supabase.storage
         .from("generated-sites")
-        .upload(`${clientId}/deploy/index.html`, htmlBlob, { upsert: true, contentType: "text/html" });
+        .upload(`${clientId}/deploy/${activePage}`, htmlBlob, {
+          upsert: true,
+          contentType: "text/html",
+        });
       if (upErr) throw upErr;
 
       // 2) Push staging copy to Hostinger so the live preview updates
       const { error: pushErr } = await supabase.functions.invoke("push-to-staging", {
-        body: { client_id: clientId, file: "index.html", content: htmlContent },
+        body: { client_id: clientId, file: activePage, content: htmlContent },
       });
       if (pushErr) {
         console.error("Push to staging failed:", pushErr);
@@ -191,7 +251,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
           client_id: clientId,
           operator_id: user.id,
           operator_email: user.email,
-          instruction: "Manual code edit via code editor",
+          instruction: `Manual code edit via code editor (${activePage})`,
           model_used: "manual",
           status: "completed",
         } as any);
@@ -209,6 +269,8 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
 
   if (!open) return null;
 
+  const hasPages = pages.length > 0;
+
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
@@ -221,22 +283,44 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
         style={{ width: "95vw", height: "95vh" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-zinc-950 border-b border-zinc-800 shrink-0">
-          <div className="flex items-center gap-2 font-semibold text-sm">
+        <div className="flex items-center justify-between px-4 py-3 bg-zinc-950 border-b border-zinc-800 shrink-0 gap-3">
+          <div className="flex items-center gap-2 font-semibold text-sm shrink-0">
             <Code2 className="h-4 w-4" />
             Code editor ♛
           </div>
 
-          {/* Single HTML tab */}
-          <div className="flex items-center gap-1 bg-zinc-800 rounded-md p-1">
-            <span className="px-3 py-1 text-xs font-medium rounded bg-zinc-700 text-white">HTML</span>
+          {/* Dynamic page tabs */}
+          <div className="flex-1 min-w-0 overflow-x-auto">
+            {hasPages ? (
+              <div className="flex items-center gap-1 bg-zinc-800 rounded-md p-1 w-fit mx-auto">
+                {pages.map((name) => {
+                  const isActive = name === activePage;
+                  return (
+                    <button
+                      key={name}
+                      onClick={() => setActivePage(name)}
+                      className={`px-3 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
+                        isActive
+                          ? "bg-zinc-700 text-white"
+                          : "text-zinc-400 hover:text-white hover:bg-zinc-700/50"
+                      }`}
+                      title={name}
+                    >
+                      {friendlyPageName(name)}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-xs text-zinc-500 text-center">No pages generated yet</div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={saving || loading}
+              disabled={saving || loading || !hasPages}
               className="gap-1.5 bg-purple-600 hover:bg-purple-700 text-white"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
