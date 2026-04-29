@@ -371,17 +371,6 @@ async function processQuickEditJob(params: {
 
     const results = await Promise.allSettled(filesToEdit.map(editOne));
 
-    if (rateLimited) {
-      await logEdit(supabase, clientId, callerId, operatorEmail,
-        `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
-      await updateJob(supabase, jobId, {
-        status: "failed",
-        error_message: "Rate limited — please wait a moment and try again.",
-        completed_at: new Date().toISOString(),
-      });
-      return;
-    }
-
     const failures = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
     if (failures.length > 0 && editedFiles.length === 0) {
       throw new Error(failures.map((f) => (f.reason as any)?.message ?? String(f.reason)).join("; "));
