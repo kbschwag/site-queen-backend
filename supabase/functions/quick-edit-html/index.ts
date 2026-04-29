@@ -32,43 +32,45 @@ function injectNoindex(html: string): string {
 
 /**
  * Tiered change-type detection.
- *   Type 1: css_variable     — color/font/spacing tweaks → deterministic :root edit
- *   Type 2: section_removal  — remove/hide a section → deterministic block delete
- *   Type 3: copy             — small text/copy tweak → AI on a small excerpt
- *   Type 4: section          — restructure/rewrite a section → AI on the full section
+ *   additive        — adding new content (card, item, link) → AI given pattern as template
+ *   section_removal — remove/hide a section → deterministic block delete
+ *   css_variable    — color/font/spacing tweaks → deterministic :root edit
+ *   copy            — small text/copy tweak → AI on a small excerpt
+ *   section         — restructure/rewrite a section → AI on the full section
  */
 function detectChangeType(instruction: string): string {
   const lower = instruction.toLowerCase();
 
-  // Type 2 — destructive structural edit takes priority.
-  if (lower.match(/\b(remove|delete|hide|get rid of|take out|drop)\b/)) {
+  // Additive — must be checked FIRST before section/copy.
+  if (/\b(add|include|insert|create|put in|append)\b/.test(lower)) {
+    return "additive";
+  }
+
+  // Destructive structural edit.
+  if (/\b(remove|delete|hide|get rid of|take out|drop)\b/.test(lower)) {
     return "section_removal";
   }
 
-  // Type 1 — CSS variable / color / font / spacing tweaks.
-  // Only when the instruction is clearly about a style token, not "rewrite the
-  // section about colors" etc. We require either a hex/rgb value, an explicit
-  // color/font keyword, or a "change … to …" phrasing on a style noun.
+  // CSS variable / color / font / spacing tweaks.
   if (
     /#[0-9a-f]{3,8}\b/i.test(instruction) ||
     /\brgb\s*\(/i.test(instruction) ||
-    /\b(color|colour|font|font-family|font size|spacing|padding|margin|radius|border)\b/i.test(lower) ||
-    /\b(navy|crimson|gold|teal|sage|maroon|beige|charcoal)\b/i.test(lower)
+    /\b(color|colour|font|font-family|font size|spacing|padding|margin|radius|border|background|css|style)\b/i.test(lower) ||
+    /\b(navy|crimson|gold|teal|sage|maroon|beige|charcoal|red|blue|green)\b/i.test(lower)
   ) {
     return "css_variable";
   }
 
-  // Type 4 — clearly section-scale work.
-  if (/\b(rewrite|redo|restructure|redesign|replace the entire|add (a |an )?(new )?section)\b/i.test(lower)) {
+  // Clearly section-scale work.
+  if (/\b(rewrite|redo|restructure|redesign|replace the entire)\b/i.test(lower)) {
     return "section";
   }
 
-  // Type 3 — small copy/text edits (default for most plain-language tweaks).
+  // Small copy/text edits.
   if (/\b(headline|title|tagline|heading|text|copy|wording|phrase|word|say|change|update|fix|rename|rephrase|capitalize|punctuation|spelling|typo|phone|email|address|hours)\b/i.test(lower)) {
     return "copy";
   }
 
-  // Fallback — treat as a section-scale change so the AI gets enough context.
   return "section";
 }
 
@@ -198,7 +200,14 @@ function findSectionBlock(html: string, keywords: string[]): string | null {
  * The excerpt itself becomes the `find` string for splicing.
  */
 function extractExcerpt(html: string, instruction: string, changeType: string): string {
-  if (changeType === "copy") {
+  if (changeType === "additive") {
+    // Return the matching <section> block as a TEMPLATE/example for the AI.
+    const block = findSectionBlock(html, extractSectionKeywords(instruction));
+    if (block) return block;
+    // Fall through to copy-style window if no section keyword matched.
+  }
+
+  if (changeType === "copy" || changeType === "additive") {
     const quoted = instruction.match(/["']([^"']{3,})["']/);
     const needle = quoted?.[1];
     if (needle) {
@@ -264,6 +273,32 @@ function pickFirstKeyword(instruction: string): string | null {
  * by replacing the original excerpt. Minimal tokens, no JSON parsing failure mode.
  */
 function buildExcerptPrompt(instruction: string, changeType: string, excerpt: string) {
+  if (changeType === "additive") {
+    const systemPrompt = `You are a precise HTML editor. You ADD new content by returning a JSON patch.
+Output ONLY a JSON object with "find" and "replace" keys. No markdown, no code fences, no commentary.`;
+
+    const userPrompt = `CHANGE REQUESTED: ${instruction}
+CHANGE TYPE: additive — you are ADDING something new, not replacing existing content.
+
+HERE IS AN EXAMPLE OF THE EXISTING PATTERN TO FOLLOW (use it as a template for the new item):
+${excerpt}
+
+Return a JSON object:
+{
+  "find": "the LAST occurrence of an existing item's full HTML inside the section above (a complete, unique substring that appears exactly once in the page)",
+  "replace": "that same existing item's HTML, followed by the NEW item's HTML appended directly after it, using IDENTICAL HTML structure and CSS classes"
+}
+
+Rules:
+- The new item must use IDENTICAL HTML structure and CSS classes as the existing items shown above.
+- Do NOT invent new classes or inline styles.
+- "find" must be a verbatim substring of the page that appears exactly once.
+- "replace" must start with the exact same content as "find" and then add the new item after it.
+- Return ONLY the JSON object — no other text.`;
+
+    return { systemPrompt, userPrompt };
+  }
+
   const systemPrompt = `You are a precise HTML editor. You receive a snippet of HTML from a larger page and a change request.
 Return ONLY the updated snippet — same boundaries as the input — with the requested change applied.
 No markdown, no code fences, no commentary. Raw HTML only.`;
@@ -304,6 +339,7 @@ function applyPatch(html: string, patch: Patch, changeType: string): string {
   const maxDelta =
     changeType === "section_removal" ? 50000 :
     changeType === "section" ? 30000 :
+    changeType === "additive" ? 20000 :
     changeType === "css_variable" ? 200 :
     3000;
   if (delta > maxDelta) {
@@ -356,8 +392,7 @@ async function processQuickEditJob(params: {
     if (pages === "all" || changeType === "css_variable") {
       filesToEdit = [...ALL_PAGE_FILES];
     } else {
-      const file = PAGE_MAP[pages];
-      if (!file) throw new Error(`Invalid page: ${pages}`);
+      const file = PAGE_MAP[pages] || (pages.endsWith(".html") ? pages : `${pages}.html`);
       filesToEdit = [file];
     }
 
@@ -517,11 +552,38 @@ async function processQuickEditJob(params: {
         throw new Error(`AI did not finish cleanly (stop=${stopReason}) — snippet may be truncated`);
       }
 
-      const updatedExcerpt = cleanAiHtml(rawText);
-      if (!updatedExcerpt) throw new Error("AI returned empty snippet after cleanup");
-
-      patch = { find: excerpt, replace: updatedExcerpt };
-      console.log(`[quick-edit] excerpt patch: ${excerpt.length} → ${updatedExcerpt.length} chars`);
+      if (changeType === "additive") {
+        // Expect JSON { find, replace } from the AI.
+        const cleaned = rawText
+          .trim()
+          .replace(/^```(?:json)?\s*\n?/i, "")
+          .replace(/\n?```\s*$/i, "")
+          .trim();
+        const jsonStart = cleaned.indexOf("{");
+        const jsonEnd = cleaned.lastIndexOf("}");
+        if (jsonStart < 0 || jsonEnd <= jsonStart) {
+          throw new Error("AI did not return a JSON object for additive change");
+        }
+        let parsed: { find?: string; replace?: string };
+        try {
+          parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
+        } catch (e: any) {
+          throw new Error(`Failed to parse additive JSON patch: ${e.message}`);
+        }
+        if (!parsed.find || !parsed.replace) {
+          throw new Error("Additive patch missing 'find' or 'replace'");
+        }
+        if (!parsed.replace.startsWith(parsed.find)) {
+          throw new Error("Additive 'replace' must start with the 'find' string (append-only)");
+        }
+        patch = { find: parsed.find, replace: parsed.replace };
+        console.log(`[quick-edit] additive patch: appending ${parsed.replace.length - parsed.find.length} chars`);
+      } else {
+        const updatedExcerpt = cleanAiHtml(rawText);
+        if (!updatedExcerpt) throw new Error("AI returned empty snippet after cleanup");
+        patch = { find: excerpt, replace: updatedExcerpt };
+        console.log(`[quick-edit] excerpt patch: ${excerpt.length} → ${updatedExcerpt.length} chars`);
+      }
     }
 
     // Apply the same patch to every target file. CSS variables and shared
@@ -673,7 +735,7 @@ serve(async (req) => {
     if (instruction.length > 4000) {
       return json({ error: "Instruction too long (max 4000 chars)" }, 400);
     }
-    if (pages !== "all" && !PAGE_MAP[pages]) {
+    if (pages !== "all" && !PAGE_MAP[pages] && !/^[a-z0-9_-]+(\.html)?$/i.test(pages)) {
       return json({ error: `Invalid page: ${pages}` }, 400);
     }
 
