@@ -32,43 +32,45 @@ function injectNoindex(html: string): string {
 
 /**
  * Tiered change-type detection.
- *   Type 1: css_variable     — color/font/spacing tweaks → deterministic :root edit
- *   Type 2: section_removal  — remove/hide a section → deterministic block delete
- *   Type 3: copy             — small text/copy tweak → AI on a small excerpt
- *   Type 4: section          — restructure/rewrite a section → AI on the full section
+ *   additive        — adding new content (card, item, link) → AI given pattern as template
+ *   section_removal — remove/hide a section → deterministic block delete
+ *   css_variable    — color/font/spacing tweaks → deterministic :root edit
+ *   copy            — small text/copy tweak → AI on a small excerpt
+ *   section         — restructure/rewrite a section → AI on the full section
  */
 function detectChangeType(instruction: string): string {
   const lower = instruction.toLowerCase();
 
-  // Type 2 — destructive structural edit takes priority.
-  if (lower.match(/\b(remove|delete|hide|get rid of|take out|drop)\b/)) {
+  // Additive — must be checked FIRST before section/copy.
+  if (/\b(add|include|insert|create|put in|append)\b/.test(lower)) {
+    return "additive";
+  }
+
+  // Destructive structural edit.
+  if (/\b(remove|delete|hide|get rid of|take out|drop)\b/.test(lower)) {
     return "section_removal";
   }
 
-  // Type 1 — CSS variable / color / font / spacing tweaks.
-  // Only when the instruction is clearly about a style token, not "rewrite the
-  // section about colors" etc. We require either a hex/rgb value, an explicit
-  // color/font keyword, or a "change … to …" phrasing on a style noun.
+  // CSS variable / color / font / spacing tweaks.
   if (
     /#[0-9a-f]{3,8}\b/i.test(instruction) ||
     /\brgb\s*\(/i.test(instruction) ||
-    /\b(color|colour|font|font-family|font size|spacing|padding|margin|radius|border)\b/i.test(lower) ||
-    /\b(navy|crimson|gold|teal|sage|maroon|beige|charcoal)\b/i.test(lower)
+    /\b(color|colour|font|font-family|font size|spacing|padding|margin|radius|border|background|css|style)\b/i.test(lower) ||
+    /\b(navy|crimson|gold|teal|sage|maroon|beige|charcoal|red|blue|green)\b/i.test(lower)
   ) {
     return "css_variable";
   }
 
-  // Type 4 — clearly section-scale work.
-  if (/\b(rewrite|redo|restructure|redesign|replace the entire|add (a |an )?(new )?section)\b/i.test(lower)) {
+  // Clearly section-scale work.
+  if (/\b(rewrite|redo|restructure|redesign|replace the entire)\b/i.test(lower)) {
     return "section";
   }
 
-  // Type 3 — small copy/text edits (default for most plain-language tweaks).
+  // Small copy/text edits.
   if (/\b(headline|title|tagline|heading|text|copy|wording|phrase|word|say|change|update|fix|rename|rephrase|capitalize|punctuation|spelling|typo|phone|email|address|hours)\b/i.test(lower)) {
     return "copy";
   }
 
-  // Fallback — treat as a section-scale change so the AI gets enough context.
   return "section";
 }
 
