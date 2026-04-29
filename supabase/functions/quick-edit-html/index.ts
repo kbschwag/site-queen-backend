@@ -44,44 +44,121 @@ function detectChangeType(instruction: string): string {
   return "general";
 }
 
-function buildPrompt(instruction: string, changeType: string, currentHtml: string) {
-  const systemPrompt = `You are a precise HTML editor for SiteQueen websites.
-You make ONLY the specific changes requested — nothing else.
-Return ONLY raw complete HTML. No markdown, no explanation, no code blocks.`;
+/**
+ * Extract a small, focused excerpt of the HTML that's relevant to the
+ * requested change. Keeping the excerpt small means Claude only ever
+ * needs to return a tiny JSON patch — no truncation, no large outputs.
+ */
+function extractExcerpt(html: string, instruction: string, changeType: string): string {
+  if (changeType === "css_variable") {
+    const rootMatch = html.match(/:root\s*\{[\s\S]*?\}/);
+    if (rootMatch) return rootMatch[0];
+  }
 
-  const userPrompt = `
+  if (changeType === "copy") {
+    // Try to find a quoted phrase in the instruction and locate the section around it.
+    const quoted = instruction.match(/["']([^"']{3,})["']/);
+    const needle = quoted?.[1];
+    if (needle) {
+      const idx = html.indexOf(needle);
+      if (idx >= 0) {
+        // Pull surrounding <section>…</section> if possible, else a window.
+        const before = html.lastIndexOf("<section", idx);
+        const afterStart = html.indexOf("</section>", idx);
+        if (before >= 0 && afterStart >= 0 && afterStart - before < 8000) {
+          return html.slice(before, afterStart + "</section>".length);
+        }
+        const start = Math.max(0, idx - 1500);
+        const end = Math.min(html.length, idx + needle.length + 1500);
+        return html.slice(start, end);
+      }
+    }
+  }
+
+  if (changeType === "section") {
+    // Heuristic: find a <section …> mentioning a keyword from the instruction.
+    const tokens = instruction.toLowerCase().match(/\b(hero|footer|header|nav|about|services?|contact|testimonials?|pricing|cta|gallery|faq)\b/g);
+    if (tokens) {
+      for (const tok of tokens) {
+        const re = new RegExp(`<(section|header|footer|nav)[^>]*(?:id|class)=["'][^"']*${tok}[^"']*["'][^>]*>[\\s\\S]*?</\\1>`, "i");
+        const m = html.match(re);
+        if (m) return m[0];
+      }
+    }
+  }
+
+  // General fallback: head + first ~150 lines + last ~50 lines as context.
+  const lines = html.split("\n");
+  if (lines.length <= 250) return html;
+  return [
+    ...lines.slice(0, 200),
+    "\n<!-- … HTML omitted … -->\n",
+    ...lines.slice(-50),
+  ].join("\n");
+}
+
+function buildPatchPrompt(instruction: string, changeType: string, excerpt: string) {
+  const systemPrompt = `You are a precise HTML editor that returns surgical find/replace patches.
+Return ONLY a single JSON object — no markdown, no code fences, no explanation.`;
+
+  const userPrompt = `You are editing a specific part of a website HTML file.
+
+CHANGE REQUESTED: ${instruction}
 CHANGE TYPE: ${changeType}
-INSTRUCTION: ${instruction}
 
-${changeType === "css_variable" ? `
-IMPORTANT: This is a CSS variable change. Find the :root { } block and update the relevant CSS variable there.
-Do NOT change individual element styles — only update the CSS variable in :root.
-All elements using that variable will update automatically.
-Example: changing navy → find "--navy: #0d1d3b" and change the hex value.
-` : ""}
+RELEVANT HTML EXCERPT:
+${excerpt}
 
-${changeType === "copy" ? `
-IMPORTANT: This is a copy/text change. Find the specific text mentioned and update only that text.
-Do not change any CSS, structure, or other copy.
-` : ""}
+Return a JSON object with exactly this structure:
+{
+  "find": "the exact string to find in the original HTML (must be unique)",
+  "replace": "the replacement string"
+}
 
-${changeType === "section" ? `
-IMPORTANT: This is a section change. Find the specific HTML section and modify only that section.
-Keep all CSS, other sections, and scripts exactly as they are.
-` : ""}
-
-RULES:
-- Make ONLY the requested change
-- Do not change anything else
-- Keep all CSS classes and IDs exactly as they are
-- Keep the analytics script intact
-- Keep all href and src attributes intact unless specifically asked to change them
-- Return the complete updated HTML
-
-CURRENT HTML:
-${currentHtml}`;
+Rules:
+- "find" must be an exact match to text in the excerpt — copy it character for character (including whitespace).
+- "find" must be unique enough to identify exactly one location in the full HTML file.
+- "replace" is the corrected version with ONLY the requested change applied.
+- Keep the patch as small as possible — do not include unchanged surrounding context unless required for uniqueness.
+- Return ONLY the JSON object. No explanation. No markdown. No code fences.`;
 
   return { systemPrompt, userPrompt };
+}
+
+interface Patch { find: string; replace: string; }
+
+function parsePatch(raw: string): Patch {
+  let txt = raw.trim()
+    .replace(/^```(?:json)?\s*\n?/i, "")
+    .replace(/\n?```\s*$/i, "")
+    .trim();
+  // Find the first {...} block.
+  const start = txt.indexOf("{");
+  const end = txt.lastIndexOf("}");
+  if (start >= 0 && end > start) txt = txt.slice(start, end + 1);
+  const obj = JSON.parse(txt);
+  if (typeof obj?.find !== "string" || typeof obj?.replace !== "string") {
+    throw new Error("Patch JSON missing find/replace strings");
+  }
+  return { find: obj.find, replace: obj.replace };
+}
+
+function applyPatch(html: string, patch: Patch, changeType: string): string {
+  const occurrences = html.split(patch.find).length - 1;
+  if (occurrences === 0) {
+    throw new Error(`Patch target not found in HTML — find string did not match (find length=${patch.find.length})`);
+  }
+  if (occurrences > 1) {
+    throw new Error(`Patch target ambiguous — found ${occurrences} matches; AI must return a more unique 'find' string`);
+  }
+  const updated = html.replace(patch.find, patch.replace);
+  const delta = Math.abs(updated.length - html.length);
+  // Sanity bounds: copy/CSS edits should be small. Section edits can be larger.
+  const maxDelta = changeType === "section" ? 20000 : 2000;
+  if (delta > maxDelta) {
+    throw new Error(`Patch size out of bounds (${delta} chars changed, max ${maxDelta} for ${changeType})`);
+  }
+  return updated;
 }
 
 function json(body: Record<string, unknown>, status = 200) {
