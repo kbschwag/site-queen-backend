@@ -314,54 +314,72 @@ async function processQuickEditJob(params: {
     }
     const primaryHtml = await primaryFileData.text();
 
-    const excerpt = extractExcerpt(primaryHtml, instruction, changeType);
-    const { systemPrompt, userPrompt } = buildPatchPrompt(instruction, changeType, excerpt);
+    let patch: Patch;
 
-    console.log(`[quick-edit] computing patch from ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
+    if (changeType === "section_removal") {
+      // Deterministic: locate the full <section>…</section> block ourselves
+      // and delete it. No AI round-trip needed — and no risk of the model
+      // returning a partial block that leaves orphan markup behind.
+      const keywords = extractSectionKeywords(instruction);
+      if (keywords.length === 0) {
+        throw new Error("Section removal requested but no recognizable section keyword found in instruction");
+      }
+      const block = findSectionBlock(primaryHtml, keywords);
+      if (!block) {
+        throw new Error(`No <section> matching keywords [${keywords.join(", ")}] found in ${primaryFile}`);
+      }
+      patch = { find: block, replace: "" };
+      console.log(`[quick-edit] section_removal: deterministic patch, removing ${block.length} chars (keywords=${keywords.join(",")})`);
+    } else {
+      const excerpt = extractExcerpt(primaryHtml, instruction, changeType);
+      const { systemPrompt, userPrompt } = buildPatchPrompt(instruction, changeType, excerpt);
 
-    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
+      console.log(`[quick-edit] computing patch from ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
 
-    if (aiRes.status === 429) {
-      rateLimited = true;
-    } else if (!aiRes.ok) {
-      const txt = await aiRes.text();
-      throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 300)}`);
-    }
-
-    if (rateLimited) {
-      await logEdit(supabase, clientId, callerId, operatorEmail,
-        `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
-      await updateJob(supabase, jobId, {
-        status: "failed",
-        error_message: "Rate limited — please wait a moment and try again.",
-        completed_at: new Date().toISOString(),
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 4000,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+        }),
       });
-      return;
+
+      if (aiRes.status === 429) {
+        rateLimited = true;
+      } else if (!aiRes.ok) {
+        const txt = await aiRes.text();
+        throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 300)}`);
+      }
+
+      if (rateLimited) {
+        await logEdit(supabase, clientId, callerId, operatorEmail,
+          `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
+        await updateJob(supabase, jobId, {
+          status: "failed",
+          error_message: "Rate limited — please wait a moment and try again.",
+          completed_at: new Date().toISOString(),
+        });
+        return;
+      }
+
+      const aiJson = await aiRes.json();
+      const rawText: string = aiJson?.content?.[0]?.text ?? "";
+      const stopReason = aiJson?.stop_reason;
+      const usage = aiJson?.usage;
+      console.log(`[quick-edit] patch response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
+
+      if (!rawText) throw new Error(`AI returned empty patch (stop=${stopReason})`);
+
+      patch = parsePatch(rawText);
+      console.log(`[quick-edit] patch find=${patch.find.length} chars, replace=${patch.replace.length} chars`);
     }
-
-    const aiJson = await aiRes.json();
-    const rawText: string = aiJson?.content?.[0]?.text ?? "";
-    const stopReason = aiJson?.stop_reason;
-    const usage = aiJson?.usage;
-    console.log(`[quick-edit] patch response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
-
-    if (!rawText) throw new Error(`AI returned empty patch (stop=${stopReason})`);
-
-    const patch = parsePatch(rawText);
-    console.log(`[quick-edit] patch find=${patch.find.length} chars, replace=${patch.replace.length} chars`);
 
     // Apply the same patch to every target file. CSS variables and shared
     // markup (nav/footer) cascade naturally across pages this way.
