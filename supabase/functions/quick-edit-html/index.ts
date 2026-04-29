@@ -735,7 +735,7 @@ serve(async (req) => {
     if (instruction.length > 4000) {
       return json({ error: "Instruction too long (max 4000 chars)" }, 400);
     }
-    if (pages !== "all" && !PAGE_MAP[pages]) {
+    if (pages !== "all" && !PAGE_MAP[pages] && !/^[a-z0-9_-]+(\.html)?$/i.test(pages)) {
       return json({ error: `Invalid page: ${pages}` }, 400);
     }
 
