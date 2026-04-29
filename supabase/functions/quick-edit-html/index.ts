@@ -32,16 +32,64 @@ function injectNoindex(html: string): string {
 
 function detectChangeType(instruction: string): string {
   const lower = instruction.toLowerCase();
+  // Section removal takes priority — it's a destructive structural edit.
+  if (lower.match(/\b(remove|delete|hide|get rid of|take out|drop)\b/)) {
+    return "section_removal";
+  }
   if (lower.match(/color|navy|red|gold|blue|green|font|css|style|background|#[0-9a-f]{3,6}/i)) {
     return "css_variable";
   }
   if (lower.match(/headline|title|text|copy|wording|say|change.*to|replace|update.*section|about|tagline/i)) {
     return "copy";
   }
-  if (lower.match(/remove|hide|delete|add|move|section|show|footer|header|nav/i)) {
+  if (lower.match(/add|move|section|show|footer|header|nav/i)) {
     return "section";
   }
   return "general";
+}
+
+const SECTION_KEYWORDS = [
+  "hero","footer","header","nav","navigation","about","service","services",
+  "contact","testimonial","testimonials","review","reviews","pricing","cta",
+  "gallery","faq","financing","awards","team","stats","features","portfolio",
+  "process","banner",
+];
+
+function extractSectionKeywords(instruction: string): string[] {
+  const lower = instruction.toLowerCase();
+  const found = SECTION_KEYWORDS.filter((k) => new RegExp(`\\b${k}\\b`, "i").test(lower));
+  // Also pull any quoted phrase as a keyword.
+  const quoted = instruction.match(/["']([^"']{2,40})["']/g);
+  if (quoted) found.push(...quoted.map((q) => q.replace(/["']/g, "").toLowerCase()));
+  return Array.from(new Set(found));
+}
+
+/**
+ * Find the full <section>…</section> (or <header>/<footer>/<nav>) block whose
+ * markup or inner text contains any of the given keywords. Returns the exact
+ * substring suitable for use as a patch `find` value.
+ */
+function findSectionBlock(html: string, keywords: string[]): string | null {
+  if (keywords.length === 0) return null;
+  const tagRe = /<(section|header|footer|nav|aside)\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(html)) !== null) {
+    const tag = m[1].toLowerCase();
+    const start = m.index;
+    // Find matching close tag (sections rarely nest in our generated sites).
+    const closeRe = new RegExp(`</${tag}>`, "i");
+    closeRe.lastIndex = m.index + m[0].length;
+    const rest = html.slice(m.index + m[0].length);
+    const closeMatch = rest.match(closeRe);
+    if (!closeMatch || closeMatch.index === undefined) continue;
+    const end = m.index + m[0].length + closeMatch.index + closeMatch[0].length;
+    const block = html.slice(start, end);
+    const blockLower = block.toLowerCase();
+    if (keywords.some((k) => blockLower.includes(k))) {
+      return block;
+    }
+  }
+  return null;
 }
 
 /**
