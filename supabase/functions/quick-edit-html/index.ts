@@ -421,10 +421,31 @@ async function processQuickEditJob(params: {
 
     let patch: Patch;
 
-    if (changeType === "section_removal") {
-      // Deterministic: locate the full <section>…</section> block ourselves
-      // and delete it. No AI round-trip needed — and no risk of the model
-      // returning a partial block that leaves orphan markup behind.
+    if (changeType === "css_variable") {
+      // Type 1 — deterministic. No AI call.
+      const result = applyCssVariableEdit(primaryHtml, instruction);
+      if (!result) {
+        throw new Error(
+          "Could not apply CSS variable edit deterministically — " +
+          "no matching :root variable found, or no color/value detected in the instruction.",
+        );
+      }
+      const declRe = new RegExp(
+        `(${result.varName.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`,
+      );
+      const declMatch = primaryHtml.match(declRe);
+      if (!declMatch) {
+        throw new Error(`CSS variable ${result.varName} declaration not found for patching`);
+      }
+      patch = {
+        find: declMatch[0],
+        replace: `${declMatch[1]}${result.newValue}${declMatch[3]}`,
+      };
+      console.log(
+        `[quick-edit] css_variable: ${result.varName} ${result.oldValue} → ${result.newValue} (deterministic)`,
+      );
+    } else if (changeType === "section_removal") {
+      // Type 2 — deterministic. No AI call.
       const keywords = extractSectionKeywords(instruction);
       if (keywords.length === 0) {
         throw new Error("Section removal requested but no recognizable section keyword found in instruction");
@@ -436,10 +457,21 @@ async function processQuickEditJob(params: {
       patch = { find: block, replace: "" };
       console.log(`[quick-edit] section_removal: deterministic patch, removing ${block.length} chars (keywords=${keywords.join(",")})`);
     } else {
+      // Types 3 & 4 — AI on a focused excerpt. AI returns the rewritten snippet
+      // directly; we splice it back by replacing the original excerpt.
       const excerpt = extractExcerpt(primaryHtml, instruction, changeType);
-      const { systemPrompt, userPrompt } = buildPatchPrompt(instruction, changeType, excerpt);
+      if (!excerpt || occurrencesOf(primaryHtml, excerpt) !== 1) {
+        throw new Error(
+          `Could not extract a unique excerpt for ${changeType} edit ` +
+          `(excerpt length=${excerpt?.length ?? 0}, occurrences=${occurrencesOf(primaryHtml, excerpt || "")})`,
+        );
+      }
+      const { systemPrompt, userPrompt } = buildExcerptPrompt(instruction, changeType, excerpt);
 
-      console.log(`[quick-edit] computing patch from ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
+      console.log(`[quick-edit] AI edit on ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
+
+      // Token budget scales with excerpt size — generous cap for Type 4.
+      const maxTokens = Math.min(8000, Math.ceil(excerpt.length / 2) + 500);
 
       const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -450,7 +482,7 @@ async function processQuickEditJob(params: {
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 4000,
+          max_tokens: maxTokens,
           system: systemPrompt,
           messages: [{ role: "user", content: userPrompt }],
         }),
@@ -478,12 +510,18 @@ async function processQuickEditJob(params: {
       const rawText: string = aiJson?.content?.[0]?.text ?? "";
       const stopReason = aiJson?.stop_reason;
       const usage = aiJson?.usage;
-      console.log(`[quick-edit] patch response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
+      console.log(`[quick-edit] AI response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
 
-      if (!rawText) throw new Error(`AI returned empty patch (stop=${stopReason})`);
+      if (!rawText) throw new Error(`AI returned empty response (stop=${stopReason})`);
+      if (stopReason && stopReason !== "end_turn" && stopReason !== "stop_sequence") {
+        throw new Error(`AI did not finish cleanly (stop=${stopReason}) — snippet may be truncated`);
+      }
 
-      patch = parsePatch(rawText);
-      console.log(`[quick-edit] patch find=${patch.find.length} chars, replace=${patch.replace.length} chars`);
+      const updatedExcerpt = cleanAiHtml(rawText);
+      if (!updatedExcerpt) throw new Error("AI returned empty snippet after cleanup");
+
+      patch = { find: excerpt, replace: updatedExcerpt };
+      console.log(`[quick-edit] excerpt patch: ${excerpt.length} → ${updatedExcerpt.length} chars`);
     }
 
     // Apply the same patch to every target file. CSS variables and shared
