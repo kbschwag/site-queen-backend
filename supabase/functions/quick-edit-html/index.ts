@@ -32,16 +32,64 @@ function injectNoindex(html: string): string {
 
 function detectChangeType(instruction: string): string {
   const lower = instruction.toLowerCase();
+  // Section removal takes priority — it's a destructive structural edit.
+  if (lower.match(/\b(remove|delete|hide|get rid of|take out|drop)\b/)) {
+    return "section_removal";
+  }
   if (lower.match(/color|navy|red|gold|blue|green|font|css|style|background|#[0-9a-f]{3,6}/i)) {
     return "css_variable";
   }
   if (lower.match(/headline|title|text|copy|wording|say|change.*to|replace|update.*section|about|tagline/i)) {
     return "copy";
   }
-  if (lower.match(/remove|hide|delete|add|move|section|show|footer|header|nav/i)) {
+  if (lower.match(/add|move|section|show|footer|header|nav/i)) {
     return "section";
   }
   return "general";
+}
+
+const SECTION_KEYWORDS = [
+  "hero","footer","header","nav","navigation","about","service","services",
+  "contact","testimonial","testimonials","review","reviews","pricing","cta",
+  "gallery","faq","financing","awards","team","stats","features","portfolio",
+  "process","banner",
+];
+
+function extractSectionKeywords(instruction: string): string[] {
+  const lower = instruction.toLowerCase();
+  const found = SECTION_KEYWORDS.filter((k) => new RegExp(`\\b${k}\\b`, "i").test(lower));
+  // Also pull any quoted phrase as a keyword.
+  const quoted = instruction.match(/["']([^"']{2,40})["']/g);
+  if (quoted) found.push(...quoted.map((q) => q.replace(/["']/g, "").toLowerCase()));
+  return Array.from(new Set(found));
+}
+
+/**
+ * Find the full <section>…</section> (or <header>/<footer>/<nav>) block whose
+ * markup or inner text contains any of the given keywords. Returns the exact
+ * substring suitable for use as a patch `find` value.
+ */
+function findSectionBlock(html: string, keywords: string[]): string | null {
+  if (keywords.length === 0) return null;
+  const tagRe = /<(section|header|footer|nav|aside)\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(html)) !== null) {
+    const tag = m[1].toLowerCase();
+    const start = m.index;
+    // Find matching close tag (sections rarely nest in our generated sites).
+    const closeRe = new RegExp(`</${tag}>`, "i");
+    closeRe.lastIndex = m.index + m[0].length;
+    const rest = html.slice(m.index + m[0].length);
+    const closeMatch = rest.match(closeRe);
+    if (!closeMatch || closeMatch.index === undefined) continue;
+    const end = m.index + m[0].length + closeMatch.index + closeMatch[0].length;
+    const block = html.slice(start, end);
+    const blockLower = block.toLowerCase();
+    if (keywords.some((k) => blockLower.includes(k))) {
+      return block;
+    }
+  }
+  return null;
 }
 
 /**
@@ -55,14 +103,17 @@ function extractExcerpt(html: string, instruction: string, changeType: string): 
     if (rootMatch) return rootMatch[0];
   }
 
+  if (changeType === "section_removal") {
+    const block = findSectionBlock(html, extractSectionKeywords(instruction));
+    if (block) return block;
+  }
+
   if (changeType === "copy") {
-    // Try to find a quoted phrase in the instruction and locate the section around it.
     const quoted = instruction.match(/["']([^"']{3,})["']/);
     const needle = quoted?.[1];
     if (needle) {
       const idx = html.indexOf(needle);
       if (idx >= 0) {
-        // Pull surrounding <section>…</section> if possible, else a window.
         const before = html.lastIndexOf("<section", idx);
         const afterStart = html.indexOf("</section>", idx);
         if (before >= 0 && afterStart >= 0 && afterStart - before < 8000) {
@@ -76,18 +127,10 @@ function extractExcerpt(html: string, instruction: string, changeType: string): 
   }
 
   if (changeType === "section") {
-    // Heuristic: find a <section …> mentioning a keyword from the instruction.
-    const tokens = instruction.toLowerCase().match(/\b(hero|footer|header|nav|about|services?|contact|testimonials?|pricing|cta|gallery|faq)\b/g);
-    if (tokens) {
-      for (const tok of tokens) {
-        const re = new RegExp(`<(section|header|footer|nav)[^>]*(?:id|class)=["'][^"']*${tok}[^"']*["'][^>]*>[\\s\\S]*?</\\1>`, "i");
-        const m = html.match(re);
-        if (m) return m[0];
-      }
-    }
+    const block = findSectionBlock(html, extractSectionKeywords(instruction));
+    if (block) return block;
   }
 
-  // General fallback: head + first ~150 lines + last ~50 lines as context.
   const lines = html.split("\n");
   if (lines.length <= 250) return html;
   return [
@@ -153,8 +196,11 @@ function applyPatch(html: string, patch: Patch, changeType: string): string {
   }
   const updated = html.replace(patch.find, patch.replace);
   const delta = Math.abs(updated.length - html.length);
-  // Sanity bounds: copy/CSS edits should be small. Section edits can be larger.
-  const maxDelta = changeType === "section" ? 20000 : 2000;
+  // Sanity bounds: copy/CSS edits should be small. Section edits/removals can be larger.
+  const maxDelta =
+    changeType === "section_removal" ? 50000 :
+    changeType === "section" ? 20000 :
+    2000;
   if (delta > maxDelta) {
     throw new Error(`Patch size out of bounds (${delta} chars changed, max ${maxDelta} for ${changeType})`);
   }
@@ -268,54 +314,72 @@ async function processQuickEditJob(params: {
     }
     const primaryHtml = await primaryFileData.text();
 
-    const excerpt = extractExcerpt(primaryHtml, instruction, changeType);
-    const { systemPrompt, userPrompt } = buildPatchPrompt(instruction, changeType, excerpt);
+    let patch: Patch;
 
-    console.log(`[quick-edit] computing patch from ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
+    if (changeType === "section_removal") {
+      // Deterministic: locate the full <section>…</section> block ourselves
+      // and delete it. No AI round-trip needed — and no risk of the model
+      // returning a partial block that leaves orphan markup behind.
+      const keywords = extractSectionKeywords(instruction);
+      if (keywords.length === 0) {
+        throw new Error("Section removal requested but no recognizable section keyword found in instruction");
+      }
+      const block = findSectionBlock(primaryHtml, keywords);
+      if (!block) {
+        throw new Error(`No <section> matching keywords [${keywords.join(", ")}] found in ${primaryFile}`);
+      }
+      patch = { find: block, replace: "" };
+      console.log(`[quick-edit] section_removal: deterministic patch, removing ${block.length} chars (keywords=${keywords.join(",")})`);
+    } else {
+      const excerpt = extractExcerpt(primaryHtml, instruction, changeType);
+      const { systemPrompt, userPrompt } = buildPatchPrompt(instruction, changeType, excerpt);
 
-    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
+      console.log(`[quick-edit] computing patch from ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
 
-    if (aiRes.status === 429) {
-      rateLimited = true;
-    } else if (!aiRes.ok) {
-      const txt = await aiRes.text();
-      throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 300)}`);
-    }
-
-    if (rateLimited) {
-      await logEdit(supabase, clientId, callerId, operatorEmail,
-        `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
-      await updateJob(supabase, jobId, {
-        status: "failed",
-        error_message: "Rate limited — please wait a moment and try again.",
-        completed_at: new Date().toISOString(),
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 4000,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+        }),
       });
-      return;
+
+      if (aiRes.status === 429) {
+        rateLimited = true;
+      } else if (!aiRes.ok) {
+        const txt = await aiRes.text();
+        throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 300)}`);
+      }
+
+      if (rateLimited) {
+        await logEdit(supabase, clientId, callerId, operatorEmail,
+          `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
+        await updateJob(supabase, jobId, {
+          status: "failed",
+          error_message: "Rate limited — please wait a moment and try again.",
+          completed_at: new Date().toISOString(),
+        });
+        return;
+      }
+
+      const aiJson = await aiRes.json();
+      const rawText: string = aiJson?.content?.[0]?.text ?? "";
+      const stopReason = aiJson?.stop_reason;
+      const usage = aiJson?.usage;
+      console.log(`[quick-edit] patch response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
+
+      if (!rawText) throw new Error(`AI returned empty patch (stop=${stopReason})`);
+
+      patch = parsePatch(rawText);
+      console.log(`[quick-edit] patch find=${patch.find.length} chars, replace=${patch.replace.length} chars`);
     }
-
-    const aiJson = await aiRes.json();
-    const rawText: string = aiJson?.content?.[0]?.text ?? "";
-    const stopReason = aiJson?.stop_reason;
-    const usage = aiJson?.usage;
-    console.log(`[quick-edit] patch response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
-
-    if (!rawText) throw new Error(`AI returned empty patch (stop=${stopReason})`);
-
-    const patch = parsePatch(rawText);
-    console.log(`[quick-edit] patch find=${patch.find.length} chars, replace=${patch.replace.length} chars`);
 
     // Apply the same patch to every target file. CSS variables and shared
     // markup (nav/footer) cascade naturally across pages this way.
