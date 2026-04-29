@@ -392,8 +392,7 @@ async function processQuickEditJob(params: {
     if (pages === "all" || changeType === "css_variable") {
       filesToEdit = [...ALL_PAGE_FILES];
     } else {
-      const file = PAGE_MAP[pages];
-      if (!file) throw new Error(`Invalid page: ${pages}`);
+      const file = PAGE_MAP[pages] || (pages.endsWith(".html") ? pages : `${pages}.html`);
       filesToEdit = [file];
     }
 
