@@ -103,14 +103,17 @@ function extractExcerpt(html: string, instruction: string, changeType: string): 
     if (rootMatch) return rootMatch[0];
   }
 
+  if (changeType === "section_removal") {
+    const block = findSectionBlock(html, extractSectionKeywords(instruction));
+    if (block) return block;
+  }
+
   if (changeType === "copy") {
-    // Try to find a quoted phrase in the instruction and locate the section around it.
     const quoted = instruction.match(/["']([^"']{3,})["']/);
     const needle = quoted?.[1];
     if (needle) {
       const idx = html.indexOf(needle);
       if (idx >= 0) {
-        // Pull surrounding <section>…</section> if possible, else a window.
         const before = html.lastIndexOf("<section", idx);
         const afterStart = html.indexOf("</section>", idx);
         if (before >= 0 && afterStart >= 0 && afterStart - before < 8000) {
@@ -124,18 +127,10 @@ function extractExcerpt(html: string, instruction: string, changeType: string): 
   }
 
   if (changeType === "section") {
-    // Heuristic: find a <section …> mentioning a keyword from the instruction.
-    const tokens = instruction.toLowerCase().match(/\b(hero|footer|header|nav|about|services?|contact|testimonials?|pricing|cta|gallery|faq)\b/g);
-    if (tokens) {
-      for (const tok of tokens) {
-        const re = new RegExp(`<(section|header|footer|nav)[^>]*(?:id|class)=["'][^"']*${tok}[^"']*["'][^>]*>[\\s\\S]*?</\\1>`, "i");
-        const m = html.match(re);
-        if (m) return m[0];
-      }
-    }
+    const block = findSectionBlock(html, extractSectionKeywords(instruction));
+    if (block) return block;
   }
 
-  // General fallback: head + first ~150 lines + last ~50 lines as context.
   const lines = html.split("\n");
   if (lines.length <= 250) return html;
   return [
