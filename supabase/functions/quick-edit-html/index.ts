@@ -202,7 +202,11 @@ async function processQuickEditJob(params: {
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 16000,
+          // Sonnet 4 supports up to 64K output tokens. The function must echo the
+          // entire HTML file back, so we need headroom for ~65KB index pages plus
+          // any growth from the edit. 16K was truncating mid-document, producing
+          // output without </html> that the validator (correctly) rejected.
+          max_tokens: 64000,
           system: systemPrompt,
           messages: [{ role: "user", content: userPrompt }],
         }),
