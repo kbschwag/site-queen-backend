@@ -339,6 +339,7 @@ function applyPatch(html: string, patch: Patch, changeType: string): string {
   const maxDelta =
     changeType === "section_removal" ? 50000 :
     changeType === "section" ? 30000 :
+    changeType === "additive" ? 20000 :
     changeType === "css_variable" ? 200 :
     3000;
   if (delta > maxDelta) {
