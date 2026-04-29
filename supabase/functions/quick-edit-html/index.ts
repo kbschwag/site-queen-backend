@@ -30,22 +30,121 @@ function injectNoindex(html: string): string {
   return html;
 }
 
+/**
+ * Tiered change-type detection.
+ *   Type 1: css_variable     — color/font/spacing tweaks → deterministic :root edit
+ *   Type 2: section_removal  — remove/hide a section → deterministic block delete
+ *   Type 3: copy             — small text/copy tweak → AI on a small excerpt
+ *   Type 4: section          — restructure/rewrite a section → AI on the full section
+ */
 function detectChangeType(instruction: string): string {
   const lower = instruction.toLowerCase();
-  // Section removal takes priority — it's a destructive structural edit.
+
+  // Type 2 — destructive structural edit takes priority.
   if (lower.match(/\b(remove|delete|hide|get rid of|take out|drop)\b/)) {
     return "section_removal";
   }
-  if (lower.match(/color|navy|red|gold|blue|green|font|css|style|background|#[0-9a-f]{3,6}/i)) {
+
+  // Type 1 — CSS variable / color / font / spacing tweaks.
+  // Only when the instruction is clearly about a style token, not "rewrite the
+  // section about colors" etc. We require either a hex/rgb value, an explicit
+  // color/font keyword, or a "change … to …" phrasing on a style noun.
+  if (
+    /#[0-9a-f]{3,8}\b/i.test(instruction) ||
+    /\brgb\s*\(/i.test(instruction) ||
+    /\b(color|colour|font|font-family|font size|spacing|padding|margin|radius|border)\b/i.test(lower) ||
+    /\b(navy|crimson|gold|teal|sage|maroon|beige|charcoal)\b/i.test(lower)
+  ) {
     return "css_variable";
   }
-  if (lower.match(/headline|title|text|copy|wording|say|change.*to|replace|update.*section|about|tagline/i)) {
-    return "copy";
-  }
-  if (lower.match(/add|move|section|show|footer|header|nav/i)) {
+
+  // Type 4 — clearly section-scale work.
+  if (/\b(rewrite|redo|restructure|redesign|replace the entire|add (a |an )?(new )?section)\b/i.test(lower)) {
     return "section";
   }
-  return "general";
+
+  // Type 3 — small copy/text edits (default for most plain-language tweaks).
+  if (/\b(headline|title|tagline|heading|text|copy|wording|phrase|word|say|change|update|fix|rename|rephrase|capitalize|punctuation|spelling|typo|phone|email|address|hours)\b/i.test(lower)) {
+    return "copy";
+  }
+
+  // Fallback — treat as a section-scale change so the AI gets enough context.
+  return "section";
+}
+
+// ─── Type 1: deterministic CSS variable edit ────────────────────────────────
+
+/** Common natural-language → CSS custom property name aliases. */
+const CSS_VAR_ALIASES: Record<string, string[]> = {
+  primary: ["--primary", "--color-primary", "--brand", "--brand-color", "--accent"],
+  secondary: ["--secondary", "--color-secondary"],
+  accent: ["--accent", "--accent-color"],
+  background: ["--background", "--bg", "--bg-color", "--color-bg"],
+  text: ["--text", "--text-color", "--foreground", "--color-text"],
+  navy: ["--navy", "--primary", "--brand"],
+  gold: ["--gold", "--accent"],
+  font: ["--font", "--font-family", "--font-body", "--font-heading"],
+};
+
+/** Pull a hex/rgb/named color value out of the instruction. */
+function extractColorValue(instruction: string): string | null {
+  const hex = instruction.match(/#[0-9a-fA-F]{3,8}\b/);
+  if (hex) return hex[0];
+  const rgb = instruction.match(/rgba?\s*\([^)]+\)/i);
+  if (rgb) return rgb[0];
+  return null;
+}
+
+/** Try to deterministically apply a CSS-variable change. Returns updated HTML or null. */
+function applyCssVariableEdit(
+  html: string,
+  instruction: string,
+): { updated: string; varName: string; oldValue: string; newValue: string } | null {
+  const rootMatch = html.match(/(:root\s*\{)([\s\S]*?)(\})/);
+  if (!rootMatch) return null;
+  const rootBlock = rootMatch[0];
+  const rootBody = rootMatch[2];
+
+  const newValue = extractColorValue(instruction);
+  if (!newValue) return null;
+
+  // Try to identify the target variable via aliases or any name in :root mentioned in the instruction.
+  const lower = instruction.toLowerCase();
+
+  // Collect all defined vars in :root.
+  const definedVars = Array.from(rootBody.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/gi))
+    .map((m) => ({ name: m[1], value: m[2].trim() }));
+  if (definedVars.length === 0) return null;
+
+  // 1. Direct mention of a var name (e.g. "set --primary to #001a4d").
+  let target = definedVars.find((v) => lower.includes(v.name.toLowerCase()));
+
+  // 2. Alias mention (e.g. "make the primary color …", "navy to …").
+  if (!target) {
+    for (const [alias, candidates] of Object.entries(CSS_VAR_ALIASES)) {
+      if (new RegExp(`\\b${alias}\\b`, "i").test(lower)) {
+        target = definedVars.find((v) => candidates.includes(v.name));
+        if (target) break;
+      }
+    }
+  }
+
+  if (!target) return null;
+
+  // Replace just this declaration inside the :root block — must be unique.
+  const declRe = new RegExp(
+    `(${target.name.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`,
+  );
+  const newRootBlock = rootBlock.replace(declRe, `$1${newValue}$3`);
+  if (newRootBlock === rootBlock) return null;
+
+  const updated = html.replace(rootBlock, newRootBlock);
+  return {
+    updated,
+    varName: target.name,
+    oldValue: target.value,
+    newValue,
+  };
 }
 
 const SECTION_KEYWORDS = [
@@ -93,37 +192,36 @@ function findSectionBlock(html: string, keywords: string[]): string | null {
 }
 
 /**
- * Extract a small, focused excerpt of the HTML that's relevant to the
- * requested change. Keeping the excerpt small means Claude only ever
- * needs to return a tiny JSON patch — no truncation, no large outputs.
+ * Extract a focused excerpt of the HTML for AI editing.
+ *   copy    → small ~80-line window around the relevant text/keyword
+ *   section → the full <section>…</section> containing the relevant keywords
+ * The excerpt itself becomes the `find` string for splicing.
  */
 function extractExcerpt(html: string, instruction: string, changeType: string): string {
-  if (changeType === "css_variable") {
-    const rootMatch = html.match(/:root\s*\{[\s\S]*?\}/);
-    if (rootMatch) return rootMatch[0];
-  }
-
-  if (changeType === "section_removal") {
-    const block = findSectionBlock(html, extractSectionKeywords(instruction));
-    if (block) return block;
-  }
-
   if (changeType === "copy") {
     const quoted = instruction.match(/["']([^"']{3,})["']/);
     const needle = quoted?.[1];
     if (needle) {
       const idx = html.indexOf(needle);
       if (idx >= 0) {
-        const before = html.lastIndexOf("<section", idx);
-        const afterStart = html.indexOf("</section>", idx);
-        if (before >= 0 && afterStart >= 0 && afterStart - before < 8000) {
-          return html.slice(before, afterStart + "</section>".length);
-        }
         const start = Math.max(0, idx - 1500);
         const end = Math.min(html.length, idx + needle.length + 1500);
-        return html.slice(start, end);
+        const slice = html.slice(start, end);
+        if (occurrencesOf(html, slice) === 1) return slice;
       }
     }
+    const keyword = pickFirstKeyword(instruction);
+    if (keyword) {
+      const idx = html.toLowerCase().indexOf(keyword.toLowerCase());
+      if (idx >= 0) {
+        const start = Math.max(0, idx - 1200);
+        const end = Math.min(html.length, idx + 1200);
+        const slice = html.slice(start, end);
+        if (occurrencesOf(html, slice) === 1) return slice;
+      }
+    }
+    const block = findSectionBlock(html, extractSectionKeywords(instruction));
+    if (block) return block;
   }
 
   if (changeType === "section") {
@@ -131,6 +229,7 @@ function extractExcerpt(html: string, instruction: string, changeType: string): 
     if (block) return block;
   }
 
+  // Last-resort head+tail summary (rarely used now Types 1/2 short-circuit).
   const lines = html.split("\n");
   if (lines.length <= 250) return html;
   return [
@@ -140,50 +239,56 @@ function extractExcerpt(html: string, instruction: string, changeType: string): 
   ].join("\n");
 }
 
-function buildPatchPrompt(instruction: string, changeType: string, excerpt: string) {
-  const systemPrompt = `You are a precise HTML editor that returns surgical find/replace patches.
-Return ONLY a single JSON object — no markdown, no code fences, no explanation.`;
-
-  const userPrompt = `You are editing a specific part of a website HTML file.
-
-CHANGE REQUESTED: ${instruction}
-CHANGE TYPE: ${changeType}
-
-RELEVANT HTML EXCERPT:
-${excerpt}
-
-Return a JSON object with exactly this structure:
-{
-  "find": "the exact string to find in the original HTML (must be unique)",
-  "replace": "the replacement string"
+function occurrencesOf(haystack: string, needle: string): number {
+  if (!needle) return 0;
+  return haystack.split(needle).length - 1;
 }
 
-Rules:
-- "find" must be an exact match to text in the excerpt — copy it character for character (including whitespace).
-- "find" must be unique enough to identify exactly one location in the full HTML file.
-- "replace" is the corrected version with ONLY the requested change applied.
-- Keep the patch as small as possible — do not include unchanged surrounding context unless required for uniqueness.
-- Return ONLY the JSON object. No explanation. No markdown. No code fences.`;
+function pickFirstKeyword(instruction: string): string | null {
+  const stop = new Set([
+    "the","and","for","with","into","change","update","make","fix","please","to","a","an",
+    "remove","delete","hide","section","page","site","website","add","new","copy","text","headline",
+    "this","that","from","tagline","title","heading",
+  ]);
+  const tokens = instruction
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 4 && !stop.has(t));
+  tokens.sort((a, b) => b.length - a.length);
+  return tokens[0] || null;
+}
+
+/**
+ * The AI returns the rewritten snippet directly; the server splices it back in
+ * by replacing the original excerpt. Minimal tokens, no JSON parsing failure mode.
+ */
+function buildExcerptPrompt(instruction: string, changeType: string, excerpt: string) {
+  const systemPrompt = `You are a precise HTML editor. You receive a snippet of HTML from a larger page and a change request.
+Return ONLY the updated snippet — same boundaries as the input — with the requested change applied.
+No markdown, no code fences, no commentary. Raw HTML only.`;
+
+  const userPrompt = `CHANGE REQUESTED: ${instruction}
+CHANGE TYPE: ${changeType}
+
+Return the snippet below with ONLY the requested change applied. Preserve all surrounding markup, classes, attributes, and indentation exactly. Do not modify anything outside the requested change.
+
+ORIGINAL SNIPPET:
+${excerpt}
+
+UPDATED SNIPPET:`;
 
   return { systemPrompt, userPrompt };
 }
 
 interface Patch { find: string; replace: string; }
 
-function parsePatch(raw: string): Patch {
-  let txt = raw.trim()
-    .replace(/^```(?:json)?\s*\n?/i, "")
+function cleanAiHtml(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^```(?:html)?\s*\n?/i, "")
     .replace(/\n?```\s*$/i, "")
     .trim();
-  // Find the first {...} block.
-  const start = txt.indexOf("{");
-  const end = txt.lastIndexOf("}");
-  if (start >= 0 && end > start) txt = txt.slice(start, end + 1);
-  const obj = JSON.parse(txt);
-  if (typeof obj?.find !== "string" || typeof obj?.replace !== "string") {
-    throw new Error("Patch JSON missing find/replace strings");
-  }
-  return { find: obj.find, replace: obj.replace };
 }
 
 function applyPatch(html: string, patch: Patch, changeType: string): string {
@@ -192,15 +297,15 @@ function applyPatch(html: string, patch: Patch, changeType: string): string {
     throw new Error(`Patch target not found in HTML — find string did not match (find length=${patch.find.length})`);
   }
   if (occurrences > 1) {
-    throw new Error(`Patch target ambiguous — found ${occurrences} matches; AI must return a more unique 'find' string`);
+    throw new Error(`Patch target ambiguous — found ${occurrences} matches in HTML`);
   }
   const updated = html.replace(patch.find, patch.replace);
   const delta = Math.abs(updated.length - html.length);
-  // Sanity bounds: copy/CSS edits should be small. Section edits/removals can be larger.
   const maxDelta =
     changeType === "section_removal" ? 50000 :
-    changeType === "section" ? 20000 :
-    2000;
+    changeType === "section" ? 30000 :
+    changeType === "css_variable" ? 200 :
+    3000;
   if (delta > maxDelta) {
     throw new Error(`Patch size out of bounds (${delta} chars changed, max ${maxDelta} for ${changeType})`);
   }
@@ -316,10 +421,31 @@ async function processQuickEditJob(params: {
 
     let patch: Patch;
 
-    if (changeType === "section_removal") {
-      // Deterministic: locate the full <section>…</section> block ourselves
-      // and delete it. No AI round-trip needed — and no risk of the model
-      // returning a partial block that leaves orphan markup behind.
+    if (changeType === "css_variable") {
+      // Type 1 — deterministic. No AI call.
+      const result = applyCssVariableEdit(primaryHtml, instruction);
+      if (!result) {
+        throw new Error(
+          "Could not apply CSS variable edit deterministically — " +
+          "no matching :root variable found, or no color/value detected in the instruction.",
+        );
+      }
+      const declRe = new RegExp(
+        `(${result.varName.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`,
+      );
+      const declMatch = primaryHtml.match(declRe);
+      if (!declMatch) {
+        throw new Error(`CSS variable ${result.varName} declaration not found for patching`);
+      }
+      patch = {
+        find: declMatch[0],
+        replace: `${declMatch[1]}${result.newValue}${declMatch[3]}`,
+      };
+      console.log(
+        `[quick-edit] css_variable: ${result.varName} ${result.oldValue} → ${result.newValue} (deterministic)`,
+      );
+    } else if (changeType === "section_removal") {
+      // Type 2 — deterministic. No AI call.
       const keywords = extractSectionKeywords(instruction);
       if (keywords.length === 0) {
         throw new Error("Section removal requested but no recognizable section keyword found in instruction");
@@ -331,10 +457,21 @@ async function processQuickEditJob(params: {
       patch = { find: block, replace: "" };
       console.log(`[quick-edit] section_removal: deterministic patch, removing ${block.length} chars (keywords=${keywords.join(",")})`);
     } else {
+      // Types 3 & 4 — AI on a focused excerpt. AI returns the rewritten snippet
+      // directly; we splice it back by replacing the original excerpt.
       const excerpt = extractExcerpt(primaryHtml, instruction, changeType);
-      const { systemPrompt, userPrompt } = buildPatchPrompt(instruction, changeType, excerpt);
+      if (!excerpt || occurrencesOf(primaryHtml, excerpt) !== 1) {
+        throw new Error(
+          `Could not extract a unique excerpt for ${changeType} edit ` +
+          `(excerpt length=${excerpt?.length ?? 0}, occurrences=${occurrencesOf(primaryHtml, excerpt || "")})`,
+        );
+      }
+      const { systemPrompt, userPrompt } = buildExcerptPrompt(instruction, changeType, excerpt);
 
-      console.log(`[quick-edit] computing patch from ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
+      console.log(`[quick-edit] AI edit on ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
+
+      // Token budget scales with excerpt size — generous cap for Type 4.
+      const maxTokens = Math.min(8000, Math.ceil(excerpt.length / 2) + 500);
 
       const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -345,7 +482,7 @@ async function processQuickEditJob(params: {
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 4000,
+          max_tokens: maxTokens,
           system: systemPrompt,
           messages: [{ role: "user", content: userPrompt }],
         }),
@@ -373,12 +510,18 @@ async function processQuickEditJob(params: {
       const rawText: string = aiJson?.content?.[0]?.text ?? "";
       const stopReason = aiJson?.stop_reason;
       const usage = aiJson?.usage;
-      console.log(`[quick-edit] patch response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
+      console.log(`[quick-edit] AI response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
 
-      if (!rawText) throw new Error(`AI returned empty patch (stop=${stopReason})`);
+      if (!rawText) throw new Error(`AI returned empty response (stop=${stopReason})`);
+      if (stopReason && stopReason !== "end_turn" && stopReason !== "stop_sequence") {
+        throw new Error(`AI did not finish cleanly (stop=${stopReason}) — snippet may be truncated`);
+      }
 
-      patch = parsePatch(rawText);
-      console.log(`[quick-edit] patch find=${patch.find.length} chars, replace=${patch.replace.length} chars`);
+      const updatedExcerpt = cleanAiHtml(rawText);
+      if (!updatedExcerpt) throw new Error("AI returned empty snippet after cleanup");
+
+      patch = { find: excerpt, replace: updatedExcerpt };
+      console.log(`[quick-edit] excerpt patch: ${excerpt.length} → ${updatedExcerpt.length} chars`);
     }
 
     // Apply the same patch to every target file. CSS variables and shared
