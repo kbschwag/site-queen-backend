@@ -198,14 +198,14 @@ async function processQuickEditJob(params: {
         headers: {
           "x-api-key": anthropicKey,
           "anthropic-version": "2023-06-01",
+          // Required to unlock >8192 output tokens on Sonnet 4. Without this,
+          // Anthropic silently caps output and truncates large HTML files
+          // mid-document, causing the </html> validator to reject the result.
+          "anthropic-beta": "output-128k-2025-02-19",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           model: MODEL,
-          // Sonnet 4 supports up to 64K output tokens. The function must echo the
-          // entire HTML file back, so we need headroom for ~65KB index pages plus
-          // any growth from the edit. 16K was truncating mid-document, producing
-          // output without </html> that the validator (correctly) rejected.
           max_tokens: 64000,
           system: systemPrompt,
           messages: [{ role: "user", content: userPrompt }],
@@ -218,12 +218,16 @@ async function processQuickEditJob(params: {
       }
       if (!aiRes.ok) {
         const txt = await aiRes.text();
-        throw new Error(`Anthropic API error ${aiRes.status} on ${pageFile}: ${txt.slice(0, 200)}`);
+        throw new Error(`Anthropic API error ${aiRes.status} on ${pageFile}: ${txt.slice(0, 300)}`);
       }
 
       const aiJson = await aiRes.json();
       let updatedHtml: string = aiJson?.content?.[0]?.text ?? "";
-      if (!updatedHtml) throw new Error(`AI returned empty content for ${pageFile}`);
+      const stopReason = aiJson?.stop_reason;
+      const usage = aiJson?.usage;
+      console.log(`[quick-edit] ${pageFile}: stop_reason=${stopReason}, output_tokens=${usage?.output_tokens}, len=${updatedHtml.length}`);
+
+      if (!updatedHtml) throw new Error(`AI returned empty content for ${pageFile} (stop=${stopReason})`);
 
       updatedHtml = updatedHtml
         .replace(/^```(?:html)?\s*\n?/i, "")
@@ -231,7 +235,8 @@ async function processQuickEditJob(params: {
         .trim();
 
       if (updatedHtml.length < 200 || !/<\/html>/i.test(updatedHtml)) {
-        throw new Error(`AI output for ${pageFile} does not look like a complete HTML document`);
+        const tail = updatedHtml.slice(-200);
+        throw new Error(`AI output for ${pageFile} not a complete HTML document (stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${updatedHtml.length}, tail=${JSON.stringify(tail)})`);
       }
 
       const { error: upErr } = await supabase.storage
