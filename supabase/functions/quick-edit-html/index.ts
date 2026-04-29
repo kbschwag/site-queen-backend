@@ -248,11 +248,77 @@ async function processQuickEditJob(params: {
       created_by: callerId,
     });
 
-    // ─── Edit each target file (parallel — keeps total time near a single call) ──
+    // ─── Compute the patch ONCE from a representative file, then apply ──
     const editedFiles: string[] = [];
     const skippedFiles: string[] = [];
     let rateLimited = false;
 
+    // Pick a "primary" file to ask Claude about. Prefer index.html if present.
+    const primaryFile = filesToEdit.find((f) => filesSaved.includes(f) && f === "index.html")
+      ?? filesToEdit.find((f) => filesSaved.includes(f));
+    if (!primaryFile) {
+      throw new Error("None of the requested pages have a deployed file to edit");
+    }
+
+    const { data: primaryFileData, error: primaryDlErr } = await supabase.storage
+      .from("generated-sites")
+      .download(`${clientId}/deploy/${primaryFile}`);
+    if (primaryDlErr || !primaryFileData) {
+      throw new Error(`Could not download primary file ${primaryFile}: ${primaryDlErr?.message}`);
+    }
+    const primaryHtml = await primaryFileData.text();
+
+    const excerpt = extractExcerpt(primaryHtml, instruction, changeType);
+    const { systemPrompt, userPrompt } = buildPatchPrompt(instruction, changeType, excerpt);
+
+    console.log(`[quick-edit] computing patch from ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
+
+    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
+
+    if (aiRes.status === 429) {
+      rateLimited = true;
+    } else if (!aiRes.ok) {
+      const txt = await aiRes.text();
+      throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 300)}`);
+    }
+
+    if (rateLimited) {
+      await logEdit(supabase, clientId, callerId, operatorEmail,
+        `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
+      await updateJob(supabase, jobId, {
+        status: "failed",
+        error_message: "Rate limited — please wait a moment and try again.",
+        completed_at: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const aiJson = await aiRes.json();
+    const rawText: string = aiJson?.content?.[0]?.text ?? "";
+    const stopReason = aiJson?.stop_reason;
+    const usage = aiJson?.usage;
+    console.log(`[quick-edit] patch response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
+
+    if (!rawText) throw new Error(`AI returned empty patch (stop=${stopReason})`);
+
+    const patch = parsePatch(rawText);
+    console.log(`[quick-edit] patch find=${patch.find.length} chars, replace=${patch.replace.length} chars`);
+
+    // Apply the same patch to every target file. CSS variables and shared
+    // markup (nav/footer) cascade naturally across pages this way.
     const editOne = async (pageFile: string): Promise<void> => {
       if (!filesSaved.includes(pageFile)) {
         skippedFiles.push(pageFile);
@@ -268,53 +334,15 @@ async function processQuickEditJob(params: {
       }
 
       const currentHtml = await file.text();
-      const { systemPrompt, userPrompt } = buildPrompt(instruction, changeType, currentHtml);
 
-      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": anthropicKey,
-          "anthropic-version": "2023-06-01",
-          // Required to unlock >8192 output tokens on Sonnet 4. Without this,
-          // Anthropic silently caps output and truncates large HTML files
-          // mid-document, causing the </html> validator to reject the result.
-          "anthropic-beta": "output-128k-2025-02-19",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 64000,
-          system: systemPrompt,
-          messages: [{ role: "user", content: userPrompt }],
-        }),
-      });
-
-      if (aiRes.status === 429) {
-        rateLimited = true;
-        throw new Error(`Rate limited on ${pageFile}`);
-      }
-      if (!aiRes.ok) {
-        const txt = await aiRes.text();
-        throw new Error(`Anthropic API error ${aiRes.status} on ${pageFile}: ${txt.slice(0, 300)}`);
+      // Patch target may not exist on every page (e.g. hero only on homepage).
+      if (!currentHtml.includes(patch.find)) {
+        console.log(`[quick-edit] ${pageFile}: patch target not present, skipping`);
+        skippedFiles.push(pageFile);
+        return;
       }
 
-      const aiJson = await aiRes.json();
-      let updatedHtml: string = aiJson?.content?.[0]?.text ?? "";
-      const stopReason = aiJson?.stop_reason;
-      const usage = aiJson?.usage;
-      console.log(`[quick-edit] ${pageFile}: stop_reason=${stopReason}, output_tokens=${usage?.output_tokens}, len=${updatedHtml.length}`);
-
-      if (!updatedHtml) throw new Error(`AI returned empty content for ${pageFile} (stop=${stopReason})`);
-
-      updatedHtml = updatedHtml
-        .replace(/^```(?:html)?\s*\n?/i, "")
-        .replace(/\n?```\s*$/i, "")
-        .trim();
-
-      if (updatedHtml.length < 200 || !/<\/html>/i.test(updatedHtml)) {
-        const tail = updatedHtml.slice(-200);
-        throw new Error(`AI output for ${pageFile} not a complete HTML document (stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${updatedHtml.length}, tail=${JSON.stringify(tail)})`);
-      }
+      const updatedHtml = applyPatch(currentHtml, patch, changeType);
 
       const { error: upErr } = await supabase.storage
         .from("generated-sites")
@@ -325,7 +353,7 @@ async function processQuickEditJob(params: {
         );
       if (upErr) throw new Error(`Storage upload failed for ${pageFile}: ${upErr.message}`);
 
-      // Push to Hostinger staging in the background so a slow mirror does not hold the job open.
+      // Push to Hostinger staging in the background.
       runInBackground((async () => {
         try {
           const stagingHtml = injectNoindex(updatedHtml);
