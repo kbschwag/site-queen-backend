@@ -44,44 +44,121 @@ function detectChangeType(instruction: string): string {
   return "general";
 }
 
-function buildPrompt(instruction: string, changeType: string, currentHtml: string) {
-  const systemPrompt = `You are a precise HTML editor for SiteQueen websites.
-You make ONLY the specific changes requested — nothing else.
-Return ONLY raw complete HTML. No markdown, no explanation, no code blocks.`;
+/**
+ * Extract a small, focused excerpt of the HTML that's relevant to the
+ * requested change. Keeping the excerpt small means Claude only ever
+ * needs to return a tiny JSON patch — no truncation, no large outputs.
+ */
+function extractExcerpt(html: string, instruction: string, changeType: string): string {
+  if (changeType === "css_variable") {
+    const rootMatch = html.match(/:root\s*\{[\s\S]*?\}/);
+    if (rootMatch) return rootMatch[0];
+  }
 
-  const userPrompt = `
+  if (changeType === "copy") {
+    // Try to find a quoted phrase in the instruction and locate the section around it.
+    const quoted = instruction.match(/["']([^"']{3,})["']/);
+    const needle = quoted?.[1];
+    if (needle) {
+      const idx = html.indexOf(needle);
+      if (idx >= 0) {
+        // Pull surrounding <section>…</section> if possible, else a window.
+        const before = html.lastIndexOf("<section", idx);
+        const afterStart = html.indexOf("</section>", idx);
+        if (before >= 0 && afterStart >= 0 && afterStart - before < 8000) {
+          return html.slice(before, afterStart + "</section>".length);
+        }
+        const start = Math.max(0, idx - 1500);
+        const end = Math.min(html.length, idx + needle.length + 1500);
+        return html.slice(start, end);
+      }
+    }
+  }
+
+  if (changeType === "section") {
+    // Heuristic: find a <section …> mentioning a keyword from the instruction.
+    const tokens = instruction.toLowerCase().match(/\b(hero|footer|header|nav|about|services?|contact|testimonials?|pricing|cta|gallery|faq)\b/g);
+    if (tokens) {
+      for (const tok of tokens) {
+        const re = new RegExp(`<(section|header|footer|nav)[^>]*(?:id|class)=["'][^"']*${tok}[^"']*["'][^>]*>[\\s\\S]*?</\\1>`, "i");
+        const m = html.match(re);
+        if (m) return m[0];
+      }
+    }
+  }
+
+  // General fallback: head + first ~150 lines + last ~50 lines as context.
+  const lines = html.split("\n");
+  if (lines.length <= 250) return html;
+  return [
+    ...lines.slice(0, 200),
+    "\n<!-- … HTML omitted … -->\n",
+    ...lines.slice(-50),
+  ].join("\n");
+}
+
+function buildPatchPrompt(instruction: string, changeType: string, excerpt: string) {
+  const systemPrompt = `You are a precise HTML editor that returns surgical find/replace patches.
+Return ONLY a single JSON object — no markdown, no code fences, no explanation.`;
+
+  const userPrompt = `You are editing a specific part of a website HTML file.
+
+CHANGE REQUESTED: ${instruction}
 CHANGE TYPE: ${changeType}
-INSTRUCTION: ${instruction}
 
-${changeType === "css_variable" ? `
-IMPORTANT: This is a CSS variable change. Find the :root { } block and update the relevant CSS variable there.
-Do NOT change individual element styles — only update the CSS variable in :root.
-All elements using that variable will update automatically.
-Example: changing navy → find "--navy: #0d1d3b" and change the hex value.
-` : ""}
+RELEVANT HTML EXCERPT:
+${excerpt}
 
-${changeType === "copy" ? `
-IMPORTANT: This is a copy/text change. Find the specific text mentioned and update only that text.
-Do not change any CSS, structure, or other copy.
-` : ""}
+Return a JSON object with exactly this structure:
+{
+  "find": "the exact string to find in the original HTML (must be unique)",
+  "replace": "the replacement string"
+}
 
-${changeType === "section" ? `
-IMPORTANT: This is a section change. Find the specific HTML section and modify only that section.
-Keep all CSS, other sections, and scripts exactly as they are.
-` : ""}
-
-RULES:
-- Make ONLY the requested change
-- Do not change anything else
-- Keep all CSS classes and IDs exactly as they are
-- Keep the analytics script intact
-- Keep all href and src attributes intact unless specifically asked to change them
-- Return the complete updated HTML
-
-CURRENT HTML:
-${currentHtml}`;
+Rules:
+- "find" must be an exact match to text in the excerpt — copy it character for character (including whitespace).
+- "find" must be unique enough to identify exactly one location in the full HTML file.
+- "replace" is the corrected version with ONLY the requested change applied.
+- Keep the patch as small as possible — do not include unchanged surrounding context unless required for uniqueness.
+- Return ONLY the JSON object. No explanation. No markdown. No code fences.`;
 
   return { systemPrompt, userPrompt };
+}
+
+interface Patch { find: string; replace: string; }
+
+function parsePatch(raw: string): Patch {
+  let txt = raw.trim()
+    .replace(/^```(?:json)?\s*\n?/i, "")
+    .replace(/\n?```\s*$/i, "")
+    .trim();
+  // Find the first {...} block.
+  const start = txt.indexOf("{");
+  const end = txt.lastIndexOf("}");
+  if (start >= 0 && end > start) txt = txt.slice(start, end + 1);
+  const obj = JSON.parse(txt);
+  if (typeof obj?.find !== "string" || typeof obj?.replace !== "string") {
+    throw new Error("Patch JSON missing find/replace strings");
+  }
+  return { find: obj.find, replace: obj.replace };
+}
+
+function applyPatch(html: string, patch: Patch, changeType: string): string {
+  const occurrences = html.split(patch.find).length - 1;
+  if (occurrences === 0) {
+    throw new Error(`Patch target not found in HTML — find string did not match (find length=${patch.find.length})`);
+  }
+  if (occurrences > 1) {
+    throw new Error(`Patch target ambiguous — found ${occurrences} matches; AI must return a more unique 'find' string`);
+  }
+  const updated = html.replace(patch.find, patch.replace);
+  const delta = Math.abs(updated.length - html.length);
+  // Sanity bounds: copy/CSS edits should be small. Section edits can be larger.
+  const maxDelta = changeType === "section" ? 20000 : 2000;
+  if (delta > maxDelta) {
+    throw new Error(`Patch size out of bounds (${delta} chars changed, max ${maxDelta} for ${changeType})`);
+  }
+  return updated;
 }
 
 function json(body: Record<string, unknown>, status = 200) {
@@ -171,11 +248,77 @@ async function processQuickEditJob(params: {
       created_by: callerId,
     });
 
-    // ─── Edit each target file (parallel — keeps total time near a single call) ──
+    // ─── Compute the patch ONCE from a representative file, then apply ──
     const editedFiles: string[] = [];
     const skippedFiles: string[] = [];
     let rateLimited = false;
 
+    // Pick a "primary" file to ask Claude about. Prefer index.html if present.
+    const primaryFile = filesToEdit.find((f) => filesSaved.includes(f) && f === "index.html")
+      ?? filesToEdit.find((f) => filesSaved.includes(f));
+    if (!primaryFile) {
+      throw new Error("None of the requested pages have a deployed file to edit");
+    }
+
+    const { data: primaryFileData, error: primaryDlErr } = await supabase.storage
+      .from("generated-sites")
+      .download(`${clientId}/deploy/${primaryFile}`);
+    if (primaryDlErr || !primaryFileData) {
+      throw new Error(`Could not download primary file ${primaryFile}: ${primaryDlErr?.message}`);
+    }
+    const primaryHtml = await primaryFileData.text();
+
+    const excerpt = extractExcerpt(primaryHtml, instruction, changeType);
+    const { systemPrompt, userPrompt } = buildPatchPrompt(instruction, changeType, excerpt);
+
+    console.log(`[quick-edit] computing patch from ${primaryFile} (excerpt=${excerpt.length} chars, full=${primaryHtml.length} chars, type=${changeType})`);
+
+    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
+
+    if (aiRes.status === 429) {
+      rateLimited = true;
+    } else if (!aiRes.ok) {
+      const txt = await aiRes.text();
+      throw new Error(`Anthropic API error ${aiRes.status}: ${txt.slice(0, 300)}`);
+    }
+
+    if (rateLimited) {
+      await logEdit(supabase, clientId, callerId, operatorEmail,
+        `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
+      await updateJob(supabase, jobId, {
+        status: "failed",
+        error_message: "Rate limited — please wait a moment and try again.",
+        completed_at: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const aiJson = await aiRes.json();
+    const rawText: string = aiJson?.content?.[0]?.text ?? "";
+    const stopReason = aiJson?.stop_reason;
+    const usage = aiJson?.usage;
+    console.log(`[quick-edit] patch response: stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${rawText.length}`);
+
+    if (!rawText) throw new Error(`AI returned empty patch (stop=${stopReason})`);
+
+    const patch = parsePatch(rawText);
+    console.log(`[quick-edit] patch find=${patch.find.length} chars, replace=${patch.replace.length} chars`);
+
+    // Apply the same patch to every target file. CSS variables and shared
+    // markup (nav/footer) cascade naturally across pages this way.
     const editOne = async (pageFile: string): Promise<void> => {
       if (!filesSaved.includes(pageFile)) {
         skippedFiles.push(pageFile);
@@ -191,53 +334,15 @@ async function processQuickEditJob(params: {
       }
 
       const currentHtml = await file.text();
-      const { systemPrompt, userPrompt } = buildPrompt(instruction, changeType, currentHtml);
 
-      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": anthropicKey,
-          "anthropic-version": "2023-06-01",
-          // Required to unlock >8192 output tokens on Sonnet 4. Without this,
-          // Anthropic silently caps output and truncates large HTML files
-          // mid-document, causing the </html> validator to reject the result.
-          "anthropic-beta": "output-128k-2025-02-19",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 64000,
-          system: systemPrompt,
-          messages: [{ role: "user", content: userPrompt }],
-        }),
-      });
-
-      if (aiRes.status === 429) {
-        rateLimited = true;
-        throw new Error(`Rate limited on ${pageFile}`);
-      }
-      if (!aiRes.ok) {
-        const txt = await aiRes.text();
-        throw new Error(`Anthropic API error ${aiRes.status} on ${pageFile}: ${txt.slice(0, 300)}`);
+      // Patch target may not exist on every page (e.g. hero only on homepage).
+      if (!currentHtml.includes(patch.find)) {
+        console.log(`[quick-edit] ${pageFile}: patch target not present, skipping`);
+        skippedFiles.push(pageFile);
+        return;
       }
 
-      const aiJson = await aiRes.json();
-      let updatedHtml: string = aiJson?.content?.[0]?.text ?? "";
-      const stopReason = aiJson?.stop_reason;
-      const usage = aiJson?.usage;
-      console.log(`[quick-edit] ${pageFile}: stop_reason=${stopReason}, output_tokens=${usage?.output_tokens}, len=${updatedHtml.length}`);
-
-      if (!updatedHtml) throw new Error(`AI returned empty content for ${pageFile} (stop=${stopReason})`);
-
-      updatedHtml = updatedHtml
-        .replace(/^```(?:html)?\s*\n?/i, "")
-        .replace(/\n?```\s*$/i, "")
-        .trim();
-
-      if (updatedHtml.length < 200 || !/<\/html>/i.test(updatedHtml)) {
-        const tail = updatedHtml.slice(-200);
-        throw new Error(`AI output for ${pageFile} not a complete HTML document (stop=${stopReason}, out_tokens=${usage?.output_tokens}, len=${updatedHtml.length}, tail=${JSON.stringify(tail)})`);
-      }
+      const updatedHtml = applyPatch(currentHtml, patch, changeType);
 
       const { error: upErr } = await supabase.storage
         .from("generated-sites")
@@ -248,7 +353,7 @@ async function processQuickEditJob(params: {
         );
       if (upErr) throw new Error(`Storage upload failed for ${pageFile}: ${upErr.message}`);
 
-      // Push to Hostinger staging in the background so a slow mirror does not hold the job open.
+      // Push to Hostinger staging in the background.
       runInBackground((async () => {
         try {
           const stagingHtml = injectNoindex(updatedHtml);
@@ -265,17 +370,6 @@ async function processQuickEditJob(params: {
     };
 
     const results = await Promise.allSettled(filesToEdit.map(editOne));
-
-    if (rateLimited) {
-      await logEdit(supabase, clientId, callerId, operatorEmail,
-        `[${pages}] ${instruction}`, "failed", "Rate limited (429)");
-      await updateJob(supabase, jobId, {
-        status: "failed",
-        error_message: "Rate limited — please wait a moment and try again.",
-        completed_at: new Date().toISOString(),
-      });
-      return;
-    }
 
     const failures = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
     if (failures.length > 0 && editedFiles.length === 0) {
