@@ -552,11 +552,38 @@ async function processQuickEditJob(params: {
         throw new Error(`AI did not finish cleanly (stop=${stopReason}) — snippet may be truncated`);
       }
 
-      const updatedExcerpt = cleanAiHtml(rawText);
-      if (!updatedExcerpt) throw new Error("AI returned empty snippet after cleanup");
-
-      patch = { find: excerpt, replace: updatedExcerpt };
-      console.log(`[quick-edit] excerpt patch: ${excerpt.length} → ${updatedExcerpt.length} chars`);
+      if (changeType === "additive") {
+        // Expect JSON { find, replace } from the AI.
+        const cleaned = rawText
+          .trim()
+          .replace(/^```(?:json)?\s*\n?/i, "")
+          .replace(/\n?```\s*$/i, "")
+          .trim();
+        const jsonStart = cleaned.indexOf("{");
+        const jsonEnd = cleaned.lastIndexOf("}");
+        if (jsonStart < 0 || jsonEnd <= jsonStart) {
+          throw new Error("AI did not return a JSON object for additive change");
+        }
+        let parsed: { find?: string; replace?: string };
+        try {
+          parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
+        } catch (e: any) {
+          throw new Error(`Failed to parse additive JSON patch: ${e.message}`);
+        }
+        if (!parsed.find || !parsed.replace) {
+          throw new Error("Additive patch missing 'find' or 'replace'");
+        }
+        if (!parsed.replace.startsWith(parsed.find)) {
+          throw new Error("Additive 'replace' must start with the 'find' string (append-only)");
+        }
+        patch = { find: parsed.find, replace: parsed.replace };
+        console.log(`[quick-edit] additive patch: appending ${parsed.replace.length - parsed.find.length} chars`);
+      } else {
+        const updatedExcerpt = cleanAiHtml(rawText);
+        if (!updatedExcerpt) throw new Error("AI returned empty snippet after cleanup");
+        patch = { find: excerpt, replace: updatedExcerpt };
+        console.log(`[quick-edit] excerpt patch: ${excerpt.length} → ${updatedExcerpt.length} chars`);
+      }
     }
 
     // Apply the same patch to every target file. CSS variables and shared
