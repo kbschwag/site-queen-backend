@@ -200,7 +200,14 @@ function findSectionBlock(html: string, keywords: string[]): string | null {
  * The excerpt itself becomes the `find` string for splicing.
  */
 function extractExcerpt(html: string, instruction: string, changeType: string): string {
-  if (changeType === "copy") {
+  if (changeType === "additive") {
+    // Return the matching <section> block as a TEMPLATE/example for the AI.
+    const block = findSectionBlock(html, extractSectionKeywords(instruction));
+    if (block) return block;
+    // Fall through to copy-style window if no section keyword matched.
+  }
+
+  if (changeType === "copy" || changeType === "additive") {
     const quoted = instruction.match(/["']([^"']{3,})["']/);
     const needle = quoted?.[1];
     if (needle) {
