@@ -196,8 +196,11 @@ function applyPatch(html: string, patch: Patch, changeType: string): string {
   }
   const updated = html.replace(patch.find, patch.replace);
   const delta = Math.abs(updated.length - html.length);
-  // Sanity bounds: copy/CSS edits should be small. Section edits can be larger.
-  const maxDelta = changeType === "section" ? 20000 : 2000;
+  // Sanity bounds: copy/CSS edits should be small. Section edits/removals can be larger.
+  const maxDelta =
+    changeType === "section_removal" ? 50000 :
+    changeType === "section" ? 20000 :
+    2000;
   if (delta > maxDelta) {
     throw new Error(`Patch size out of bounds (${delta} chars changed, max ${maxDelta} for ${changeType})`);
   }
