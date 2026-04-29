@@ -273,6 +273,32 @@ function pickFirstKeyword(instruction: string): string | null {
  * by replacing the original excerpt. Minimal tokens, no JSON parsing failure mode.
  */
 function buildExcerptPrompt(instruction: string, changeType: string, excerpt: string) {
+  if (changeType === "additive") {
+    const systemPrompt = `You are a precise HTML editor. You ADD new content by returning a JSON patch.
+Output ONLY a JSON object with "find" and "replace" keys. No markdown, no code fences, no commentary.`;
+
+    const userPrompt = `CHANGE REQUESTED: ${instruction}
+CHANGE TYPE: additive — you are ADDING something new, not replacing existing content.
+
+HERE IS AN EXAMPLE OF THE EXISTING PATTERN TO FOLLOW (use it as a template for the new item):
+${excerpt}
+
+Return a JSON object:
+{
+  "find": "the LAST occurrence of an existing item's full HTML inside the section above (a complete, unique substring that appears exactly once in the page)",
+  "replace": "that same existing item's HTML, followed by the NEW item's HTML appended directly after it, using IDENTICAL HTML structure and CSS classes"
+}
+
+Rules:
+- The new item must use IDENTICAL HTML structure and CSS classes as the existing items shown above.
+- Do NOT invent new classes or inline styles.
+- "find" must be a verbatim substring of the page that appears exactly once.
+- "replace" must start with the exact same content as "find" and then add the new item after it.
+- Return ONLY the JSON object — no other text.`;
+
+    return { systemPrompt, userPrompt };
+  }
+
   const systemPrompt = `You are a precise HTML editor. You receive a snippet of HTML from a larger page and a change request.
 Return ONLY the updated snippet — same boundaries as the input — with the requested change applied.
 No markdown, no code fences, no commentary. Raw HTML only.`;
