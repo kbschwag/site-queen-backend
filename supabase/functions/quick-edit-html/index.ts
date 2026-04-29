@@ -192,37 +192,36 @@ function findSectionBlock(html: string, keywords: string[]): string | null {
 }
 
 /**
- * Extract a small, focused excerpt of the HTML that's relevant to the
- * requested change. Keeping the excerpt small means Claude only ever
- * needs to return a tiny JSON patch — no truncation, no large outputs.
+ * Extract a focused excerpt of the HTML for AI editing.
+ *   copy    → small ~80-line window around the relevant text/keyword
+ *   section → the full <section>…</section> containing the relevant keywords
+ * The excerpt itself becomes the `find` string for splicing.
  */
 function extractExcerpt(html: string, instruction: string, changeType: string): string {
-  if (changeType === "css_variable") {
-    const rootMatch = html.match(/:root\s*\{[\s\S]*?\}/);
-    if (rootMatch) return rootMatch[0];
-  }
-
-  if (changeType === "section_removal") {
-    const block = findSectionBlock(html, extractSectionKeywords(instruction));
-    if (block) return block;
-  }
-
   if (changeType === "copy") {
     const quoted = instruction.match(/["']([^"']{3,})["']/);
     const needle = quoted?.[1];
     if (needle) {
       const idx = html.indexOf(needle);
       if (idx >= 0) {
-        const before = html.lastIndexOf("<section", idx);
-        const afterStart = html.indexOf("</section>", idx);
-        if (before >= 0 && afterStart >= 0 && afterStart - before < 8000) {
-          return html.slice(before, afterStart + "</section>".length);
-        }
         const start = Math.max(0, idx - 1500);
         const end = Math.min(html.length, idx + needle.length + 1500);
-        return html.slice(start, end);
+        const slice = html.slice(start, end);
+        if (occurrencesOf(html, slice) === 1) return slice;
       }
     }
+    const keyword = pickFirstKeyword(instruction);
+    if (keyword) {
+      const idx = html.toLowerCase().indexOf(keyword.toLowerCase());
+      if (idx >= 0) {
+        const start = Math.max(0, idx - 1200);
+        const end = Math.min(html.length, idx + 1200);
+        const slice = html.slice(start, end);
+        if (occurrencesOf(html, slice) === 1) return slice;
+      }
+    }
+    const block = findSectionBlock(html, extractSectionKeywords(instruction));
+    if (block) return block;
   }
 
   if (changeType === "section") {
@@ -230,6 +229,7 @@ function extractExcerpt(html: string, instruction: string, changeType: string): 
     if (block) return block;
   }
 
+  // Last-resort head+tail summary (rarely used now Types 1/2 short-circuit).
   const lines = html.split("\n");
   if (lines.length <= 250) return html;
   return [
@@ -239,50 +239,56 @@ function extractExcerpt(html: string, instruction: string, changeType: string): 
   ].join("\n");
 }
 
-function buildPatchPrompt(instruction: string, changeType: string, excerpt: string) {
-  const systemPrompt = `You are a precise HTML editor that returns surgical find/replace patches.
-Return ONLY a single JSON object — no markdown, no code fences, no explanation.`;
-
-  const userPrompt = `You are editing a specific part of a website HTML file.
-
-CHANGE REQUESTED: ${instruction}
-CHANGE TYPE: ${changeType}
-
-RELEVANT HTML EXCERPT:
-${excerpt}
-
-Return a JSON object with exactly this structure:
-{
-  "find": "the exact string to find in the original HTML (must be unique)",
-  "replace": "the replacement string"
+function occurrencesOf(haystack: string, needle: string): number {
+  if (!needle) return 0;
+  return haystack.split(needle).length - 1;
 }
 
-Rules:
-- "find" must be an exact match to text in the excerpt — copy it character for character (including whitespace).
-- "find" must be unique enough to identify exactly one location in the full HTML file.
-- "replace" is the corrected version with ONLY the requested change applied.
-- Keep the patch as small as possible — do not include unchanged surrounding context unless required for uniqueness.
-- Return ONLY the JSON object. No explanation. No markdown. No code fences.`;
+function pickFirstKeyword(instruction: string): string | null {
+  const stop = new Set([
+    "the","and","for","with","into","change","update","make","fix","please","to","a","an",
+    "remove","delete","hide","section","page","site","website","add","new","copy","text","headline",
+    "this","that","from","tagline","title","heading",
+  ]);
+  const tokens = instruction
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 4 && !stop.has(t));
+  tokens.sort((a, b) => b.length - a.length);
+  return tokens[0] || null;
+}
+
+/**
+ * The AI returns the rewritten snippet directly; the server splices it back in
+ * by replacing the original excerpt. Minimal tokens, no JSON parsing failure mode.
+ */
+function buildExcerptPrompt(instruction: string, changeType: string, excerpt: string) {
+  const systemPrompt = `You are a precise HTML editor. You receive a snippet of HTML from a larger page and a change request.
+Return ONLY the updated snippet — same boundaries as the input — with the requested change applied.
+No markdown, no code fences, no commentary. Raw HTML only.`;
+
+  const userPrompt = `CHANGE REQUESTED: ${instruction}
+CHANGE TYPE: ${changeType}
+
+Return the snippet below with ONLY the requested change applied. Preserve all surrounding markup, classes, attributes, and indentation exactly. Do not modify anything outside the requested change.
+
+ORIGINAL SNIPPET:
+${excerpt}
+
+UPDATED SNIPPET:`;
 
   return { systemPrompt, userPrompt };
 }
 
 interface Patch { find: string; replace: string; }
 
-function parsePatch(raw: string): Patch {
-  let txt = raw.trim()
-    .replace(/^```(?:json)?\s*\n?/i, "")
+function cleanAiHtml(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^```(?:html)?\s*\n?/i, "")
     .replace(/\n?```\s*$/i, "")
     .trim();
-  // Find the first {...} block.
-  const start = txt.indexOf("{");
-  const end = txt.lastIndexOf("}");
-  if (start >= 0 && end > start) txt = txt.slice(start, end + 1);
-  const obj = JSON.parse(txt);
-  if (typeof obj?.find !== "string" || typeof obj?.replace !== "string") {
-    throw new Error("Patch JSON missing find/replace strings");
-  }
-  return { find: obj.find, replace: obj.replace };
 }
 
 function applyPatch(html: string, patch: Patch, changeType: string): string {
@@ -291,15 +297,15 @@ function applyPatch(html: string, patch: Patch, changeType: string): string {
     throw new Error(`Patch target not found in HTML — find string did not match (find length=${patch.find.length})`);
   }
   if (occurrences > 1) {
-    throw new Error(`Patch target ambiguous — found ${occurrences} matches; AI must return a more unique 'find' string`);
+    throw new Error(`Patch target ambiguous — found ${occurrences} matches in HTML`);
   }
   const updated = html.replace(patch.find, patch.replace);
   const delta = Math.abs(updated.length - html.length);
-  // Sanity bounds: copy/CSS edits should be small. Section edits/removals can be larger.
   const maxDelta =
     changeType === "section_removal" ? 50000 :
-    changeType === "section" ? 20000 :
-    2000;
+    changeType === "section" ? 30000 :
+    changeType === "css_variable" ? 200 :
+    3000;
   if (delta > maxDelta) {
     throw new Error(`Patch size out of bounds (${delta} chars changed, max ${maxDelta} for ${changeType})`);
   }
