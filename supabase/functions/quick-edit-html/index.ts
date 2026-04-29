@@ -30,22 +30,121 @@ function injectNoindex(html: string): string {
   return html;
 }
 
+/**
+ * Tiered change-type detection.
+ *   Type 1: css_variable     — color/font/spacing tweaks → deterministic :root edit
+ *   Type 2: section_removal  — remove/hide a section → deterministic block delete
+ *   Type 3: copy             — small text/copy tweak → AI on a small excerpt
+ *   Type 4: section          — restructure/rewrite a section → AI on the full section
+ */
 function detectChangeType(instruction: string): string {
   const lower = instruction.toLowerCase();
-  // Section removal takes priority — it's a destructive structural edit.
+
+  // Type 2 — destructive structural edit takes priority.
   if (lower.match(/\b(remove|delete|hide|get rid of|take out|drop)\b/)) {
     return "section_removal";
   }
-  if (lower.match(/color|navy|red|gold|blue|green|font|css|style|background|#[0-9a-f]{3,6}/i)) {
+
+  // Type 1 — CSS variable / color / font / spacing tweaks.
+  // Only when the instruction is clearly about a style token, not "rewrite the
+  // section about colors" etc. We require either a hex/rgb value, an explicit
+  // color/font keyword, or a "change … to …" phrasing on a style noun.
+  if (
+    /#[0-9a-f]{3,8}\b/i.test(instruction) ||
+    /\brgb\s*\(/i.test(instruction) ||
+    /\b(color|colour|font|font-family|font size|spacing|padding|margin|radius|border)\b/i.test(lower) ||
+    /\b(navy|crimson|gold|teal|sage|maroon|beige|charcoal)\b/i.test(lower)
+  ) {
     return "css_variable";
   }
-  if (lower.match(/headline|title|text|copy|wording|say|change.*to|replace|update.*section|about|tagline/i)) {
-    return "copy";
-  }
-  if (lower.match(/add|move|section|show|footer|header|nav/i)) {
+
+  // Type 4 — clearly section-scale work.
+  if (/\b(rewrite|redo|restructure|redesign|replace the entire|add (a |an )?(new )?section)\b/i.test(lower)) {
     return "section";
   }
-  return "general";
+
+  // Type 3 — small copy/text edits (default for most plain-language tweaks).
+  if (/\b(headline|title|tagline|heading|text|copy|wording|phrase|word|say|change|update|fix|rename|rephrase|capitalize|punctuation|spelling|typo|phone|email|address|hours)\b/i.test(lower)) {
+    return "copy";
+  }
+
+  // Fallback — treat as a section-scale change so the AI gets enough context.
+  return "section";
+}
+
+// ─── Type 1: deterministic CSS variable edit ────────────────────────────────
+
+/** Common natural-language → CSS custom property name aliases. */
+const CSS_VAR_ALIASES: Record<string, string[]> = {
+  primary: ["--primary", "--color-primary", "--brand", "--brand-color", "--accent"],
+  secondary: ["--secondary", "--color-secondary"],
+  accent: ["--accent", "--accent-color"],
+  background: ["--background", "--bg", "--bg-color", "--color-bg"],
+  text: ["--text", "--text-color", "--foreground", "--color-text"],
+  navy: ["--navy", "--primary", "--brand"],
+  gold: ["--gold", "--accent"],
+  font: ["--font", "--font-family", "--font-body", "--font-heading"],
+};
+
+/** Pull a hex/rgb/named color value out of the instruction. */
+function extractColorValue(instruction: string): string | null {
+  const hex = instruction.match(/#[0-9a-fA-F]{3,8}\b/);
+  if (hex) return hex[0];
+  const rgb = instruction.match(/rgba?\s*\([^)]+\)/i);
+  if (rgb) return rgb[0];
+  return null;
+}
+
+/** Try to deterministically apply a CSS-variable change. Returns updated HTML or null. */
+function applyCssVariableEdit(
+  html: string,
+  instruction: string,
+): { updated: string; varName: string; oldValue: string; newValue: string } | null {
+  const rootMatch = html.match(/(:root\s*\{)([\s\S]*?)(\})/);
+  if (!rootMatch) return null;
+  const rootBlock = rootMatch[0];
+  const rootBody = rootMatch[2];
+
+  const newValue = extractColorValue(instruction);
+  if (!newValue) return null;
+
+  // Try to identify the target variable via aliases or any name in :root mentioned in the instruction.
+  const lower = instruction.toLowerCase();
+
+  // Collect all defined vars in :root.
+  const definedVars = Array.from(rootBody.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/gi))
+    .map((m) => ({ name: m[1], value: m[2].trim() }));
+  if (definedVars.length === 0) return null;
+
+  // 1. Direct mention of a var name (e.g. "set --primary to #001a4d").
+  let target = definedVars.find((v) => lower.includes(v.name.toLowerCase()));
+
+  // 2. Alias mention (e.g. "make the primary color …", "navy to …").
+  if (!target) {
+    for (const [alias, candidates] of Object.entries(CSS_VAR_ALIASES)) {
+      if (new RegExp(`\\b${alias}\\b`, "i").test(lower)) {
+        target = definedVars.find((v) => candidates.includes(v.name));
+        if (target) break;
+      }
+    }
+  }
+
+  if (!target) return null;
+
+  // Replace just this declaration inside the :root block — must be unique.
+  const declRe = new RegExp(
+    `(${target.name.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`,
+  );
+  const newRootBlock = rootBlock.replace(declRe, `$1${newValue}$3`);
+  if (newRootBlock === rootBlock) return null;
+
+  const updated = html.replace(rootBlock, newRootBlock);
+  return {
+    updated,
+    varName: target.name,
+    oldValue: target.value,
+    newValue,
+  };
 }
 
 const SECTION_KEYWORDS = [
