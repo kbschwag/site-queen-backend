@@ -52,7 +52,7 @@ const CAL_URL = "https://calendly.com/sitequeenai/30min";
 
 const fn = (d: any) => d.first_name || (d.name || "").split(" ")[0] || "there";
 
-const fnName = (d: any) => d.first_name || (d.name || "").split(" ")[0] || "there";
+
 
 
 type TemplateConfig = {
