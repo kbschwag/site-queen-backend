@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
+const RESEND_URL = "https://api.resend.com";
 const FROM_ADDRESS = "SiteQueen <hello@sitequeen.ai>";
 
 const BRAND_PURPLE = "#534AB7";
@@ -52,19 +52,8 @@ const CAL_URL = "https://calendly.com/sitequeenai/30min";
 
 const fn = (d: any) => d.first_name || (d.name || "").split(" ")[0] || "there";
 
-const isSandboxRecipientError = (result: any) =>
-  result?.statusCode === 403 &&
-  typeof result?.message === "string" &&
-  result.message.includes("testing emails");
 
-const shouldTryNextResendKey = (result: any) => {
-  const message = String(result?.message || "").toLowerCase();
-  return result?.statusCode === 403 && (
-    message.includes("domain is not verified") ||
-    message.includes("api key") ||
-    message.includes("unauthorized")
-  );
-};
+
 
 type TemplateConfig = {
   subject: string | ((d: any) => string);
@@ -1197,18 +1186,14 @@ serve(async (req) => {
       });
     }
 
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-    const resendKeys = [
-      { label: "RESEND_API_KEY_1", value: Deno.env.get("RESEND_API_KEY_1") },
-      { label: "RESEND_API_KEY", value: Deno.env.get("RESEND_API_KEY") },
-    ].filter((key): key is { label: string; value: string } => Boolean(key.value));
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
-    if (!lovableApiKey || resendKeys.length === 0) {
-      console.error("Missing Resend API key");
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
+    if (!resendApiKey) {
+      console.error("Missing RESEND_API_KEY");
       await supabase.from("emails_log").insert({
         recipient_email: to,
         email_type: template,
@@ -1216,7 +1201,6 @@ serve(async (req) => {
         application_id: applicationId || null,
         client_id: clientId || null,
       });
-
       return new Response(JSON.stringify({ error: "Email service not configured", logged: true }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1226,11 +1210,8 @@ serve(async (req) => {
     const templateData = { ...(data || {}) };
     if (template === "welcome_set_password" && !templateData.magic_link) {
       try {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const sb = createClient(supabaseUrl, supabaseKey);
         const siteUrl = "https://site-queen-backend.lovable.app";
-        const { data: linkData } = await sb.auth.admin.generateLink({
+        const { data: linkData } = await supabase.auth.admin.generateLink({
           type: "magiclink",
           email: to,
           options: { redirectTo: `${siteUrl}/set-password` },
@@ -1247,15 +1228,14 @@ serve(async (req) => {
       ? (emailTemplate.subject as (d: any) => string)(templateData)
       : emailTemplate.subject;
 
-    const sendEmail = (apiKey: string, from: string) => fetch(`${GATEWAY_URL}/emails`, {
+    const response = await fetch(`${RESEND_URL}/emails`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${lovableApiKey}`,
-        "X-Connection-Api-Key": apiKey,
+        Authorization: `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from,
+        from: FROM_ADDRESS,
         to: [to],
         ...(replyTo ? { reply_to: replyTo } : {}),
         subject,
@@ -1263,51 +1243,23 @@ serve(async (req) => {
       }),
     });
 
-    let response: Response | null = null;
-    let result: any = null;
-    let usedKeyLabel = resendKeys[0].label;
-
-    for (let index = 0; index < resendKeys.length; index++) {
-      const key = resendKeys[index];
-      usedKeyLabel = key.label;
-      response = await sendEmail(key.value, FROM_ADDRESS);
-      result = await response.json().catch(() => ({}));
-
-      if (response.ok || !shouldTryNextResendKey(result) || index === resendKeys.length - 1) {
-        break;
-      }
-
-      console.warn(`${key.label} could not send from ${FROM_ADDRESS}; trying alternate Resend key.`);
-    }
-
-    // Log the email
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const result = await response.json().catch(() => ({}));
 
     await supabase.from("emails_log").insert({
       recipient_email: to,
       email_type: template,
-      status: response?.ok ? "sent" : "failed",
+      status: response.ok ? "sent" : "failed",
       application_id: applicationId || null,
       client_id: clientId || null,
     });
 
-    if (!response?.ok) {
-      console.error(`Resend error using ${usedKeyLabel}:`, result);
-      // Create operator notification for failed email
+    if (!response.ok) {
+      console.error("Resend error:", result);
       await supabase.from("notifications").insert({
         type: "email_failed",
         message: `Email "${template}" failed to send to ${to}: ${result?.message || "Unknown error"}`,
         target_role: "operator",
       });
-
-      if (isSandboxRecipientError(result)) {
-        console.warn("Resend sandbox mode: email not delivered to", to);
-        return new Response(JSON.stringify({ success: true, sandbox: true, warning: "Resend sandbox mode" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       return new Response(JSON.stringify({ error: "Failed to send email", details: result }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
