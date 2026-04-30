@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
+const RESEND_URL = "https://api.resend.com";
 const FROM_ADDRESS = "SiteQueen <hello@sitequeen.ai>";
 
 const BRAND_PURPLE = "#534AB7";
