@@ -6,7 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
 const FROM_ADDRESS = "SiteQueen <hello@sitequeen.ai>";
 
 const BRAND_PURPLE = "#534AB7";
@@ -56,6 +55,15 @@ const isSandboxRecipientError = (result: any) =>
   result?.statusCode === 403 &&
   typeof result?.message === "string" &&
   result.message.includes("testing emails");
+
+const shouldTryNextResendKey = (result: any) => {
+  const message = String(result?.message || "").toLowerCase();
+  return result?.statusCode === 403 && (
+    message.includes("domain is not verified") ||
+    message.includes("api key") ||
+    message.includes("unauthorized")
+  );
+};
 
 type TemplateConfig = {
   subject: string | ((d: any) => string);
@@ -1188,11 +1196,13 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || Deno.env.get("RESEND_API_KEY_1");
+    const resendKeys = [
+      { label: "RESEND_API_KEY", value: Deno.env.get("RESEND_API_KEY") },
+      { label: "RESEND_API_KEY_1", value: Deno.env.get("RESEND_API_KEY_1") },
+    ].filter((key): key is { label: string; value: string } => Boolean(key.value));
 
-    if (!LOVABLE_API_KEY || !RESEND_API_KEY) {
-      console.error("Missing API keys - LOVABLE:", !!LOVABLE_API_KEY, "RESEND:", !!RESEND_API_KEY);
+    if (resendKeys.length === 0) {
+      console.error("Missing Resend API key");
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
@@ -1235,11 +1245,11 @@ serve(async (req) => {
       ? (emailTemplate.subject as (d: any) => string)(templateData)
       : emailTemplate.subject;
 
-    const sendEmail = (from: string) => fetch(`https://api.resend.com/emails`, {
+    const sendEmail = (apiKey: string, from: string) => fetch(`https://api.resend.com/emails`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         from,
@@ -1250,8 +1260,22 @@ serve(async (req) => {
       }),
     });
 
-    const response = await sendEmail(FROM_ADDRESS);
-    const result = await response.json();
+    let response: Response | null = null;
+    let result: any = null;
+    let usedKeyLabel = resendKeys[0].label;
+
+    for (let index = 0; index < resendKeys.length; index++) {
+      const key = resendKeys[index];
+      usedKeyLabel = key.label;
+      response = await sendEmail(key.value, FROM_ADDRESS);
+      result = await response.json().catch(() => ({}));
+
+      if (response.ok || !shouldTryNextResendKey(result) || index === resendKeys.length - 1) {
+        break;
+      }
+
+      console.warn(`${key.label} could not send from ${FROM_ADDRESS}; trying alternate Resend key.`);
+    }
 
     // Log the email
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1261,13 +1285,13 @@ serve(async (req) => {
     await supabase.from("emails_log").insert({
       recipient_email: to,
       email_type: template,
-      status: response.ok ? "sent" : "failed",
+      status: response?.ok ? "sent" : "failed",
       application_id: applicationId || null,
       client_id: clientId || null,
     });
 
-    if (!response.ok) {
-      console.error("Resend error:", result);
+    if (!response?.ok) {
+      console.error(`Resend error using ${usedKeyLabel}:`, result);
       // Create operator notification for failed email
       await supabase.from("notifications").insert({
         type: "email_failed",
