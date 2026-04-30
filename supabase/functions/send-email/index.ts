@@ -52,19 +52,8 @@ const CAL_URL = "https://calendly.com/sitequeenai/30min";
 
 const fn = (d: any) => d.first_name || (d.name || "").split(" ")[0] || "there";
 
-const isSandboxRecipientError = (result: any) =>
-  result?.statusCode === 403 &&
-  typeof result?.message === "string" &&
-  result.message.includes("testing emails");
+const fnName = (d: any) => d.first_name || (d.name || "").split(" ")[0] || "there";
 
-const shouldTryNextResendKey = (result: any) => {
-  const message = String(result?.message || "").toLowerCase();
-  return result?.statusCode === 403 && (
-    message.includes("domain is not verified") ||
-    message.includes("api key") ||
-    message.includes("unauthorized")
-  );
-};
 
 type TemplateConfig = {
   subject: string | ((d: any) => string);
