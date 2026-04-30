@@ -6,6 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
 const FROM_ADDRESS = "SiteQueen <hello@sitequeen.ai>";
 
 const BRAND_PURPLE = "#534AB7";
@@ -1196,12 +1197,13 @@ serve(async (req) => {
       });
     }
 
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
     const resendKeys = [
-      { label: "RESEND_API_KEY", value: Deno.env.get("RESEND_API_KEY") },
       { label: "RESEND_API_KEY_1", value: Deno.env.get("RESEND_API_KEY_1") },
+      { label: "RESEND_API_KEY", value: Deno.env.get("RESEND_API_KEY") },
     ].filter((key): key is { label: string; value: string } => Boolean(key.value));
 
-    if (resendKeys.length === 0) {
+    if (!lovableApiKey || resendKeys.length === 0) {
       console.error("Missing Resend API key");
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1245,11 +1247,12 @@ serve(async (req) => {
       ? (emailTemplate.subject as (d: any) => string)(templateData)
       : emailTemplate.subject;
 
-    const sendEmail = (apiKey: string, from: string) => fetch(`https://api.resend.com/emails`, {
+    const sendEmail = (apiKey: string, from: string) => fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${lovableApiKey}`,
+        "X-Connection-Api-Key": apiKey,
       },
       body: JSON.stringify({
         from,
