@@ -8,7 +8,6 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
 const FROM_ADDRESS = "SiteQueen <hello@sitequeen.ai>";
-const SANDBOX_FROM_ADDRESS = "SiteQueen <onboarding@resend.dev>";
 
 const BRAND_PURPLE = "#534AB7";
 const DARK_TEXT = "#1a1a2e";
@@ -52,11 +51,6 @@ const OPERATOR_URL = "https://site-queen-backend.lovable.app/operator";
 const CAL_URL = "https://calendly.com/sitequeenai/30min";
 
 const fn = (d: any) => d.first_name || (d.name || "").split(" ")[0] || "there";
-
-const isDomainNotVerifiedError = (result: any) =>
-  result?.statusCode === 403 &&
-  typeof result?.message === "string" &&
-  result.message.toLowerCase().includes("domain is not verified");
 
 const isSandboxRecipientError = (result: any) =>
   result?.statusCode === 403 &&
@@ -1257,14 +1251,8 @@ serve(async (req) => {
       }),
     });
 
-    let response = await sendEmail(FROM_ADDRESS);
-    let result = await response.json();
-
-    if (!response.ok && isDomainNotVerifiedError(result)) {
-      console.warn("Resend sender domain not verified; retrying with sandbox sender:", result);
-      response = await sendEmail(SANDBOX_FROM_ADDRESS);
-      result = await response.json();
-    }
+    const response = await sendEmail(FROM_ADDRESS);
+    const result = await response.json();
 
     // Log the email
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
