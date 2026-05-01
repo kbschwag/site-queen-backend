@@ -402,7 +402,41 @@ Return this exact JSON structure (every field required, no empty strings unless 
   "FINAL_CTA_HEADLINE": "5-8 words all caps",
   "FINAL_CTA_SUBTEXT": "1-2 sentences urgency and reassurance specific to this business",
   "FOOTER_TAGLINE": "short memorable tagline specific to this business — use their exact words if they provided a tagline (${tagline || "none provided"}), otherwise write a 5-8 word tagline that captures this business's character",
-  "FOOTER_NEWSLETTER_TEXT": "1 sentence inviting email signup for deals and tips, specific to this business"
+  "FOOTER_NEWSLETTER_TEXT": "1 sentence inviting email signup for deals and tips, specific to this business"${templateId === "feminine-bold" ? `,
+  "ANNOUNCE_TEXT": "short announcement bar text e.g. 'Now booking — Spring cohort open'",
+  "ABOUT_STRIP_DROPCAP": "first letter of the first word of the about strip headline",
+  "ABOUT_STRIP_LINE1": "rest of first word e.g. if dropcap is H, this is ELPING",
+  "ABOUT_STRIP_LINE2": "second line of the about strip e.g. 'WOMEN COACHES,'",
+  "ABOUT_STRIP_LINE3": "third line e.g. 'FOUNDERS WORK LESS'",
+  "ABOUT_STRIP_LINE4": "fourth line e.g. 'PROFIT MORE.'",
+  "ABOUT_STRIP_BODY": "1-2 sentences expanding on the about strip",
+  "ABOUT_INTRO_HEADLINE": "personal intro headline e.g. 'Hi, I'm [name], [title]'",
+  "ABOUT_INTRO_BODY": "2-3 sentences personal intro body",
+  "TRANSFORMATION_BODY": "1-2 sentences about the transformation journey",
+  "BA_1_BEFORE": "before state 1 — what the client struggles with now",
+  "BA_1_AFTER": "after state 1 — what they achieve after working together",
+  "BA_2_BEFORE": "before state 2",
+  "BA_2_AFTER": "after state 2",
+  "BA_3_BEFORE": "before state 3",
+  "BA_3_AFTER": "after state 3",
+  "PHILOSOPHY_HEADLINE_REST": "headline rest after dropcap for philosophy section",
+  "PILLAR_1_TITLE": "first philosophy pillar title e.g. 'Clarity'",
+  "PILLAR_1_BODY": "2-3 sentences describing pillar 1",
+  "PILLAR_2_TITLE": "second philosophy pillar title",
+  "PILLAR_2_BODY": "2-3 sentences describing pillar 2",
+  "PILLAR_3_TITLE": "third philosophy pillar title",
+  "PILLAR_3_BODY": "2-3 sentences describing pillar 3",
+  "METHODOLOGY_BODY": "1 sentence describing the methodology approach",
+  "STEP_1_TITLE": "step 1 name e.g. 'The Invitation'",
+  "STEP_1_BODY": "2-3 sentences describing step 1",
+  "STEP_2_TITLE": "step 2 name",
+  "STEP_2_BODY": "2-3 sentences describing step 2",
+  "STEP_3_TITLE": "step 3 name",
+  "STEP_3_BODY": "2-3 sentences describing step 3",
+  "STEP_4_TITLE": "step 4 name",
+  "STEP_4_BODY": "2-3 sentences describing step 4",
+  "LEAD_MAGNET_BODY": "1-2 sentences describing the free lead magnet offer",
+  "TESTIMONIALS_HEADLINE_REST": "headline rest after dropcap for testimonials section"` : ""}
 }`;
 
     console.log("[generate] Calling Claude for copy...");
@@ -608,6 +642,138 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{DOMAIN}}": intake.domain || `staging.sitequeen.ai/${clientId}`,
       "{{CLIENT_ID}}": clientId,
       "{{SUPABASE_URL}}": supabaseUrl,
+
+      // ── feminine-bold template extras ───────────────────────────────────
+      // Business basics
+      "{{BUSINESS_NAME_SHORT}}": businessName.split(" ")[0],
+      "{{ANNOUNCE_TEXT}}": copy.ANNOUNCE_TEXT || `Now booking new clients — ${city || "local area"}`,
+      "{{NAV_CTA}}": "BOOK A CALL",
+
+      // Hero — feminine-bold splits the hero name differently
+      "{{HERO_NAME_FIRST_LETTER}}": (ownerName || businessName).charAt(0).toUpperCase(),
+      "{{HERO_NAME_REST}}": (ownerName || businessName).slice(1),
+      "{{HERO_CTA_PRIMARY}}": copy.HERO_CTA_PRIMARY || "BOOK A CALL",
+      "{{HERO_CTA_SECONDARY}}": copy.HERO_CTA_SECONDARY || "EXPLORE SERVICES",
+
+      // About strip
+      "{{ABOUT_STRIP_DROPCAP}}": copy.ABOUT_STRIP_DROPCAP || "H",
+      "{{ABOUT_STRIP_LINE1}}": copy.ABOUT_STRIP_LINE1 || "ELPING",
+      "{{ABOUT_STRIP_LINE2}}": copy.ABOUT_STRIP_LINE2 || (businessType || "").toUpperCase(),
+      "{{ABOUT_STRIP_LINE3}}": copy.ABOUT_STRIP_LINE3 || "WORK LESS",
+      "{{ABOUT_STRIP_LINE4}}": copy.ABOUT_STRIP_LINE4 || "PROFIT MORE.",
+      "{{ABOUT_STRIP_BODY}}": copy.ABOUT_STRIP_BODY || copy.ABOUT_STORY || "",
+      "{{ABOUT_EYEBROW}}": copy.ABOUT_EYEBROW || "ABOUT ME",
+      "{{ABOUT_INTRO_HEADLINE}}": copy.ABOUT_INTRO_HEADLINE || `Hi, I'm ${ownerName || "your coach"}`,
+      "{{ABOUT_INTRO_BODY}}": copy.ABOUT_INTRO_BODY || copy.ABOUT_STORY || "",
+      "{{ABOUT_CTA}}": "WORK WITH ME",
+      "{{OWNER_TITLE_DROPCAP}}": (intake.owner_title || "B").charAt(0).toUpperCase(),
+      "{{OWNER_TITLE_REST}}": (intake.owner_title || "Business Coach").slice(1),
+
+      // Transformation (before/after)
+      "{{TRANSFORMATION_EYEBROW}}": copy.TRANSFORMATION_EYEBROW || "✦ THE TRANSFORMATION",
+      "{{TRANSFORMATION_DROPCAP}}": "F",
+      "{{TRANSFORMATION_HEADLINE_REST}}": copy.TRANSFORMATION_HEADLINE_REST || "rom Where You Are to Where You Want to Be.",
+      "{{TRANSFORMATION_BODY}}": copy.TRANSFORMATION_BODY || "",
+      "{{BA_1_BEFORE}}": copy.BA_1_BEFORE || "Struggling with consistency",
+      "{{BA_1_AFTER}}": copy.BA_1_AFTER || "Clear systems and momentum",
+      "{{BA_2_BEFORE}}": copy.BA_2_BEFORE || "Overwhelmed and stuck",
+      "{{BA_2_AFTER}}": copy.BA_2_AFTER || "Focused strategy and direction",
+      "{{BA_3_BEFORE}}": copy.BA_3_BEFORE || "Working hard without results",
+      "{{BA_3_AFTER}}": copy.BA_3_AFTER || "Aligned effort and real growth",
+
+      // Philosophy pillars
+      "{{PHILOSOPHY_EYEBROW}}": copy.PHILOSOPHY_EYEBROW || "✦ THE PHILOSOPHY",
+      "{{PHILOSOPHY_DROPCAP}}": "M",
+      "{{PHILOSOPHY_HEADLINE_REST}}": copy.PHILOSOPHY_HEADLINE_REST || "ethod Built on Quiet Truths.",
+      "{{PILLAR_1_TITLE}}": copy.PILLAR_1_TITLE || copy.WHY_US_1_TITLE || "Clarity",
+      "{{PILLAR_1_BODY}}": copy.PILLAR_1_BODY || copy.WHY_US_1_DESC || "",
+      "{{PILLAR_2_TITLE}}": copy.PILLAR_2_TITLE || copy.WHY_US_2_TITLE || "Confidence",
+      "{{PILLAR_2_BODY}}": copy.PILLAR_2_BODY || copy.WHY_US_2_DESC || "",
+      "{{PILLAR_3_TITLE}}": copy.PILLAR_3_TITLE || copy.WHY_US_3_TITLE || "Conversion",
+      "{{PILLAR_3_BODY}}": copy.PILLAR_3_BODY || copy.WHY_US_3_DESC || "",
+
+      // Services — feminine-bold tags/prices/duration/includes
+      "{{SERVICES_EYEBROW}}": copy.SERVICES_EYEBROW || "✦ WAYS TO WORK TOGETHER",
+      "{{SERVICES_DROPCAP}}": "C",
+      "{{SERVICES_HEADLINE_REST}}": copy.SERVICES_HEADLINE_REST || "hoose Your Next Chapter.",
+      "{{SERVICES_INTRO}}": copy.SERVICES_SUBTEXT || copy.SERVICES_INTRO || "",
+      "{{SERVICE_1_TAG}}": copy.SERVICE_1_TAG || "SIGNATURE",
+      "{{SERVICE_1_PRICE}}": services[0]?.price_value || services[0]?.price || copy.SERVICE_1_PRICE || "Contact for pricing",
+      "{{SERVICE_1_DURATION}}": copy.SERVICE_1_DURATION || "12 WEEKS",
+      "{{SERVICE_1_INCLUDE_1}}": copy.SERVICE_1_INCLUDE_1 || "Weekly 1:1 sessions",
+      "{{SERVICE_1_INCLUDE_2}}": copy.SERVICE_1_INCLUDE_2 || "Personalised strategy",
+      "{{SERVICE_1_INCLUDE_3}}": copy.SERVICE_1_INCLUDE_3 || "Ongoing support",
+      "{{SERVICE_2_TAG}}": copy.SERVICE_2_TAG || "GROUP",
+      "{{SERVICE_2_PRICE}}": services[1]?.price_value || services[1]?.price || copy.SERVICE_2_PRICE || "Contact for pricing",
+      "{{SERVICE_2_DURATION}}": copy.SERVICE_2_DURATION || "6 MONTHS",
+      "{{SERVICE_2_INCLUDE_1}}": copy.SERVICE_2_INCLUDE_1 || "Group coaching calls",
+      "{{SERVICE_2_INCLUDE_2}}": copy.SERVICE_2_INCLUDE_2 || "Community access",
+      "{{SERVICE_2_INCLUDE_3}}": copy.SERVICE_2_INCLUDE_3 || "Resource library",
+      "{{SERVICE_3_TAG}}": copy.SERVICE_3_TAG || "SELF-PACED",
+      "{{SERVICE_3_PRICE}}": services[2]?.price_value || services[2]?.price || copy.SERVICE_3_PRICE || "Contact for pricing",
+      "{{SERVICE_3_DURATION}}": copy.SERVICE_3_DURATION || "LIFETIME ACCESS",
+      "{{SERVICE_3_INCLUDE_1}}": copy.SERVICE_3_INCLUDE_1 || "Video modules",
+      "{{SERVICE_3_INCLUDE_2}}": copy.SERVICE_3_INCLUDE_2 || "Workbooks & templates",
+      "{{SERVICE_3_INCLUDE_3}}": copy.SERVICE_3_INCLUDE_3 || "Bonus resources",
+
+      // Testimonials — feminine-bold uses TITLE instead of LOCATION
+      "{{TESTIMONIAL_1_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_LOCATION || copy.TESTIMONIAL_1_TITLE || ""),
+      "{{TESTIMONIAL_2_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_2_LOCATION || copy.TESTIMONIAL_2_TITLE || ""),
+      "{{TESTIMONIAL_3_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_LOCATION || copy.TESTIMONIAL_3_TITLE || ""),
+      "{{TESTIMONIAL_1_AVATAR_URL}}": teamPhotos[0] || intake.owner_photo_url || "",
+      "{{TESTIMONIAL_2_AVATAR_URL}}": portfolioPhotos[0] || "",
+      "{{TESTIMONIAL_3_AVATAR_URL}}": portfolioPhotos[1] || "",
+      "{{TESTIMONIALS_EYEBROW}}": copy.TESTIMONIALS_EYEBROW || "✦ WORDS FROM CLIENTS",
+      "{{TESTIMONIALS_DROPCAP}}": "Q",
+      "{{TESTIMONIALS_HEADLINE_REST}}": copy.TESTIMONIALS_HEADLINE_REST || "uiet Wins, Loudly Earned.",
+
+      // Methodology
+      "{{METHODOLOGY_EYEBROW}}": copy.METHODOLOGY_EYEBROW || "✦ THE METHODOLOGY",
+      "{{METHODOLOGY_DROPCAP}}": "F",
+      "{{METHODOLOGY_HEADLINE_REST}}": copy.METHODOLOGY_HEADLINE_REST || "our-part Journey.",
+      "{{METHODOLOGY_BODY}}": copy.METHODOLOGY_BODY || "",
+      "{{STEP_1_TITLE}}": copy.STEP_1_TITLE || "The Invitation",
+      "{{STEP_1_BODY}}": copy.STEP_1_BODY || "We begin with a discovery conversation to understand where you are and where you want to go.",
+      "{{STEP_2_TITLE}}": copy.STEP_2_TITLE || "The Architecture",
+      "{{STEP_2_BODY}}": copy.STEP_2_BODY || "Together we map your vision, offers, and the strategy to get there.",
+      "{{STEP_3_TITLE}}": copy.STEP_3_TITLE || "The Becoming",
+      "{{STEP_3_BODY}}": copy.STEP_3_BODY || "Deep work, accountability, and the integration of who you are becoming.",
+      "{{STEP_4_TITLE}}": copy.STEP_4_TITLE || "The Return",
+      "{{STEP_4_BODY}}": copy.STEP_4_BODY || "You leave with clarity, confidence, and a business that runs on your terms.",
+
+      // Marquee
+      "{{MARQUEE_1}}": copy.MARQUEE_1 || copy.PILLAR_1_TITLE || "Clarity",
+      "{{MARQUEE_2}}": copy.MARQUEE_2 || copy.PILLAR_2_TITLE || "Confidence",
+      "{{MARQUEE_3}}": copy.MARQUEE_3 || copy.PILLAR_3_TITLE || "Growth",
+      "{{MARQUEE_4}}": copy.MARQUEE_4 || "Results",
+
+      // Lead magnet
+      "{{LEAD_MAGNET_EYEBROW}}": copy.LEAD_MAGNET_EYEBROW || "✦ A FREE GIFT",
+      "{{LEAD_MAGNET_DROPCAP}}": "T",
+      "{{LEAD_MAGNET_TITLE_REST}}": copy.LEAD_MAGNET_TITLE_REST || `he ${businessName} Starter Guide.`,
+      "{{LEAD_MAGNET_BODY}}": copy.LEAD_MAGNET_BODY || copy.FOOTER_NEWSLETTER_TEXT || "",
+      "{{LEAD_MAGNET_BTN}}": "SEND IT",
+      "{{LEAD_MAGNET_NOTE}}": "No spam, ever. Unsubscribe anytime.",
+
+      // FAQ (feminine-bold-style headline)
+      "{{FAQ_EYEBROW}}": "✦ CONSIDERED QUESTIONS",
+      "{{FAQ_DROPCAP}}": "F",
+      "{{FAQ_HEADLINE_REST}}": "requently Asked Questions",
+
+      // Final CTA (feminine-bold-style)
+      "{{FINAL_CTA_EYEBROW}}": copy.FINAL_CTA_EYEBROW || "✦ YOUR NEXT STEP",
+      "{{FINAL_CTA_DROPCAP}}": "S",
+      "{{FINAL_CTA_HEADLINE_REST}}": copy.FINAL_CTA_HEADLINE_REST || "tarts With a Conversation.",
+      "{{FINAL_CTA_BODY}}": copy.FINAL_CTA_SUBTEXT || "",
+      "{{FINAL_CTA_BTN}}": copy.FINAL_CTA_BTN || "BOOK YOUR DISCOVERY CALL",
+
+      // Social links
+      "{{SOCIAL_INSTAGRAM_URL}}": (intake.social_links as any)?.instagram
+        ? `https://instagram.com/${String((intake.social_links as any).instagram).replace("@", "")}`
+        : "#",
+      "{{SOCIAL_SUBSTACK_URL}}": (intake.social_links as any)?.substack || "#",
+      "{{SOCIAL_PODCAST_URL}}": (intake.social_links as any)?.podcast || "#",
+      "{{SOCIAL_BLOG_URL}}": (intake.social_links as any)?.blog || "#",
     };
 
     // Pre-fill header logo block: logo XOR business name (never both).
