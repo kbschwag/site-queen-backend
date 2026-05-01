@@ -14,7 +14,7 @@ export interface ApplicationFormData {
   google_search_terms: string;
 
   // Step 3 — Your Vision
-  website_goal: string;
+  website_goal: string[];
   has_logo: string; // yes | want_addon | no
   support_level: string; // basic | standard | full_service | not_sure
   restricted_niches: string[];
@@ -39,7 +39,7 @@ export const initialFormData: ApplicationFormData = {
   business_facebook: "",
   ideal_customer: "",
   google_search_terms: "",
-  website_goal: "",
+  website_goal: [],
   has_logo: "",
   support_level: "",
   restricted_niches: ["None of the above"],
@@ -182,9 +182,10 @@ export function calculateScore(form: ApplicationFormData): { score: number; temp
   else if (form.business_type === "brand_new") score += 1;
 
   // Website goal
-  if (form.website_goal === "get_more_leads" || form.website_goal === "all_of_above") score += 3;
-  else if (form.website_goal === "look_professional") score += 2;
-  else score += 1;
+  const goals = Array.isArray(form.website_goal) ? form.website_goal : [];
+  if (goals.includes("get_more_leads") || goals.includes("all_of_above")) score += 3;
+  else if (goals.includes("look_professional")) score += 2;
+  else if (goals.length > 0) score += 1;
 
   // Support level
   if (form.support_level === "full_service") score += 3;
