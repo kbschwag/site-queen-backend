@@ -212,7 +212,7 @@ serve(async (req) => {
       (siteData as any).using_stock_photos !== false;
 
     const firstServiceName = (services[0] && (typeof services[0] === "string" ? services[0] : services[0]?.name || services[0]?.title)) || "";
-    const stockTerms = buildStockSearchTerms(businessType, firstServiceName);
+    const stockTerms = buildStockSearchTerms(businessType, firstServiceName, tagline, businessName);
 
     const heroCandidates = [intake.hero_photo_url, portfolioPhotos[0]].filter(Boolean) as string[];
     const aboutCandidates = [teamPhotos[0], intake.owner_photo_url, portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
