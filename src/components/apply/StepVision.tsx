@@ -1,5 +1,6 @@
 import { ApplicationFormData, WEBSITE_GOALS, LOGO_OPTIONS, SUPPORT_LEVELS, RESTRICTED_NICHES, READINESS_OPTIONS } from "./types";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -62,6 +63,38 @@ export default function StepVision({ form, update }: Props) {
             );
           })}
         </div>
+      </div>
+
+      {/* Q8b — Current domain */}
+      <div className="space-y-3">
+        <Label className="text-base font-semibold">Do you already have a domain name? *</Label>
+        <p className="text-sm text-muted-foreground">If yes, please enter it below. If not, just check no — we'll help you get one.</p>
+        <RadioGroup value={form.has_domain} onValueChange={(v) => update("has_domain", v)} className="space-y-2">
+          {[
+            { value: "yes", label: "Yes, I have a domain" },
+            { value: "no", label: "No, I don't have one yet" },
+          ].map((opt) => (
+            <label
+              key={opt.value}
+              className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                form.has_domain === opt.value
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/30"
+              }`}
+            >
+              <RadioGroupItem value={opt.value} />
+              <span className="font-medium">{opt.label}</span>
+            </label>
+          ))}
+        </RadioGroup>
+        {form.has_domain === "yes" && (
+          <Input
+            value={form.current_domain}
+            onChange={(e) => update("current_domain", e.target.value)}
+            placeholder="yourbusiness.com"
+            className="text-base"
+          />
+        )}
       </div>
 
       {/* Q9 — Logo */}

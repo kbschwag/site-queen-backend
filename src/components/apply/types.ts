@@ -15,6 +15,8 @@ export interface ApplicationFormData {
 
   // Step 3 — Your Vision
   website_goal: string[];
+  has_domain: string; // yes | no
+  current_domain: string;
   has_logo: string; // yes | want_addon | no
   support_level: string; // basic | standard | full_service | not_sure
   restricted_niches: string[];
@@ -40,6 +42,8 @@ export const initialFormData: ApplicationFormData = {
   ideal_customer: "",
   google_search_terms: "",
   website_goal: [],
+  has_domain: "",
+  current_domain: "",
   has_logo: "",
   support_level: "",
   restricted_niches: ["None of the above"],

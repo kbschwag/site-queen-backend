@@ -59,6 +59,8 @@ export default function Apply() {
         return null;
       case 3:
         if (!form.website_goal || form.website_goal.length === 0) return "Please pick at least one goal for your website.";
+        if (!form.has_domain) return "Let us know if you have a domain.";
+        if (form.has_domain === "yes" && !form.current_domain.trim()) return "Please enter your current domain.";
         if (!form.has_logo) return "Let us know about your logo.";
         if (!form.support_level) return "Pick the level of support you're looking for.";
         if (!form.readiness) return "Let us know when you'd like to get started.";
@@ -185,6 +187,7 @@ export default function Apply() {
         ideal_customer: sanitizeInput(form.ideal_customer),
         google_search_terms: sanitizeInput(form.google_search_terms),
         website_goal: form.website_goal.join(", "),
+        current_domain: form.has_domain === "yes" ? sanitizeInput(form.current_domain) : null,
         has_logo: form.has_logo,
         logo_addon_requested: form.has_logo === "want_addon",
         support_level: form.support_level,
