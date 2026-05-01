@@ -58,7 +58,7 @@ export default function Apply() {
         if (!form.google_search_terms.trim()) return "Tell us what people search on Google to find you.";
         return null;
       case 3:
-        if (!form.website_goal) return "Please pick the main goal for your website.";
+        if (!form.website_goal || form.website_goal.length === 0) return "Please pick at least one goal for your website.";
         if (!form.has_logo) return "Let us know about your logo.";
         if (!form.support_level) return "Pick the level of support you're looking for.";
         if (!form.readiness) return "Let us know when you'd like to get started.";
@@ -107,7 +107,7 @@ export default function Apply() {
         city_state: [form.city, form.state_province].filter(Boolean).map(sanitizeInput).join(", "),
         ideal_customer: sanitizeInput(form.ideal_customer) || null,
         google_search_terms: sanitizeInput(form.google_search_terms) || null,
-        website_goal: form.website_goal || null,
+        website_goal: form.website_goal.length > 0 ? form.website_goal.join(", ") : null,
         has_logo: form.has_logo || null,
         support_level: form.support_level || null,
         readiness: form.readiness || null,
@@ -184,7 +184,7 @@ export default function Apply() {
         business_facebook: sanitizeInput(form.business_facebook) || null,
         ideal_customer: sanitizeInput(form.ideal_customer),
         google_search_terms: sanitizeInput(form.google_search_terms),
-        website_goal: form.website_goal,
+        website_goal: form.website_goal.join(", "),
         has_logo: form.has_logo,
         logo_addon_requested: form.has_logo === "want_addon",
         support_level: form.support_level,
