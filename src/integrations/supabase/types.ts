@@ -149,6 +149,7 @@ export type Database = {
           city_state: string | null
           country: string | null
           created_at: string
+          current_domain: string | null
           decision_maker_status: string | null
           decline_note: string | null
           decline_reason: string | null
@@ -204,6 +205,7 @@ export type Database = {
           city_state?: string | null
           country?: string | null
           created_at?: string
+          current_domain?: string | null
           decision_maker_status?: string | null
           decline_note?: string | null
           decline_reason?: string | null
@@ -259,6 +261,7 @@ export type Database = {
           city_state?: string | null
           country?: string | null
           created_at?: string
+          current_domain?: string | null
           decision_maker_status?: string | null
           decline_note?: string | null
           decline_reason?: string | null
