@@ -977,6 +977,71 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
 
     console.log(`[generate] ✓ Homepage complete for ${clientId} → ${stagingURL}`);
 
+    // ── feminine-bold: also build about.html + services.html from templates ─
+    // These templates already have inline CSS and use the same fill map as
+    // the homepage, so no Claude calls are needed — just load, replace, push.
+    if (templateId === "feminine-bold") {
+      const extraPages: Array<{ slug: string; storagePath: string }> = [
+        { slug: "about", storagePath: `${templateId}/about.html` },
+        { slug: "services", storagePath: `${templateId}/services.html` },
+      ];
+
+      for (const page of extraPages) {
+        try {
+          const { data: pageFile, error: pageErr } = await supabase.storage
+            .from("templates")
+            .download(page.storagePath);
+          if (pageErr || !pageFile) {
+            console.warn(`[generate] feminine-bold: ${page.storagePath} not found — skipping`);
+            continue;
+          }
+          let pageHtml = await pageFile.text();
+
+          // Same header logo block pre-fill as homepage
+          pageHtml = pageHtml.replace(headerLogoBlockRe, hasLogo
+            ? logoHTML
+            : `<span class="logo-text">${escapeHTML(businessName)}</span>`);
+
+          // Apply the full fill map
+          for (const [key, value] of Object.entries(fill)) {
+            pageHtml = pageHtml.split(key).join(value);
+          }
+
+          // CSS is inline in these templates, so no stylesheet swap needed.
+          // Strip any unfilled placeholders.
+          pageHtml = pageHtml.replace(/\{\{[^}]+\}\}/g, "");
+
+          // Same safety net + analytics + form wiring + favicon as homepage
+          pageHtml = pageHtml.replace("</body>", safetyNet + "\n</body>");
+          pageHtml = pageHtml.replace("</body>", analyticsScript + "\n</body>");
+          pageHtml = wireContactForms(pageHtml, clientId, supabaseUrl);
+          pageHtml = injectFavicon(pageHtml, faviconTag);
+
+          // Upload to Hostinger staging (with noindex)
+          const stagingPageHTML = injectNoindex(pageHtml);
+          await uploadFileToHostingerFtp(
+            `${STAGING_FOLDER_ROOT}/${clientId}/${page.slug}.html`,
+            stagingPageHTML,
+          );
+          console.log(`[generate] ✓ ${page.slug}.html → Hostinger staging`);
+
+          // Backup clean (no noindex) version to deploy/
+          const { error: pageBackupErr } = await supabase.storage
+            .from("generated-sites")
+            .upload(
+              `${clientId}/deploy/${page.slug}.html`,
+              new Blob([pageHtml], { type: "text/html" }),
+              { upsert: true, contentType: "text/html; charset=utf-8" },
+            );
+          if (pageBackupErr) {
+            console.warn(`[generate] feminine-bold: deploy backup failed for ${page.slug}.html: ${pageBackupErr.message}`);
+          }
+        } catch (e: any) {
+          console.error(`[generate] feminine-bold: failed to build ${page.slug}.html:`, e?.message || e);
+        }
+      }
+    }
+
     // ── Fire generate-extra-pages ────────────────────────────────────────
     fetch(`${supabaseUrl}/functions/v1/generate-extra-pages`, {
       method: "POST",
