@@ -1015,6 +1015,17 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
           }
           let pageHtml = await pageFile.text();
 
+          // Inject brand colors + fonts into :root (same as homepage)
+          pageHtml = injectBrandTokensIntoRoot(pageHtml, {
+            primaryColor: primaryColorResolved,
+            accentColor: accentColorResolved,
+            headingFont: headingFontResolved || undefined,
+            bodyFont: bodyFontResolved || undefined,
+          });
+          if (headingFontResolved || bodyFontResolved) {
+            pageHtml = injectGoogleFontsLink(pageHtml, headingFontResolved, bodyFontResolved);
+          }
+
           // Same header logo block pre-fill as homepage
           pageHtml = pageHtml.replace(headerLogoBlockRe, hasLogo
             ? logoHTML
