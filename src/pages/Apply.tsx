@@ -58,7 +58,7 @@ export default function Apply() {
         if (!form.google_search_terms.trim()) return "Tell us what people search on Google to find you.";
         return null;
       case 3:
-        if (!form.website_goal) return "Please pick the main goal for your website.";
+        if (!form.website_goal || form.website_goal.length === 0) return "Please pick at least one goal for your website.";
         if (!form.has_logo) return "Let us know about your logo.";
         if (!form.support_level) return "Pick the level of support you're looking for.";
         if (!form.readiness) return "Let us know when you'd like to get started.";

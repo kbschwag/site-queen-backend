@@ -37,22 +37,31 @@ export default function StepVision({ form, update }: Props) {
       {/* Q8 — Website goal */}
       <div className="space-y-3">
         <Label className="text-base font-semibold">What is the main goal of your new website? *</Label>
-        <p className="text-sm text-muted-foreground">Be honest — there's no wrong answer here</p>
-        <RadioGroup value={form.website_goal} onValueChange={(v) => update("website_goal", v)} className="space-y-2">
-          {WEBSITE_GOALS.map((g) => (
-            <label
-              key={g.value}
-              className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                form.website_goal === g.value
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:border-primary/30"
-              }`}
-            >
-              <RadioGroupItem value={g.value} />
-              <span className="font-medium">{g.label}</span>
-            </label>
-          ))}
-        </RadioGroup>
+        <p className="text-sm text-muted-foreground">Select all that apply</p>
+        <div className="space-y-2">
+          {WEBSITE_GOALS.map((g) => {
+            const checked = form.website_goal.includes(g.value);
+            return (
+              <label
+                key={g.value}
+                className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                  checked ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
+                }`}
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(v) => {
+                    const next = v
+                      ? [...form.website_goal, g.value]
+                      : form.website_goal.filter((x: string) => x !== g.value);
+                    update("website_goal", next);
+                  }}
+                />
+                <span className="font-medium">{g.label}</span>
+              </label>
+            );
+          })}
+        </div>
       </div>
 
       {/* Q9 — Logo */}
