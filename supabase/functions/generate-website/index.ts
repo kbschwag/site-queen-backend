@@ -212,7 +212,7 @@ serve(async (req) => {
       (siteData as any).using_stock_photos !== false;
 
     const firstServiceName = (services[0] && (typeof services[0] === "string" ? services[0] : services[0]?.name || services[0]?.title)) || "";
-    const stockTerms = buildStockSearchTerms(businessType, firstServiceName);
+    const stockTerms = buildStockSearchTerms(businessType, firstServiceName, tagline, businessName);
 
     const heroCandidates = [intake.hero_photo_url, portfolioPhotos[0]].filter(Boolean) as string[];
     const aboutCandidates = [teamPhotos[0], intake.owner_photo_url, portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
@@ -1459,9 +1459,38 @@ function buildMapHTML(input: MapInput): { html: string; url: string } {
 }
 
 // ── Photo helpers ─────────────────────────────────────────────────────
-// Build specific Unsplash search terms based on the client's business type and first service.
-function buildStockSearchTerms(businessType: string, firstService: string): string[] {
-  const ctx = `${businessType || ""} ${firstService || ""}`.toLowerCase();
+// Build specific Unsplash search terms based on the client's business type,
+// first service, tagline, and business name — so stock photos are always
+// relevant to what the business actually does (e.g. a business coach gets
+// "coaching women business" instead of a random landscape).
+function buildStockSearchTerms(
+  businessType: string,
+  firstService: string,
+  tagline = "",
+  businessName = "",
+): string[] {
+  // Always lead with a client-specific query: service[0].name + tagline +
+  // businessType, capped at 50 chars. Strips the business name itself so
+  // we don't search Unsplash for the company brand.
+  const stripWords = (businessName || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
+  const cleanTagline = (tagline || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !stripWords.includes(w))
+    .slice(0, 4)
+    .join(" ");
+  const clientQuery = [firstService, cleanTagline, businessType]
+    .map((s) => (s || "").toString().trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .slice(0, 50)
+    .trim();
+
+  const ctx = `${businessType || ""} ${firstService || ""} ${tagline || ""}`.toLowerCase();
   const map: Array<{ match: RegExp; terms: string[] }> = [
     { match: /excavat|earthwork|grading/, terms: ["excavator digging site", "excavation construction site", "earthwork heavy equipment"] },
     { match: /plumb/, terms: ["plumber pipe repair", "plumber working under sink", "bathroom plumbing service"] },
@@ -1474,8 +1503,8 @@ function buildStockSearchTerms(businessType: string, firstService: string): stri
     { match: /floor/, terms: ["flooring installation", "hardwood floor installer", "tile flooring contractor"] },
     { match: /construct|contract|build|remodel|renovat/, terms: ["construction contractor working", "home renovation crew", "general contractor jobsite"] },
     { match: /salon|hair|beauty|spa/, terms: ["modern hair salon", "beauty salon interior", "spa treatment room"] },
-    { match: /restaurant|cafe|food|bakery/, terms: ["restaurant interior", "chef cooking kitchen", "cafe atmosphere"] },
-    { match: /fitness|gym|train/, terms: ["fitness training session", "gym workout", "personal trainer client"] },
+    { match: /restaurant|cafe|food|bakery|dining/, terms: ["restaurant interior", "chef cooking kitchen", "cafe atmosphere"] },
+    { match: /fitness|gym|train(?!ing services)/, terms: ["fitness training session", "gym workout", "personal trainer client"] },
     { match: /photo/, terms: ["photographer working", "photography studio", "camera lens close up"] },
     { match: /law|attorney|legal/, terms: ["modern law office", "attorney consultation", "legal documents desk"] },
     { match: /dental|dentist/, terms: ["modern dental office", "dentist patient", "dental clinic"] },
@@ -1484,12 +1513,26 @@ function buildStockSearchTerms(businessType: string, firstService: string): stri
     { match: /pest|exterminat/, terms: ["pest control technician", "exterminator working", "pest control service"] },
     { match: /pool/, terms: ["pool maintenance", "pool cleaner working", "swimming pool service"] },
     { match: /window/, terms: ["window installation", "window cleaner working", "professional window service"] },
+    { match: /coach|coaching|mentor|consult/, terms: ["business coaching session", "professional consultant meeting", "mentor and client conversation"] },
+    { match: /therapy|therapist|counsel|wellness|holistic|healer/, terms: ["calm therapy session", "wellness retreat lifestyle", "candid mindfulness moment"] },
+    { match: /yoga|pilates|meditation/, terms: ["yoga studio practice", "calm meditation session", "pilates class"] },
+    { match: /real estate|realtor|property/, terms: ["modern home interior", "real estate agent showing house", "luxury property listing"] },
+    { match: /event|wedding|planner/, terms: ["elegant event styling", "wedding ceremony decor", "event planner at work"] },
+    { match: /design|interior|architect/, terms: ["modern interior design", "designer studio workspace", "architect plans on desk"] },
   ];
   for (const { match, terms } of map) {
-    if (match.test(ctx)) return terms;
+    if (match.test(ctx)) {
+      // Prefer the client-specific query when it adds real signal beyond
+      // the business type alone, otherwise stick with the curated terms.
+      return clientQuery && clientQuery.length > (businessType?.length || 0) + 2
+        ? [clientQuery, ...terms]
+        : terms;
+    }
   }
-  const safe = ctx.trim().replace(/\s+/g, " ").substring(0, 60);
-  return safe ? [safe, `${safe} professional service`, `professional ${businessType || "small business"}`] : ["professional small business service", "local business team"];
+  // No category match — rely on the client-specific query first, then
+  // safe generic fallbacks so we never end up with totally random images.
+  const safe = clientQuery || `professional ${businessType || "small business"}`;
+  return [safe, `${safe} professional`, `professional ${businessType || "small business"} service`];
 }
 
 async function fetchUnsplashPhotoUrl(searchTerms: string[]): Promise<string> {
