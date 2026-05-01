@@ -141,18 +141,36 @@ serve(async (req) => {
     let templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
 
-    // ── Resolve client brand colors and inject into the homepage :root ──
-    // Mirrors the logic used by generate-extra-pages so the homepage matches
-    // the about/services pages. Falls back to the template's existing
-    // --red / --gold values when the client did not provide a color.
-    const templateRedMatch = templateHTML.match(/--red\s*:\s*([^;]+);/);
-    const templateGoldMatch = templateHTML.match(/--gold\s*:\s*([^;]+);/);
+    // ── Resolve client brand tokens (colors + fonts) and inject into :root ─
+    // Mirrors the logic used by generate-extra-pages so every page matches.
+    // Falls back to the template's existing values when the client did not
+    // provide overrides. Works across templates regardless of whether they
+    // use --red/--gold (trades-hero) or --burgundy/--gold (feminine-bold).
+    const templateRedMatch = templateHTML.match(/--(?:red|burgundy|primary|color-primary)\s*:\s*([^;]+);/i);
+    const templateGoldMatch = templateHTML.match(/--(?:gold|accent|color-accent)\s*:\s*([^;]+);/i);
     const templateRed = templateRedMatch ? templateRedMatch[1].trim() : "#cb2020";
     const templateGold = templateGoldMatch ? templateGoldMatch[1].trim() : "#f6a823";
     const primaryColorResolved = resolveBrandColor(intake.primary_color, templateRed);
     const accentColorResolved = resolveBrandColor(intake.accent_color, templateGold);
-    templateHTML = injectBrandColorsIntoRoot(templateHTML, primaryColorResolved, accentColorResolved);
-    console.log(`[generate] Brand colors — primary=${primaryColorResolved} (template default ${templateRed}), accent=${accentColorResolved} (template default ${templateGold})`);
+
+    const headingFontResolved = resolveFontName(
+      (intake as any).heading_font || (intake as any).preferred_font || (intake as any).font_preference
+    );
+    const bodyFontResolved = resolveFontName(
+      (intake as any).body_font || (intake as any).preferred_font || (intake as any).font_preference
+    );
+
+    templateHTML = injectBrandTokensIntoRoot(templateHTML, {
+      primaryColor: primaryColorResolved,
+      accentColor: accentColorResolved,
+      headingFont: headingFontResolved || undefined,
+      bodyFont: bodyFontResolved || undefined,
+    });
+    if (headingFontResolved || bodyFontResolved) {
+      templateHTML = injectGoogleFontsLink(templateHTML, headingFontResolved, bodyFontResolved);
+    }
+    console.log(`[generate] Brand tokens — primary=${primaryColorResolved}, accent=${accentColorResolved}, heading="${headingFontResolved}", body="${bodyFontResolved}"`);
+
 
 
     // ── Business data shortcuts ──────────────────────────────────────────
@@ -997,6 +1015,17 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
           }
           let pageHtml = await pageFile.text();
 
+          // Inject brand colors + fonts into :root (same as homepage)
+          pageHtml = injectBrandTokensIntoRoot(pageHtml, {
+            primaryColor: primaryColorResolved,
+            accentColor: accentColorResolved,
+            headingFont: headingFontResolved || undefined,
+            bodyFont: bodyFontResolved || undefined,
+          });
+          if (headingFontResolved || bodyFontResolved) {
+            pageHtml = injectGoogleFontsLink(pageHtml, headingFontResolved, bodyFontResolved);
+          }
+
           // Same header logo block pre-fill as homepage
           pageHtml = pageHtml.replace(headerLogoBlockRe, hasLogo
             ? logoHTML
@@ -1114,25 +1143,100 @@ function resolveBrandColor(input: unknown, fallback: string): string {
   return fallback;
 }
 
-// Replaces --red and --gold inside the FIRST :root { ... } block of the
-// homepage template with the resolved client brand colors. Other tokens
-// (--navy, --white, --gray, fonts, etc.) are preserved exactly as the
+// Replaces brand-color and font CSS variables inside the FIRST :root { ... }
+// block of any template. Handles multiple naming conventions so it works
+// across templates:
+//   primary  → --red, --burgundy, --primary, --color-primary
+//   accent   → --gold,             --accent,  --color-accent
+//   fonts    → --font-heading, --font-body
+// Other tokens (--navy, --white, --gray, etc.) are preserved exactly as the
 // template defines them.
-function injectBrandColorsIntoRoot(html: string, primaryColor: string, accentColor: string): string {
-  return html.replace(/:root\s*\{([\s\S]*?)\}/, (match, body: string) => {
-    let out = body;
-    if (/--red\s*:/i.test(out)) {
-      out = out.replace(/(--red\s*:\s*)([^;]+)(;)/i, `$1${primaryColor}$3`);
-    } else {
-      out = `${out.replace(/\s*$/, "")}\n  --red: ${primaryColor};\n`;
+const PRIMARY_VAR_NAMES = ["--burgundy", "--red", "--primary", "--color-primary"];
+const ACCENT_VAR_NAMES = ["--gold", "--accent", "--color-accent"];
+
+function replaceCssVarInRoot(rootBody: string, names: string[], value: string): string {
+  let out = rootBody;
+  let replaced = false;
+  for (const n of names) {
+    const re = new RegExp(`(${n.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
+    if (re.test(out)) {
+      out = out.replace(re, `$1${value}$3`);
+      replaced = true;
     }
-    if (/--gold\s*:/i.test(out)) {
-      out = out.replace(/(--gold\s*:\s*)([^;]+)(;)/i, `$1${accentColor}$3`);
-    } else {
-      out = `${out.replace(/\s*$/, "")}\n  --gold: ${accentColor};\n`;
+  }
+  if (!replaced) {
+    out = `${out.replace(/\s*$/, "")}\n  ${names[0]}: ${value};\n`;
+  }
+  return out;
+}
+
+interface BrandTokens {
+  primaryColor?: string;
+  accentColor?: string;
+  headingFont?: string;
+  bodyFont?: string;
+}
+
+function injectBrandTokensIntoRoot(html: string, tokens: BrandTokens): string {
+  return html.replace(/:root\s*\{([\s\S]*?)\}/, (_match, body: string) => {
+    let out = body;
+    if (tokens.primaryColor) out = replaceCssVarInRoot(out, PRIMARY_VAR_NAMES, tokens.primaryColor);
+    if (tokens.accentColor) out = replaceCssVarInRoot(out, ACCENT_VAR_NAMES, tokens.accentColor);
+    if (tokens.headingFont) {
+      out = replaceCssVarInRoot(out, ["--font-heading"], `'${tokens.headingFont}', serif`);
+    }
+    if (tokens.bodyFont) {
+      out = replaceCssVarInRoot(out, ["--font-body"], `'${tokens.bodyFont}', sans-serif`);
     }
     return `:root {${out}}`;
   });
+}
+
+// Backwards-compatible wrapper kept for callers using the old name.
+function injectBrandColorsIntoRoot(html: string, primaryColor: string, accentColor: string): string {
+  return injectBrandTokensIntoRoot(html, { primaryColor, accentColor });
+}
+
+// Inject a Google Fonts <link> for the chosen heading/body fonts.
+function injectGoogleFontsLink(html: string, headingFont: string, bodyFont: string): string {
+  const fonts = [headingFont, bodyFont].filter(Boolean);
+  if (fonts.length === 0) return html;
+  const families = [...new Set(fonts)]
+    .map((f) => `family=${encodeURIComponent(f).replace(/%20/g, "+")}:wght@400;500;600;700;800`)
+    .join("&");
+  const href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+  if (html.includes(href)) return html;
+  const tag = `\n  <link rel="preconnect" href="https://fonts.googleapis.com" />\n  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n  <link href="${href}" rel="stylesheet" />`;
+  if (/<meta\s+charset=["']?[^>"']+["']?\s*\/?>/i.test(html)) {
+    return html.replace(/(<meta\s+charset=["']?[^>"']+["']?\s*\/?>)/i, `$1${tag}`);
+  }
+  return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
+}
+
+// Map a free-text font preference / heading_font / body_font to a real
+// Google Fonts family name. Falls back to the input itself when the input
+// already looks like a font name.
+function resolveFontName(input: unknown): string {
+  if (typeof input !== "string") return "";
+  const raw = input.trim();
+  if (!raw) return "";
+  const key = raw.toLowerCase();
+  const map: Record<string, string> = {
+    elegant: "Playfair Display",
+    classic: "Merriweather",
+    modern: "Inter",
+    minimal: "Inter",
+    bold: "Montserrat",
+    feminine: "Cormorant Garamond",
+    luxury: "Playfair Display",
+    serif: "Playfair Display",
+    "sans-serif": "Inter",
+    sans: "Inter",
+    handwritten: "Caveat",
+    script: "Great Vibes",
+    rounded: "Nunito",
+  };
+  return map[key] || raw;
 }
 
 // Priority: 1) intake.favicon_url, 2) intake.logo_url, 3) generated SVG initial.
