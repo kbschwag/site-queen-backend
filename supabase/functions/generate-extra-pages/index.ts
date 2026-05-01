@@ -1018,19 +1018,48 @@ function extractShell(html: string): { styleBlock: string; headerHTML: string; f
   const styleMatch = html.match(/<style[^>]*>[\s\S]*?<\/style>/i);
   const styleBlock = styleMatch ? styleMatch[0] : "";
 
-  // Header: prefer the first <header>...</header>; include any preceding topbar div if present
+  // Header: prefer the first <header>...</header>; fall back to any
+  // top-of-page navigation element since some templates (e.g. feminine-bold)
+  // use <nav class="nav"> or <div class="navbar"> instead of <header>.
+  let headerHTML = "";
+  let headerStartIndex = -1;
   const headerMatch = html.match(/<header[\s\S]*?<\/header>/i);
-  let headerHTML = headerMatch ? headerMatch[0] : "";
-  // Try to also grab a topbar that immediately precedes the header
   if (headerMatch) {
-    const before = html.substring(0, html.indexOf(headerMatch[0]));
-    const topbarMatch = before.match(/<div[^>]*class=["'][^"']*(?:topbar|top-bar|announcement-bar)[^"']*["'][^>]*>[\s\S]*?<\/div>\s*$/i);
+    headerHTML = headerMatch[0];
+    headerStartIndex = html.indexOf(headerMatch[0]);
+  } else {
+    // Try common header-substitute patterns, in order of preference.
+    const fallbackPatterns: RegExp[] = [
+      /<nav[^>]*\b(?:class|id)=["'][^"']*\b(?:nav|navbar|site-nav|main-nav|header)\b[^"']*["'][\s\S]*?<\/nav>/i,
+      /<nav\b[\s\S]*?<\/nav>/i,
+      /<div[^>]*\bclass=["'][^"']*\b(?:navbar|site-header|page-header|header)\b[^"']*["'][\s\S]*?<\/div>\s*(?=<(?:section|main|div\b[^>]*\b(?:hero|main|container)))/i,
+    ];
+    for (const re of fallbackPatterns) {
+      const m = html.match(re);
+      if (m) {
+        headerHTML = m[0];
+        headerStartIndex = html.indexOf(m[0]);
+        break;
+      }
+    }
+  }
+
+  // Try to also grab a topbar / announcement bar that immediately precedes the header
+  if (headerStartIndex > 0) {
+    const before = html.substring(0, headerStartIndex);
+    const topbarMatch = before.match(/<div[^>]*class=["'][^"']*(?:topbar|top-bar|announcement-bar|announce|announcement)[^"']*["'][^>]*>[\s\S]*?<\/div>\s*$/i);
     if (topbarMatch) headerHTML = topbarMatch[0] + "\n" + headerHTML;
   }
 
-  // Footer: last <footer>...</footer>
+  // Footer: last <footer>...</footer>; fall back to a footer-like <div>.
+  let footerHTML = "";
   const footerMatches = [...html.matchAll(/<footer[\s\S]*?<\/footer>/gi)];
-  const footerHTML = footerMatches.length ? footerMatches[footerMatches.length - 1][0] : "";
+  if (footerMatches.length) {
+    footerHTML = footerMatches[footerMatches.length - 1][0];
+  } else {
+    const divFooter = html.match(/<div[^>]*\bclass=["'][^"']*\b(?:footer|site-footer|page-footer)\b[^"']*["'][\s\S]*?<\/div>\s*(?=<\/body>|<script|$)/i);
+    if (divFooter) footerHTML = divFooter[0];
+  }
 
   return { styleBlock, headerHTML, footerHTML };
 }
