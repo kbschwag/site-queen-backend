@@ -141,18 +141,36 @@ serve(async (req) => {
     let templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
 
-    // ── Resolve client brand colors and inject into the homepage :root ──
-    // Mirrors the logic used by generate-extra-pages so the homepage matches
-    // the about/services pages. Falls back to the template's existing
-    // --red / --gold values when the client did not provide a color.
-    const templateRedMatch = templateHTML.match(/--red\s*:\s*([^;]+);/);
-    const templateGoldMatch = templateHTML.match(/--gold\s*:\s*([^;]+);/);
+    // ── Resolve client brand tokens (colors + fonts) and inject into :root ─
+    // Mirrors the logic used by generate-extra-pages so every page matches.
+    // Falls back to the template's existing values when the client did not
+    // provide overrides. Works across templates regardless of whether they
+    // use --red/--gold (trades-hero) or --burgundy/--gold (feminine-bold).
+    const templateRedMatch = templateHTML.match(/--(?:red|burgundy|primary|color-primary)\s*:\s*([^;]+);/i);
+    const templateGoldMatch = templateHTML.match(/--(?:gold|accent|color-accent)\s*:\s*([^;]+);/i);
     const templateRed = templateRedMatch ? templateRedMatch[1].trim() : "#cb2020";
     const templateGold = templateGoldMatch ? templateGoldMatch[1].trim() : "#f6a823";
     const primaryColorResolved = resolveBrandColor(intake.primary_color, templateRed);
     const accentColorResolved = resolveBrandColor(intake.accent_color, templateGold);
-    templateHTML = injectBrandColorsIntoRoot(templateHTML, primaryColorResolved, accentColorResolved);
-    console.log(`[generate] Brand colors — primary=${primaryColorResolved} (template default ${templateRed}), accent=${accentColorResolved} (template default ${templateGold})`);
+
+    const headingFontResolved = resolveFontName(
+      (intake as any).heading_font || (intake as any).preferred_font || (intake as any).font_preference
+    );
+    const bodyFontResolved = resolveFontName(
+      (intake as any).body_font || (intake as any).preferred_font || (intake as any).font_preference
+    );
+
+    templateHTML = injectBrandTokensIntoRoot(templateHTML, {
+      primaryColor: primaryColorResolved,
+      accentColor: accentColorResolved,
+      headingFont: headingFontResolved || undefined,
+      bodyFont: bodyFontResolved || undefined,
+    });
+    if (headingFontResolved || bodyFontResolved) {
+      templateHTML = injectGoogleFontsLink(templateHTML, headingFontResolved, bodyFontResolved);
+    }
+    console.log(`[generate] Brand tokens — primary=${primaryColorResolved}, accent=${accentColorResolved}, heading="${headingFontResolved}", body="${bodyFontResolved}"`);
+
 
 
     // ── Business data shortcuts ──────────────────────────────────────────
