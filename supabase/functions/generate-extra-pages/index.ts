@@ -100,6 +100,7 @@ serve(async (req) => {
     const TEMPLATE_FILE_MAP: Record<string, string> = {
       trades: "trades-hero", feminine: "feminine-bold",
       warm: "warm-welcome", local: "local-favorite", modern: "modern-business",
+      professional: "business-professional",
     };
     const selectedTemplate = (callNotes as any)?.template_selected || intake?.template_selected || intake?.template_id;
     const templateId = selectedTemplate ? (TEMPLATE_FILE_MAP[selectedTemplate] || selectedTemplate) : "trades-hero";
