@@ -64,7 +64,7 @@ export function LiveStatusPanel({
   const handleRepublish = async () => {
     setRepublishing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("deploy-to-hostinger", {
+      const { data, error } = await supabase.functions.invoke("deploy-to-live", {
         body: { client_id: clientId },
       });
       if (error || (data && data.success === false)) {

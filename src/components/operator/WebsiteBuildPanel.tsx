@@ -230,7 +230,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
     setShowGoLiveModal(false);
     setGoLiveChecked(false);
     try {
-      const { data: deployResult, error: deployError } = await supabase.functions.invoke("deploy-to-hostinger", {
+      const { data: deployResult, error: deployError } = await supabase.functions.invoke("deploy-to-live", {
         body: { client_id: clientId },
       });
 
