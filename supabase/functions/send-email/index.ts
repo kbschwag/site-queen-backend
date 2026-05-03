@@ -346,9 +346,68 @@ const EMAIL_TEMPLATES: Record<string, TemplateConfig> = {
     `),
   },
 
-  // ═══════════════════════════════════════════
-  // SUPPORT TICKET EMAILS (16-21)
-  // ═══════════════════════════════════════════
+  // #15b — Dashboard guide (sent right after site_live)
+  dashboard_guide: {
+    subject: "Your SiteQueen dashboard — everything you need to know ♛",
+    html: (d) => emailWrapper(`
+      <h2 style="color:${BRAND_PURPLE};margin:0 0 16px;">Hi ${fn(d)},</h2>
+      <p>Now that <strong>${d.business_name || "your website"}</strong> is live, here's the quick tour of your dashboard so you can get the most out of it. ♛</p>
+      ${purpleButton("Open My Dashboard →", DASHBOARD_URL)}
+
+      ${divider}
+      <h3 style="color:${BRAND_PURPLE};margin:0 0 8px;font-size:17px;">🏠 Overview</h3>
+      <p style="margin:0 0 12px;">Your homepage shows your live site link, plan, credit balance, and any open requests at a glance. Start here every time.</p>
+
+      ${divider}
+      <h3 style="color:${BRAND_PURPLE};margin:0 0 8px;font-size:17px;">✏️ Requesting changes (Support tab)</h3>
+      <p style="margin:0 0 8px;">Need a tweak? Head to <strong>Support → Submit a Ticket</strong>. Describe what you want and attach photos or files if helpful. We'll assess the cost in credits, get to work, and email you when it's done.</p>
+      <ul style="margin:0 0 12px;line-height:1.8;">
+        <li><strong>Normal:</strong> 24–48 hour turnaround</li>
+        <li><strong>Urgent:</strong> 4-hour turnaround (small surcharge)</li>
+      </ul>
+
+      ${divider}
+      <h3 style="color:${BRAND_PURPLE};margin:0 0 8px;font-size:17px;">💎 How credits work</h3>
+      <p style="margin:0 0 8px;">Credits are how we price changes — they reset on the 1st of every month based on your plan, and small unused amounts roll over up to your plan's cap.</p>
+      <ul style="margin:0 0 12px;line-height:1.8;">
+        <li>Tiny tweaks (text, phone number, hours): 1 credit</li>
+        <li>Section edits or new content: 2–4 credits</li>
+        <li>New page or major redesign: 5+ credits</li>
+      </ul>
+      <p style="margin:0 0 12px;">Running low? You can buy credit packs anytime from <strong>Billing → Buy Credits</strong>.</p>
+
+      ${divider}
+      <h3 style="color:${BRAND_PURPLE};margin:0 0 8px;font-size:17px;">💳 Billing</h3>
+      <p style="margin:0 0 12px;">Your subscription is on a 12-month commitment. Inside <strong>Billing</strong> you can view invoices, update your card, see your next charge date, and manage credit purchases. If you ever need to pause or cancel, just message us — we'll walk you through it.</p>
+
+      ${d.show_analytics ? `
+      ${divider}
+      <h3 style="color:${BRAND_PURPLE};margin:0 0 8px;font-size:17px;">📈 Analytics (Pro)</h3>
+      <p style="margin:0 0 8px;">Your Pro plan includes the <strong>Analytics</strong> tab. You'll see:</p>
+      <ul style="margin:0 0 12px;line-height:1.8;">
+        <li><strong>Page views</strong> — how many people visited each page</li>
+        <li><strong>Phone clicks</strong> — taps on your phone number</li>
+        <li><strong>Form submissions</strong> — leads through your contact form</li>
+        <li><strong>CTA clicks</strong> — engagement on your buttons</li>
+      </ul>
+      <p style="margin:0 0 12px;">Data refreshes daily. Use it to spot what's working and tell us what to double down on.</p>
+      ` : ""}
+
+      ${divider}
+      <h3 style="color:${BRAND_PURPLE};margin:0 0 8px;font-size:17px;">📬 Need help? We're right here.</h3>
+      <p style="margin:0 0 8px;">From your dashboard you can:</p>
+      <ul style="margin:0 0 12px;line-height:1.8;">
+        <li><strong>Send us a message</strong> via the Contact tab — we reply fast</li>
+        <li><strong>Book a call</strong> if you'd rather talk it through</li>
+        <li>Reply to any of our emails — they all reach a real person</li>
+      </ul>
+
+      ${divider}
+      <p>That's it — you're all set. Welcome to SiteQueen. ♛</p>
+      ${darkButton("Go to Dashboard →", DASHBOARD_URL)}
+      <p style="margin-top:24px;">— The SiteQueen Team</p>
+    `),
+  },
 
   // #16 — Ticket submitted confirmation
   ticket_submitted: {
