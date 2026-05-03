@@ -140,6 +140,28 @@ serve(async (req) => {
       generation_notes: `target=${target}, files=${files.length}`,
     });
 
+    // Send "Your website is live" email to the client (only on first successful deploy)
+    if ((client.deploy_count || 0) === 0 && client.email && client.domain_name) {
+      try {
+        const siteUrl = `https://${client.domain_name.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
+        await supabase.functions.invoke("send-email", {
+          body: {
+            to: client.email,
+            template: "site_live",
+            clientId,
+            data: {
+              first_name: client.first_name || client.business_name || "there",
+              business_name: client.business_name,
+              domain: client.domain_name,
+              site_url: siteUrl,
+            },
+          },
+        });
+      } catch (e) {
+        console.error("[deploy-to-live] site_live email failed:", e);
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       target,
