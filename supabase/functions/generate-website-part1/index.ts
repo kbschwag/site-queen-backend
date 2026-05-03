@@ -78,6 +78,7 @@ serve(async (req) => {
       warm: "warm-welcome",
       local: "local-favorite",
       modern: "modern-business",
+      professional: "business-professional",
     };
 
     const selectedTemplate =

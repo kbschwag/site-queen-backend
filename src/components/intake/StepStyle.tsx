@@ -40,6 +40,14 @@ const TEMPLATES = [
     preview: previewUrl("modern-business"),
   },
   {
+    id: "professional",
+    name: "The Professional",
+    description: "Clean, corporate, trustworthy — built for credibility.",
+    bestFor: "Consultants, law firms, finance, B2B services",
+    color: "from-slate-700 to-slate-900",
+    preview: previewUrl("business-professional"),
+  },
+  {
     id: "local",
     name: "The Local Favorite",
     description: "Vibrant, appetite-forward, community feel.",
