@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Save, ShieldCheck, Lock, CheckCircle2 } from "lucide-react";
+import { ClientFtpCredentialsCard } from "./ClientFtpCredentialsCard";
 
 interface Props {
   clientId: string;
@@ -250,6 +251,9 @@ export function DomainDeployTab({ clientId, businessName }: Props) {
           </CardContent>
         </Card>
       )}
+
+      {/* Client-specific Hostinger FTP credentials */}
+      <ClientFtpCredentialsCard clientId={clientId} businessName={businessName} />
 
       {/* Domain Transfer Checklist */}
       <Card>
