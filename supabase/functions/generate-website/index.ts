@@ -141,6 +141,11 @@ serve(async (req) => {
     let templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
 
+    // ── business-professional: inject CSS variables for --navy/--gold/--font-serif ─
+    if (templateId === "business-professional") {
+      templateHTML = applyBusinessProfessionalTokens(templateHTML, intake);
+    }
+
     // ── Resolve client brand tokens (colors + fonts) and inject into :root ─
     // Mirrors the logic used by generate-extra-pages so every page matches.
     // Falls back to the template's existing values when the client did not
