@@ -23,6 +23,7 @@ import { CodeEditorModal } from "./CodeEditorModal";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { Code2 } from "lucide-react";
 import { buildSitePreviewUrl } from "@/lib/site-preview";
+import { LiveStatusPanel } from "./LiveStatusPanel";
 
 interface Props {
   clientId: string;
@@ -737,14 +738,17 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
 
       {/* Live */}
       {generationStatus === "live" && (
-        <Card className="border-emerald-200">
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-emerald-700">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="font-medium">Site is live!</span>
-            </div>
-          </CardContent>
-        </Card>
+        <LiveStatusPanel
+          clientId={clientId}
+          businessName={businessName}
+          domainName={(clientData as any)?.domain_name}
+          lastDeployedAt={(site as any)?.last_deployed_at}
+          deployCount={(site as any)?.deploy_count}
+          onRepublished={() => {
+            queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
+            queryClient.invalidateQueries({ queryKey: ["operator-clients"] });
+          }}
+        />
       )}
 
       {/* Share with client modal */}
