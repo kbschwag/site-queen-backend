@@ -250,6 +250,9 @@ serve(async (req) => {
       const { data: aboutFile } = await supabase.storage.from("templates").download(`${templateId}/about.html`);
       if (!aboutFile) throw new Error(`Template not found: ${templateId}/about.html`);
       let aboutHTML = await aboutFile.text();
+      if (templateId === "business-professional") {
+        aboutHTML = applyBusinessProfessionalTokens(aboutHTML, intake);
+      }
 
       // Generate about-specific copy
       const aboutPrompt = `You are a professional copywriter for SiteQueen. Generate copy for the ABOUT page of ${businessName}, a ${businessType} in ${city}, ${state}.
@@ -365,6 +368,9 @@ Return ONLY valid JSON. No markdown. No explanation:
       const { data: servicesFile } = await supabase.storage.from("templates").download(`${templateId}/services.html`);
       if (!servicesFile) throw new Error(`Template not found: ${templateId}/services.html`);
       let servicesHTML = await servicesFile.text();
+      if (templateId === "business-professional") {
+        servicesHTML = applyBusinessProfessionalTokens(servicesHTML, intake);
+      }
 
       // Generate services-specific copy
       const servicesPrompt = `You are a professional copywriter for SiteQueen. Generate copy for the SERVICES page of ${businessName}, a ${businessType} in ${city}, ${state}.
@@ -1229,4 +1235,36 @@ function wireContactForms(html: string, clientId: string, supabaseUrl: string): 
 })();
 </script>`;
   return out.replace("</body>", handlerScript + "\n</body>");
+}
+
+// ── business-professional template: direct CSS variable injection ──────
+function applyBusinessProfessionalTokens(html: string, intake: any): string {
+  let out = html;
+  if (intake?.primary_color && typeof intake.primary_color === "string") {
+    const c = intake.primary_color.trim();
+    if (/^#[0-9a-fA-F]{3,6}$/.test(c)) {
+      out = out.replace(/--navy:\s*#[0-9a-fA-F]{3,6}/g, `--navy: ${c}`);
+      out = out.replace(/--navy-mid:\s*#[0-9a-fA-F]{3,6}/g, `--navy-mid: ${c}`);
+    }
+  }
+  if (intake?.accent_color && typeof intake.accent_color === "string") {
+    const c = intake.accent_color.trim();
+    if (/^#[0-9a-fA-F]{3,6}$/.test(c)) {
+      out = out.replace(/--gold:\s*#[0-9a-fA-F]{3,6}/g, `--gold: ${c}`);
+      out = out.replace(/--gold-dark:\s*#[0-9a-fA-F]{3,6}/g, `--gold-dark: ${c}`);
+    }
+  }
+  if (intake?.font_preference) {
+    const fontMap: Record<string, { serif: string; url: string }> = {
+      modern: { serif: '"Playfair Display", Georgia, serif', url: "Playfair+Display:ital,wght@0,400;0,700;1,400" },
+      classic: { serif: '"Cormorant Garamond", Georgia, serif', url: "Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400" },
+      minimal: { serif: '"DM Serif Display", Georgia, serif', url: "DM+Serif+Display:ital@0;1" },
+    };
+    const font = fontMap[String(intake.font_preference).toLowerCase()];
+    if (font) {
+      out = out.replace(/--font-serif:\s*[^;]+;/, `--font-serif: ${font.serif};`);
+      out = out.replace(/Cormorant\+Garamond[^"']+/g, font.url);
+    }
+  }
+  return out;
 }
