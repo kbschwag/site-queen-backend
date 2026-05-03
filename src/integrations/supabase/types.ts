@@ -557,6 +557,62 @@ export type Database = {
         }
         Relationships: []
       }
+      client_ftp_credentials: {
+        Row: {
+          client_id: string
+          created_at: string
+          ftp_host: string
+          ftp_password: string
+          ftp_path: string
+          ftp_port: number
+          ftp_user: string
+          id: string
+          test_error: string | null
+          test_passed: boolean | null
+          tested_at: string | null
+          updated_at: string
+          use_secure: boolean
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          ftp_host: string
+          ftp_password: string
+          ftp_path?: string
+          ftp_port?: number
+          ftp_user: string
+          id?: string
+          test_error?: string | null
+          test_passed?: boolean | null
+          tested_at?: string | null
+          updated_at?: string
+          use_secure?: boolean
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          ftp_host?: string
+          ftp_password?: string
+          ftp_path?: string
+          ftp_port?: number
+          ftp_user?: string
+          id?: string
+          test_error?: string | null
+          test_passed?: boolean | null
+          tested_at?: string | null
+          updated_at?: string
+          use_secure?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_ftp_credentials_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           accent_color: string | null
