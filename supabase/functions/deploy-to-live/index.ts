@@ -157,8 +157,22 @@ serve(async (req) => {
             },
           },
         });
+
+        // Follow-up: dashboard guide email
+        await supabase.functions.invoke("send-email", {
+          body: {
+            to: client.email,
+            template: "dashboard_guide",
+            clientId,
+            data: {
+              first_name: client.first_name || client.business_name || "there",
+              business_name: client.business_name,
+              show_analytics: (client.plan || "").toLowerCase() === "pro",
+            },
+          },
+        });
       } catch (e) {
-        console.error("[deploy-to-live] site_live email failed:", e);
+        console.error("[deploy-to-live] post-launch emails failed:", e);
       }
     }
 
