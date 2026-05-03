@@ -32,14 +32,6 @@ const TEMPLATES = [
     preview: previewUrl("feminine-bold"),
   },
   {
-    id: "modern",
-    name: "The Modern Business",
-    description: "Versatile, contemporary, growth-focused.",
-    bestFor: "Any service business, general use",
-    color: "from-primary to-accent",
-    preview: previewUrl("modern-business"),
-  },
-  {
     id: "professional",
     name: "The Professional",
     description: "Clean, corporate, trustworthy — built for credibility.",
