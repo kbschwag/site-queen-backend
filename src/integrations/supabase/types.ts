@@ -624,6 +624,8 @@ export type Database = {
           calendly_revision_url: string | null
           call_notes_completed: boolean | null
           call_notes_completed_at: string | null
+          conversion_source: string | null
+          converted_at: string | null
           created_at: string
           credits_balance: number | null
           credits_last_reset: string | null
@@ -631,8 +633,12 @@ export type Database = {
           credits_rollover_cap: number | null
           custom_font_name: string | null
           custom_font_url: string | null
+          date_last_contacted: string | null
           deleted_at: string | null
           deleted_by: string | null
+          demo_last_viewed_at: string | null
+          demo_url: string | null
+          demo_view_count: number
           deploy_count: number | null
           deployment_path_confirmed: boolean | null
           domain_checklist: Json | null
@@ -644,15 +650,27 @@ export type Database = {
           intake_completed: boolean
           join_date: string | null
           last_active: string | null
+          lifecycle_stage: string
           logo_addon_requested: boolean | null
           next_billing_date: string | null
+          next_followup_date: string | null
+          outreach_channel: string | null
           payment_failed_at: string | null
           payment_failed_count: number | null
+          payment_method_at_conversion: string | null
           payment_status: string | null
+          pending_payment_expires_at: string | null
           phone_number: string | null
           plan: string
           preferred_font: string | null
           primary_color: string | null
+          prospect_brand_color: string | null
+          prospect_category: string | null
+          prospect_city: string | null
+          prospect_email: string | null
+          prospect_existing_url: string | null
+          prospect_notes: string | null
+          prospect_services: string | null
           site_status: string | null
           site_url: string | null
           stripe_customer_id: string | null
@@ -673,6 +691,8 @@ export type Database = {
           calendly_revision_url?: string | null
           call_notes_completed?: boolean | null
           call_notes_completed_at?: string | null
+          conversion_source?: string | null
+          converted_at?: string | null
           created_at?: string
           credits_balance?: number | null
           credits_last_reset?: string | null
@@ -680,8 +700,12 @@ export type Database = {
           credits_rollover_cap?: number | null
           custom_font_name?: string | null
           custom_font_url?: string | null
+          date_last_contacted?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          demo_last_viewed_at?: string | null
+          demo_url?: string | null
+          demo_view_count?: number
           deploy_count?: number | null
           deployment_path_confirmed?: boolean | null
           domain_checklist?: Json | null
@@ -693,15 +717,27 @@ export type Database = {
           intake_completed?: boolean
           join_date?: string | null
           last_active?: string | null
+          lifecycle_stage?: string
           logo_addon_requested?: boolean | null
           next_billing_date?: string | null
+          next_followup_date?: string | null
+          outreach_channel?: string | null
           payment_failed_at?: string | null
           payment_failed_count?: number | null
+          payment_method_at_conversion?: string | null
           payment_status?: string | null
+          pending_payment_expires_at?: string | null
           phone_number?: string | null
           plan?: string
           preferred_font?: string | null
           primary_color?: string | null
+          prospect_brand_color?: string | null
+          prospect_category?: string | null
+          prospect_city?: string | null
+          prospect_email?: string | null
+          prospect_existing_url?: string | null
+          prospect_notes?: string | null
+          prospect_services?: string | null
           site_status?: string | null
           site_url?: string | null
           stripe_customer_id?: string | null
@@ -722,6 +758,8 @@ export type Database = {
           calendly_revision_url?: string | null
           call_notes_completed?: boolean | null
           call_notes_completed_at?: string | null
+          conversion_source?: string | null
+          converted_at?: string | null
           created_at?: string
           credits_balance?: number | null
           credits_last_reset?: string | null
@@ -729,8 +767,12 @@ export type Database = {
           credits_rollover_cap?: number | null
           custom_font_name?: string | null
           custom_font_url?: string | null
+          date_last_contacted?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          demo_last_viewed_at?: string | null
+          demo_url?: string | null
+          demo_view_count?: number
           deploy_count?: number | null
           deployment_path_confirmed?: boolean | null
           domain_checklist?: Json | null
@@ -742,15 +784,27 @@ export type Database = {
           intake_completed?: boolean
           join_date?: string | null
           last_active?: string | null
+          lifecycle_stage?: string
           logo_addon_requested?: boolean | null
           next_billing_date?: string | null
+          next_followup_date?: string | null
+          outreach_channel?: string | null
           payment_failed_at?: string | null
           payment_failed_count?: number | null
+          payment_method_at_conversion?: string | null
           payment_status?: string | null
+          pending_payment_expires_at?: string | null
           phone_number?: string | null
           plan?: string
           preferred_font?: string | null
           primary_color?: string | null
+          prospect_brand_color?: string | null
+          prospect_category?: string | null
+          prospect_city?: string | null
+          prospect_email?: string | null
+          prospect_existing_url?: string | null
+          prospect_notes?: string | null
+          prospect_services?: string | null
           site_status?: string | null
           site_url?: string | null
           stripe_customer_id?: string | null
@@ -1147,6 +1201,44 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      prospect_contact_log: {
+        Row: {
+          channel: string
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          next_followup_date: string | null
+          note: string | null
+        }
+        Insert: {
+          channel: string
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          next_followup_date?: string | null
+          note?: string | null
+        }
+        Update: {
+          channel?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          next_followup_date?: string | null
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospect_contact_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quick_edit_jobs: {
         Row: {
