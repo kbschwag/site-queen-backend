@@ -238,10 +238,9 @@ serve(async (req) => {
     if (a.classList.contains('btn')) track('cta_click', {text: a.textContent.trim().substring(0,50)});
   });
   document.addEventListener('submit', function(e) { track('form_submission', {form_id: e.target.id || 'unknown'}); });
-  document.addEventListener('submit', function(e) { track('form_submission', {form_id: e.target.id || 'unknown'}); });
 })();
 </script>
-<script async src="${supabaseUrl.replace('https://','https://').replace('.supabase.co','.functions.supabase.co')}/prospect-banner-js?cid=${clientId}"></script>`;
+<script async src="https://${(Deno.env.get('SUPABASE_URL')||'').replace('https://','').split('.')[0]}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
 
     const generated: string[] = [];
     const failed: string[] = [];
