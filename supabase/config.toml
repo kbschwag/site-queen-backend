@@ -2,3 +2,10 @@ project_id = "onrvqbygwzhmhgkctcrm"
 
 [functions.quick-edit-html]
 verify_jwt = true
+
+[functions.track-prospect-view]
+verify_jwt = false
+
+[functions.prospect-banner-js]
+verify_jwt = false
+
