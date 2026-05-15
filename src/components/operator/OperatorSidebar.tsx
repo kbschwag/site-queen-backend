@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   Crown,
+  Target,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -41,6 +42,11 @@ export function OperatorSidebar() {
   // Dashboard — Owner & Partner
   if (isOwner || isPartner) {
     navItems.push({ title: "Dashboard", url: "/operator", icon: LayoutDashboard });
+  }
+
+  // Prospects — Owner & Partner
+  if (isOwner || isPartner) {
+    navItems.push({ title: "Prospects", url: "/operator/prospects", icon: Target });
   }
 
   // Applications — Owner, Partner, or team with review access

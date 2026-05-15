@@ -3,7 +3,7 @@ import { useOperatorRole } from "@/hooks/useOperatorRole";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Crown, Users, FileText, MessageSquare, AlertTriangle, TrendingUp, Zap, Eye, Clock, RefreshCw, Loader2 } from "lucide-react";
+import { Crown, Users, FileText, MessageSquare, AlertTriangle, TrendingUp, Zap, Eye, Clock, RefreshCw, Loader2, Target } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
@@ -45,12 +45,15 @@ export default function OperatorDashboard() {
   const { data: stats } = useQuery({
     queryKey: ["operator-dashboard-stats"],
     queryFn: async () => {
-      const [clientsRes, appsRes, changeReqRes, flaggedRes, attentionRes] = await Promise.all([
-        supabase.from("clients").select("id, plan, subscription_status, site_status, last_active, created_at").is("deleted_at", null),
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const [clientsRes, appsRes, changeReqRes, flaggedRes, attentionRes, prospectsRes, pitchedWeekRes] = await Promise.all([
+        supabase.from("clients").select("id, plan, subscription_status, site_status, last_active, created_at, lifecycle_stage").is("deleted_at", null),
         supabase.from("applications").select("id, lead_temperature, created_at").is("deleted_at", null).gte("created_at", new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
         supabase.from("change_requests").select("id").is("deleted_at", null).in("status", ["submitted", "pending"]),
         supabase.from("applications").select("id").is("deleted_at", null).eq("status", "needs_review"),
         supabase.from("clients").select("id, business_name, subscription_status, site_status, last_active, created_at").is("deleted_at", null),
+        supabase.from("clients").select("id").is("deleted_at", null).in("lifecycle_stage", ["prospect", "pitched", "viewed_demo", "call_booked", "replied"]),
+        supabase.from("clients").select("id").is("deleted_at", null).eq("lifecycle_stage", "pitched").gte("date_last_contacted", weekAgo),
       ]);
 
       const clients = clientsRes.data || [];
@@ -81,6 +84,8 @@ export default function OperatorDashboard() {
         pendingCR: changeReqRes.data?.length || 0,
         flagged: flaggedRes.data?.length || 0,
         needsAttention: needsAttention.length,
+        activeProspects: prospectsRes.data?.length || 0,
+        pitchedThisWeek: pitchedWeekRes.data?.length || 0,
       };
     },
   });
