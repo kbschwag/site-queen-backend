@@ -58,7 +58,7 @@ export default function ProspectDetail() {
 
   const saveEdits = async () => {
     if (!Object.keys(edits).length) return;
-    const { error } = await supabase.from("clients").update(edits).eq("id", id!);
+    const { error } = await supabase.from("clients").update(edits as any).eq("id", id!);
     if (error) toast.error(error.message);
     else { toast.success("Saved"); setEdits({}); qc.invalidateQueries({ queryKey: ["prospect-detail", id] }); }
   };
