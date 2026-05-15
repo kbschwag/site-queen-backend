@@ -131,7 +131,18 @@ export default function OperatorDashboard() {
       </div>
 
       {/* Stats cards — clickable */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <Card className="cursor-pointer hover:shadow-md transition-shadow border-primary/30" onClick={() => navigate("/operator/prospects")}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Target className="h-4 w-4" /> Active Prospects
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{stats?.activeProspects ?? "—"}</p>
+            <p className="text-xs text-muted-foreground mt-1">{stats?.pitchedThisWeek ?? 0} pitched this week</p>
+          </CardContent>
+        </Card>
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/operator/clients")}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
