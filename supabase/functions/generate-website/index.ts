@@ -927,7 +927,13 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
     // ── Upload to Hostinger staging ──────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
 
-    const stagingHTML = injectNoindex(html);
+    // Inject prospect-banner script (no-op for non-prospects; renders banner dynamically when active)
+    const projectRefForBanner = (Deno.env.get("SUPABASE_URL") || "").replace("https://", "").split(".")[0];
+    const prospectBannerTag = `<script async src="https://${projectRefForBanner}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
+    const htmlWithBanner = html.includes("</body>")
+      ? html.replace("</body>", `${prospectBannerTag}\n</body>`)
+      : html + prospectBannerTag;
+    const stagingHTML = injectNoindex(htmlWithBanner);
 
     try {
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/index.html`, stagingHTML);

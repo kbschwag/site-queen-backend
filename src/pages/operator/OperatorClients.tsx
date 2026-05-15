@@ -37,6 +37,7 @@ export default function OperatorClients() {
         .from("clients")
         .select("*")
         .is("deleted_at", null)
+        .not("lifecycle_stage", "in", "(prospect,pitched,viewed_demo,call_booked,replied,cold)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;

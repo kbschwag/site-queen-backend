@@ -239,7 +239,8 @@ serve(async (req) => {
   });
   document.addEventListener('submit', function(e) { track('form_submission', {form_id: e.target.id || 'unknown'}); });
 })();
-</script>`;
+</script>
+<script async src="https://${(Deno.env.get('SUPABASE_URL')||'').replace('https://','').split('.')[0]}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
 
     const generated: string[] = [];
     const failed: string[] = [];
