@@ -34,11 +34,14 @@ import OperatorLogin from "./pages/operator/OperatorLogin";
 import OperatorDashboard from "./pages/operator/OperatorDashboard";
 import OperatorApplications from "./pages/operator/OperatorApplications";
 import OperatorClients from "./pages/operator/OperatorClients";
+import OperatorProspects from "./pages/operator/OperatorProspects";
+import ProspectDetail from "./pages/operator/ProspectDetail";
 import OperatorChangeRequests from "./pages/operator/OperatorChangeRequests";
 import OperatorSupportMessages from "./pages/operator/OperatorSupportMessages";
 import OperatorRevenue from "./pages/operator/OperatorRevenue";
 import OperatorTeam from "./pages/operator/OperatorTeam";
 import OperatorSettings from "./pages/operator/OperatorSettings";
+import ClaimProspect from "./pages/ClaimProspect";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +89,8 @@ const App = () => (
             <Route path="/operator/login" element={<OperatorLogin />} />
             <Route path="/operator" element={<OperatorProtectedRoute><OperatorLayout /></OperatorProtectedRoute>}>
               <Route index element={<OperatorDashboard />} />
+              <Route path="prospects" element={<OperatorProspects />} />
+              <Route path="prospects/:id" element={<ProspectDetail />} />
               <Route path="applications" element={<OperatorApplications />} />
               <Route path="clients" element={<OperatorClients />} />
               <Route path="change-requests" element={<OperatorChangeRequests />} />
