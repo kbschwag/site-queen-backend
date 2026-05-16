@@ -364,6 +364,9 @@ export default function OperatorClients() {
               </TabsContent>
               <TabsContent value="build" className="mt-4">
                 <WebsiteBuildPanel clientId={selected.id} businessName={selected.business_name} />
+                <div className="mt-4">
+                  <GenerationDiagnosticsPanel clientId={selected.id} />
+                </div>
               </TabsContent>
               <TabsContent value="domain" className="mt-4">
                 <DomainDeployTab clientId={selected.id} businessName={selected.business_name} />
