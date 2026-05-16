@@ -53,7 +53,33 @@ export function AddProspectModal({ open, onOpenChange, onCreated }: Props) {
     notes: "",
   });
 
+  const [heroPhoto, setHeroPhoto] = useState<string | null>(null);
+  const [galleryPhotos, setGalleryPhotos] = useState<string[]>([]);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const sessionFolder = useState(() => Math.random().toString(36).slice(2))[0];
+
   const update = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  const pickAndUpload = (multiple: boolean, onDone: (urls: string[]) => void) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = multiple;
+    input.onchange = async (e) => {
+      const files = Array.from((e.target as HTMLInputElement).files || []);
+      if (!files.length) return;
+      setUploading(true);
+      const urls: string[] = [];
+      for (const f of files) {
+        const url = await uploadProspectPhoto(f, sessionFolder);
+        if (url) urls.push(url);
+      }
+      setUploading(false);
+      if (urls.length) onDone(urls);
+    };
+    input.click();
+  };
 
   const handleSubmit = async () => {
     if (!form.business_name.trim() || !form.city.trim()) {
@@ -67,6 +93,19 @@ export function AddProspectModal({ open, onOpenChange, onCreated }: Props) {
         business_name: form.business_name,
         business_city: form.city,
         primary_color: form.use_default_color ? null : form.brand_color,
+        services: form.services
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((name) => ({ name })),
+        template_selected: template,
+        business_phone: form.phone,
+        business_email: form.email,
+        hero_photo_url: heroPhoto || undefined,
+        portfolio_photos: galleryPhotos,
+        logo_url: logoUrl || undefined,
+        use_stock_photos: !heroPhoto && galleryPhotos.length === 0,
+      };
         services: form.services
           .split("\n")
           .map((s) => s.trim())
