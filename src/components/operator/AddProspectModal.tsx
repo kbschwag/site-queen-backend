@@ -231,8 +231,98 @@ export function AddProspectModal({ open, onOpenChange, onCreated }: Props) {
               <Label>Notes</Label>
               <Textarea rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} />
             </div>
+
+            <div className="col-span-2 space-y-2 pt-2 border-t">
+              <Label>Logo (optional)</Label>
+              {logoUrl ? (
+                <div className="relative inline-block">
+                  <img src={logoUrl} alt="" className="h-16 rounded border bg-white p-1" />
+                  <button
+                    type="button"
+                    onClick={() => setLogoUrl(null)}
+                    className="absolute -top-2 -right-2 bg-background border rounded-full p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploading}
+                  onClick={() => pickAndUpload(false, ([url]) => setLogoUrl(url))}
+                >
+                  <Upload className="h-4 w-4 mr-2" /> Upload logo
+                </Button>
+              )}
+            </div>
+
+            <div className="col-span-2 space-y-2">
+              <Label>Hero photo (optional)</Label>
+              {heroPhoto ? (
+                <div className="relative w-full max-w-xs aspect-video rounded-lg border overflow-hidden">
+                  <img src={heroPhoto} alt="" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setHeroPhoto(null)}
+                    className="absolute top-1 right-1 bg-background/80 rounded-full p-1"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploading}
+                  onClick={() => pickAndUpload(false, ([url]) => setHeroPhoto(url))}
+                >
+                  <Upload className="h-4 w-4 mr-2" /> Upload hero photo
+                </Button>
+              )}
+            </div>
+
+            <div className="col-span-2 space-y-2">
+              <Label>Gallery / portfolio photos (optional)</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {galleryPhotos.map((url, i) => (
+                  <div key={i} className="relative aspect-square rounded border overflow-hidden group">
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setGalleryPhotos((p) => p.filter((_, idx) => idx !== i))}
+                      className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5 opacity-0 group-hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                {galleryPhotos.length < 12 && (
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => pickAndUpload(true, (urls) => setGalleryPhotos((p) => [...p, ...urls]))}
+                    className="aspect-square rounded border-2 border-dashed flex flex-col items-center justify-center text-xs text-muted-foreground hover:border-primary/50"
+                  >
+                    <Upload className="h-4 w-4 mb-1" />
+                    Add
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                If no photos uploaded, the demo site will use stock photos.
+              </p>
+              {uploading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Uploading…
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
