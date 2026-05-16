@@ -560,6 +560,7 @@ Return ONLY valid JSON. No markdown:
       for (const [key, value] of Object.entries(servicesFill)) {
         servicesHTML = servicesHTML.split(key).join(value);
       }
+      await logUnfilledPlaceholders(supabase, clientId, templateId, "services", servicesHTML);
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");
       servicesHTML = wireContactForms(servicesHTML, clientId, supabaseUrl);
