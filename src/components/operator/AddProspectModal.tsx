@@ -8,7 +8,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Upload, X } from "lucide-react";
+
+async function uploadProspectPhoto(file: File, folder: string): Promise<string | null> {
+  try {
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `prospects-temp/${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from("client-uploads").upload(path, file, { upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from("client-uploads").getPublicUrl(path);
+    return data.publicUrl;
+  } catch (e: any) {
+    toast.error(`Upload failed: ${e.message}`);
+    return null;
+  }
+}
 
 const TEMPLATE_BY_CATEGORY: Record<string, string> = {
   trades: "trades",
