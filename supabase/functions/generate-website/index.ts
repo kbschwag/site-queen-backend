@@ -821,6 +821,7 @@ Return this exact JSON structure (every field required, no empty strings unless 
     }
 
     // Clean up any remaining unfilled placeholders
+    await logUnfilledPlaceholders(supabase, clientId, templateId, "index", html);
     html = html.replace(/\{\{[^}]+\}\}/g, "");
 
     // ── CALL 2: Apply call notes special instructions (only if needed) ───
