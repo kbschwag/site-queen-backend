@@ -11,6 +11,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
 import { WebsiteBuildPanel } from "@/components/operator/WebsiteBuildPanel";
+import { GenerationDiagnosticsPanel } from "@/components/operator/GenerationDiagnosticsPanel";
 import { DomainDeployTab } from "@/components/operator/DomainDeployTab";
 import { SoftDeleteModal } from "@/components/operator/SoftDeleteModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
