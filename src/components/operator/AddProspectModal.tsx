@@ -8,7 +8,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Upload, X } from "lucide-react";
+
+async function uploadProspectPhoto(file: File, folder: string): Promise<string | null> {
+  try {
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `prospects-temp/${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from("client-uploads").upload(path, file, { upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from("client-uploads").getPublicUrl(path);
+    return data.publicUrl;
+  } catch (e: any) {
+    toast.error(`Upload failed: ${e.message}`);
+    return null;
+  }
+}
 
 const TEMPLATE_BY_CATEGORY: Record<string, string> = {
   trades: "trades",
@@ -39,7 +53,33 @@ export function AddProspectModal({ open, onOpenChange, onCreated }: Props) {
     notes: "",
   });
 
+  const [heroPhoto, setHeroPhoto] = useState<string | null>(null);
+  const [galleryPhotos, setGalleryPhotos] = useState<string[]>([]);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const sessionFolder = useState(() => Math.random().toString(36).slice(2))[0];
+
   const update = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  const pickAndUpload = (multiple: boolean, onDone: (urls: string[]) => void) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = multiple;
+    input.onchange = async (e) => {
+      const files = Array.from((e.target as HTMLInputElement).files || []);
+      if (!files.length) return;
+      setUploading(true);
+      const urls: string[] = [];
+      for (const f of files) {
+        const url = await uploadProspectPhoto(f, sessionFolder);
+        if (url) urls.push(url);
+      }
+      setUploading(false);
+      if (urls.length) onDone(urls);
+    };
+    input.click();
+  };
 
   const handleSubmit = async () => {
     if (!form.business_name.trim() || !form.city.trim()) {
@@ -61,6 +101,10 @@ export function AddProspectModal({ open, onOpenChange, onCreated }: Props) {
         template_selected: template,
         business_phone: form.phone,
         business_email: form.email,
+        hero_photo_url: heroPhoto || undefined,
+        portfolio_photos: galleryPhotos,
+        logo_url: logoUrl || undefined,
+        use_stock_photos: !heroPhoto && galleryPhotos.length === 0,
       };
 
       const { data: client, error: cErr } = await supabase
@@ -113,6 +157,9 @@ export function AddProspectModal({ open, onOpenChange, onCreated }: Props) {
         existing_url: "",
         notes: "",
       });
+      setHeroPhoto(null);
+      setGalleryPhotos([]);
+      setLogoUrl(null);
     } catch (e: any) {
       toast.error(e.message || "Failed to create prospect");
     } finally {
@@ -184,8 +231,98 @@ export function AddProspectModal({ open, onOpenChange, onCreated }: Props) {
               <Label>Notes</Label>
               <Textarea rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} />
             </div>
+
+            <div className="col-span-2 space-y-2 pt-2 border-t">
+              <Label>Logo (optional)</Label>
+              {logoUrl ? (
+                <div className="relative inline-block">
+                  <img src={logoUrl} alt="" className="h-16 rounded border bg-white p-1" />
+                  <button
+                    type="button"
+                    onClick={() => setLogoUrl(null)}
+                    className="absolute -top-2 -right-2 bg-background border rounded-full p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploading}
+                  onClick={() => pickAndUpload(false, ([url]) => setLogoUrl(url))}
+                >
+                  <Upload className="h-4 w-4 mr-2" /> Upload logo
+                </Button>
+              )}
+            </div>
+
+            <div className="col-span-2 space-y-2">
+              <Label>Hero photo (optional)</Label>
+              {heroPhoto ? (
+                <div className="relative w-full max-w-xs aspect-video rounded-lg border overflow-hidden">
+                  <img src={heroPhoto} alt="" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setHeroPhoto(null)}
+                    className="absolute top-1 right-1 bg-background/80 rounded-full p-1"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploading}
+                  onClick={() => pickAndUpload(false, ([url]) => setHeroPhoto(url))}
+                >
+                  <Upload className="h-4 w-4 mr-2" /> Upload hero photo
+                </Button>
+              )}
+            </div>
+
+            <div className="col-span-2 space-y-2">
+              <Label>Gallery / portfolio photos (optional)</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {galleryPhotos.map((url, i) => (
+                  <div key={i} className="relative aspect-square rounded border overflow-hidden group">
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setGalleryPhotos((p) => p.filter((_, idx) => idx !== i))}
+                      className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5 opacity-0 group-hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                {galleryPhotos.length < 12 && (
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => pickAndUpload(true, (urls) => setGalleryPhotos((p) => [...p, ...urls]))}
+                    className="aspect-square rounded border-2 border-dashed flex flex-col items-center justify-center text-xs text-muted-foreground hover:border-primary/50"
+                  >
+                    <Upload className="h-4 w-4 mb-1" />
+                    Add
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                If no photos uploaded, the demo site will use stock photos.
+              </p>
+              {uploading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Uploading…
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
