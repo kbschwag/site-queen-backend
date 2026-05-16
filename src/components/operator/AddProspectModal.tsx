@@ -157,6 +157,9 @@ export function AddProspectModal({ open, onOpenChange, onCreated }: Props) {
         existing_url: "",
         notes: "",
       });
+      setHeroPhoto(null);
+      setGalleryPhotos([]);
+      setLogoUrl(null);
     } catch (e: any) {
       toast.error(e.message || "Failed to create prospect");
     } finally {
