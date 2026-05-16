@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
+import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -820,6 +821,7 @@ Return this exact JSON structure (every field required, no empty strings unless 
     }
 
     // Clean up any remaining unfilled placeholders
+    await logUnfilledPlaceholders(supabase, clientId, templateId, "index", html);
     html = html.replace(/\{\{[^}]+\}\}/g, "");
 
     // ── CALL 2: Apply call notes special instructions (only if needed) ───
@@ -1050,6 +1052,7 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
 
           // CSS is inline in these templates, so no stylesheet swap needed.
           // Strip any unfilled placeholders.
+          await logUnfilledPlaceholders(supabase, clientId, templateId, page.slug, pageHtml);
           pageHtml = pageHtml.replace(/\{\{[^}]+\}\}/g, "");
 
           // Same safety net + analytics + form wiring + favicon as homepage

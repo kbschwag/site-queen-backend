@@ -984,6 +984,44 @@ export type Database = {
         }
         Relationships: []
       }
+      generation_diagnostics: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: string
+          page_slug: string
+          placeholder_count: number
+          template_id: string
+          unfilled_placeholders: string[]
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          page_slug: string
+          placeholder_count?: number
+          template_id: string
+          unfilled_placeholders?: string[]
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          page_slug?: string
+          placeholder_count?: number
+          template_id?: string
+          unfilled_placeholders?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_diagnostics_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_logs: {
         Row: {
           client_id: string

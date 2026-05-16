@@ -11,6 +11,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
 import { WebsiteBuildPanel } from "@/components/operator/WebsiteBuildPanel";
+import { GenerationDiagnosticsPanel } from "@/components/operator/GenerationDiagnosticsPanel";
 import { DomainDeployTab } from "@/components/operator/DomainDeployTab";
 import { SoftDeleteModal } from "@/components/operator/SoftDeleteModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -363,6 +364,9 @@ export default function OperatorClients() {
               </TabsContent>
               <TabsContent value="build" className="mt-4">
                 <WebsiteBuildPanel clientId={selected.id} businessName={selected.business_name} />
+                <div className="mt-4">
+                  <GenerationDiagnosticsPanel clientId={selected.id} />
+                </div>
               </TabsContent>
               <TabsContent value="domain" className="mt-4">
                 <DomainDeployTab clientId={selected.id} businessName={selected.business_name} />

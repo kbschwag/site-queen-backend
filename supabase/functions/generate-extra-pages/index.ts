@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
+import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -344,6 +345,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       for (const [key, value] of Object.entries(aboutFill)) {
         aboutHTML = aboutHTML.split(key).join(value);
       }
+      await logUnfilledPlaceholders(supabase, clientId, templateId, "about", aboutHTML);
       aboutHTML = aboutHTML.replace(/\{\{[^}]+\}\}/g, "");
       aboutHTML = aboutHTML.replace("</body>", analyticsScript + "\n</body>");
       aboutHTML = wireContactForms(aboutHTML, clientId, supabaseUrl);
@@ -558,6 +560,7 @@ Return ONLY valid JSON. No markdown:
       for (const [key, value] of Object.entries(servicesFill)) {
         servicesHTML = servicesHTML.split(key).join(value);
       }
+      await logUnfilledPlaceholders(supabase, clientId, templateId, "services", servicesHTML);
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");
       servicesHTML = wireContactForms(servicesHTML, clientId, supabaseUrl);
