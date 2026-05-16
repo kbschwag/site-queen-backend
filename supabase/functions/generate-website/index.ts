@@ -1052,6 +1052,7 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
 
           // CSS is inline in these templates, so no stylesheet swap needed.
           // Strip any unfilled placeholders.
+          await logUnfilledPlaceholders(supabase, clientId, templateId, page.slug, pageHtml);
           pageHtml = pageHtml.replace(/\{\{[^}]+\}\}/g, "");
 
           // Same safety net + analytics + form wiring + favicon as homepage
