@@ -106,15 +106,6 @@ export function AddProspectModal({ open, onOpenChange, onCreated }: Props) {
         logo_url: logoUrl || undefined,
         use_stock_photos: !heroPhoto && galleryPhotos.length === 0,
       };
-        services: form.services
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .map((name) => ({ name })),
-        template_selected: template,
-        business_phone: form.phone,
-        business_email: form.email,
-      };
 
       const { data: client, error: cErr } = await supabase
         .from("clients")
