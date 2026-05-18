@@ -1136,6 +1136,91 @@ function listClassNames(styleBlock: string): string[] {
   return [...set];
 }
 
+// Universal form styling — applied to every generated page so contact
+// forms render legibly regardless of template. Uses CSS variables with
+// safe fallbacks so each template's palette flows through. Scoped to
+// <form> so it never bleeds into other UI.
+const FORM_STYLES = `<style id="sq-form-styles">
+  form { display: block; }
+  form label {
+    display: block;
+    font-family: var(--font-body, inherit);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin: 0 0 0.4rem;
+    color: inherit;
+    opacity: 0.85;
+  }
+  form .form-group,
+  form .form-field,
+  form p { margin: 0 0 1.1rem; }
+  form input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]),
+  form select,
+  form textarea,
+  form .form-input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.85rem 1rem;
+    font-family: var(--font-body, inherit);
+    font-size: 1rem;
+    line-height: 1.4;
+    color: var(--text, var(--dark, #1a1a1a));
+    background: var(--white, #ffffff);
+    border: 1px solid var(--border, rgba(0,0,0,0.18));
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  form textarea,
+  form textarea.form-input {
+    min-height: 140px;
+    resize: vertical;
+    font-family: var(--font-body, inherit);
+  }
+  form select,
+  form select.form-input {
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2.5rem;
+  }
+  form input::placeholder,
+  form textarea::placeholder { color: var(--text-muted, rgba(0,0,0,0.45)); opacity: 1; }
+  form input:focus,
+  form select:focus,
+  form textarea:focus,
+  form .form-input:focus {
+    border-color: var(--primary, var(--accent, var(--burgundy, var(--red, var(--navy, #333)))));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, var(--accent, var(--burgundy, var(--red, var(--navy, #333))))) 18%, transparent);
+  }
+  form button[type="submit"],
+  form input[type="submit"] {
+    font-family: var(--font-heading, var(--font-body, inherit));
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  form .sq-form-status {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    font-family: var(--font-body, inherit);
+    font-size: 0.95rem;
+  }
+  @media (max-width: 640px) {
+    form input:not([type="hidden"]):not([type="submit"]):not([type="button"]),
+    form select,
+    form textarea,
+    form .form-input { font-size: 16px; }
+  }
+</style>`;
+
 function assemblePage(opts: {
   title: string;
   description: string;
@@ -1155,6 +1240,7 @@ function assemblePage(opts: {
   <meta name="description" content="${escapeHTML(opts.description)}" />
   ${opts.googleFontsUrl ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="${opts.googleFontsUrl}" rel="stylesheet" />` : ""}
   ${opts.styleBlock}
+  ${FORM_STYLES}
 </head>
 <body>
 ${opts.headerHTML}
