@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, ArrowLeft, ExternalLink, Copy, RefreshCw, MessageCirclePlus, Crown, Eye } from "lucide-react";
+import { Loader2, ArrowLeft, ExternalLink, Copy, RefreshCw, MessageCirclePlus, Crown, Eye, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { LogContactModal } from "@/components/operator/LogContactModal";
@@ -106,6 +107,35 @@ export default function ProspectDetail() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowLog(true)}><MessageCirclePlus className="h-4 w-4 mr-1" />Log Contact</Button>
           <Button onClick={() => setShowConvert(true)}><Crown className="h-4 w-4 mr-1" />Convert to Client</Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4 mr-1" />Delete</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this prospect?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will remove <b>{c.business_name}</b> from your prospect list. The record is soft-deleted and can be restored by an Owner.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={async () => {
+                    const { data: auth } = await supabase.auth.getUser();
+                    const { error } = await supabase
+                      .from("clients")
+                      .update({ deleted_at: new Date().toISOString(), deleted_by: auth.user?.id ?? null } as any)
+                      .eq("id", id!);
+                    if (error) { toast.error(error.message); return; }
+                    toast.success("Prospect deleted");
+                    navigate("/operator/prospects");
+                  }}
+                >Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
