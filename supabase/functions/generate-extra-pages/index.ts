@@ -486,7 +486,7 @@ Return ONLY valid JSON. No markdown:
       }
 
       // Inject CSS variables
-      servicesHTML = injectCSSVars(servicesHTML, primaryColor, accentColor, fonts);
+      servicesHTML = injectCSSVars(servicesHTML, primaryColor, accentColor, fonts, templateId);
 
       // Fill all placeholders
       const servicesFill: Record<string, string> = {
