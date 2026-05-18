@@ -1242,12 +1242,21 @@ function assemblePage(opts: {
   title: string;
   description: string;
   googleFontsUrl: string;
+  fontsLinkHTML?: string;
   styleBlock: string;
   headerHTML: string;
   contentHTML: string;
   footerHTML: string;
   analyticsScript: string;
 }): string {
+  // Prefer the actual font links extracted from the about page (they match
+  // the --font-heading / --font-body declared in the inlined :root). Fall
+  // back to the template's default googleFontsUrl only when extraction failed.
+  const fontsTag = opts.fontsLinkHTML
+    ? opts.fontsLinkHTML
+    : (opts.googleFontsUrl
+      ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="${opts.googleFontsUrl}" rel="stylesheet" />`
+      : "");
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1255,7 +1264,7 @@ function assemblePage(opts: {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${escapeHTML(opts.title)}</title>
   <meta name="description" content="${escapeHTML(opts.description)}" />
-  ${opts.googleFontsUrl ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="${opts.googleFontsUrl}" rel="stylesheet" />` : ""}
+  ${fontsTag}
   ${opts.styleBlock}
   ${FORM_STYLES}
 </head>
