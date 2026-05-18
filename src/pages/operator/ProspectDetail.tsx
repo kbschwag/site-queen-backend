@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { LogContactModal } from "@/components/operator/LogContactModal";
 import { ConvertToClientModal } from "@/components/operator/ConvertToClientModal";
 import { ALL_PROSPECT_STAGES, STAGE_LABELS, STAGE_COLORS, CHANNEL_LABELS } from "@/lib/prospect-utils";
+import { InlineRevisionPanel } from "@/components/operator/InlineRevisionPanel";
 
 export default function ProspectDetail() {
   const { id } = useParams();
@@ -199,6 +200,22 @@ export default function ProspectDetail() {
               Last contacted: {c.date_last_contacted ? format(new Date(c.date_last_contacted), "MMM d, yyyy") : "Never"}<br />
               Next follow-up: {c.next_followup_date ? format(new Date(c.next_followup_date), "MMM d, yyyy") : "—"}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-3">
+          <CardHeader>
+            <CardTitle className="text-base">Request Changes</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Refine this prospect's demo site — same revision flow used for active clients. Changes deploy to staging immediately.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {demoUrl ? (
+              <InlineRevisionPanel clientId={c.id} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Generate the demo site first before requesting changes.</p>
+            )}
           </CardContent>
         </Card>
 
