@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
 import { autoFillPlaceholders } from "../_shared/autofill.ts";
+import { generateRestaurantSite, RESTAURANT_TEMPLATE_ID } from "../_shared/restaurant-generator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -140,6 +141,28 @@ serve(async (req) => {
     }
 
     if (!htmlFile) throw new Error(`Template not found: ${templateId}/index.html`);
+
+    // ── Restaurant template (local-favorite): fully isolated pipeline ────
+    if (templateId === RESTAURANT_TEMPLATE_ID) {
+      try {
+        const result = await generateRestaurantSite({
+          supabase, clientId, intake, callNotes,
+          clientData, siteData,
+          supabaseUrl, serviceKey,
+        });
+        return new Response(
+          JSON.stringify({ success: true, status: result.status, staging_url: result.stagingUrl }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      } catch (e: any) {
+        console.error("[generate/restaurant] error:", e);
+        await markFailed(supabase, clientId, e.message || String(e));
+        return new Response(
+          JSON.stringify({ success: false, error: e.message || String(e) }),
+          { status: 500, headers: corsHeaders },
+        );
+      }
+    }
 
     let templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
