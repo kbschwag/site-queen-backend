@@ -612,14 +612,17 @@ Return ONLY valid JSON. No markdown:
       // 2) CSS comes from the ABOUT page (correct simple page-hero style — NOT homepage's full hero).
       //    Fall back to the raw template's about.html if the client's about hasn't been generated yet.
       let aboutStyleBlock = "";
+      let aboutFontsLink = "";
       try {
         const { data: clientAboutFile } = await supabase.storage
           .from("generated-sites")
           .download(`${clientId}/deploy/about.html`);
         if (clientAboutFile) {
           const aboutHTMLForCSS = await clientAboutFile.text();
-          aboutStyleBlock = extractShell(aboutHTMLForCSS).styleBlock;
-          console.log(`[extra-pages] Pulled CSS from client about.html (${aboutStyleBlock.length} chars)`);
+          const ex = extractShell(aboutHTMLForCSS);
+          aboutStyleBlock = ex.styleBlock;
+          aboutFontsLink = ex.fontsLinkHTML;
+          console.log(`[extra-pages] Pulled CSS from client about.html (${aboutStyleBlock.length} chars, fonts:${aboutFontsLink ? "yes" : "no"})`);
         }
       } catch (e) {
         console.warn("[extra-pages] Could not load client about.html, will fall back to template:", (e as any)?.message);
@@ -630,8 +633,10 @@ Return ONLY valid JSON. No markdown:
           .download(`${templateId}/about.html`);
         if (templateAboutFile) {
           const tplHTML = await templateAboutFile.text();
-          aboutStyleBlock = extractShell(tplHTML).styleBlock;
-          console.log(`[extra-pages] Pulled CSS from template about.html (${aboutStyleBlock.length} chars)`);
+          const ex = extractShell(tplHTML);
+          aboutStyleBlock = ex.styleBlock;
+          aboutFontsLink = ex.fontsLinkHTML;
+          console.log(`[extra-pages] Pulled CSS from template about.html (${aboutStyleBlock.length} chars, fonts:${aboutFontsLink ? "yes" : "no"})`);
         }
       }
 
@@ -639,6 +644,7 @@ Return ONLY valid JSON. No markdown:
         styleBlock: aboutStyleBlock,
         headerHTML: homeShell.headerHTML,
         footerHTML: homeShell.footerHTML,
+        fontsLinkHTML: aboutFontsLink,
       };
       if (!shell.styleBlock || !shell.headerHTML || !shell.footerHTML) {
         throw new Error(`Failed to extract shell — style:${!!shell.styleBlock} header:${!!shell.headerHTML} footer:${!!shell.footerHTML}`);
@@ -766,6 +772,7 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
             title: `${spec.name} | ${businessName}`,
             description: `${spec.name} — ${businessName}, ${businessType} in ${city}, ${state}.`,
             googleFontsUrl: fonts.googleUrl,
+            fontsLinkHTML: shell.fontsLinkHTML,
             styleBlock: shell.styleBlock,
             headerHTML: shell.headerHTML,
             contentHTML,
@@ -1075,10 +1082,20 @@ function formatBusinessHours(input: any): string {
   return "";
 }
 
-function extractShell(html: string): { styleBlock: string; headerHTML: string; footerHTML: string } {
+function extractShell(html: string): { styleBlock: string; headerHTML: string; footerHTML: string; fontsLinkHTML: string } {
   // Capture the FIRST <style>...</style> block (and any topbar styles too — usually only one)
   const styleMatch = html.match(/<style[^>]*>[\s\S]*?<\/style>/i);
   const styleBlock = styleMatch ? styleMatch[0] : "";
+
+  // Capture every Google Fonts <link> from <head> so we can reuse the EXACT
+  // typography the about page loads (otherwise contact/services fall back to
+  // Helvetica when the template's default fonts differ from the brand fonts).
+  const headMatch = html.match(/<head[\s\S]*?<\/head>/i);
+  const headHTML = headMatch ? headMatch[0] : html;
+  const fontLinks = [...headHTML.matchAll(/<link[^>]+href=["'][^"']*fonts\.(?:googleapis|gstatic)\.com[^"']*["'][^>]*\/?>/gi)].map((m) => m[0]);
+  // Always include preconnects (cheap, harmless) so the fonts load fast.
+  const preconnects = `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />`;
+  const fontsLinkHTML = fontLinks.length ? `${preconnects}${fontLinks.join("")}` : "";
 
   // Header: prefer the first <header>...</header>; fall back to any
   // top-of-page navigation element since some templates (e.g. feminine-bold)
@@ -1123,7 +1140,7 @@ function extractShell(html: string): { styleBlock: string; headerHTML: string; f
     if (divFooter) footerHTML = divFooter[0];
   }
 
-  return { styleBlock, headerHTML, footerHTML };
+  return { styleBlock, headerHTML, footerHTML, fontsLinkHTML };
 }
 
 function listClassNames(styleBlock: string): string[] {
@@ -1225,12 +1242,21 @@ function assemblePage(opts: {
   title: string;
   description: string;
   googleFontsUrl: string;
+  fontsLinkHTML?: string;
   styleBlock: string;
   headerHTML: string;
   contentHTML: string;
   footerHTML: string;
   analyticsScript: string;
 }): string {
+  // Prefer the actual font links extracted from the about page (they match
+  // the --font-heading / --font-body declared in the inlined :root). Fall
+  // back to the template's default googleFontsUrl only when extraction failed.
+  const fontsTag = opts.fontsLinkHTML
+    ? opts.fontsLinkHTML
+    : (opts.googleFontsUrl
+      ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="${opts.googleFontsUrl}" rel="stylesheet" />`
+      : "");
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1238,7 +1264,7 @@ function assemblePage(opts: {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${escapeHTML(opts.title)}</title>
   <meta name="description" content="${escapeHTML(opts.description)}" />
-  ${opts.googleFontsUrl ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="${opts.googleFontsUrl}" rel="stylesheet" />` : ""}
+  ${fontsTag}
   ${opts.styleBlock}
   ${FORM_STYLES}
 </head>
