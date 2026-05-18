@@ -612,14 +612,17 @@ Return ONLY valid JSON. No markdown:
       // 2) CSS comes from the ABOUT page (correct simple page-hero style — NOT homepage's full hero).
       //    Fall back to the raw template's about.html if the client's about hasn't been generated yet.
       let aboutStyleBlock = "";
+      let aboutFontsLink = "";
       try {
         const { data: clientAboutFile } = await supabase.storage
           .from("generated-sites")
           .download(`${clientId}/deploy/about.html`);
         if (clientAboutFile) {
           const aboutHTMLForCSS = await clientAboutFile.text();
-          aboutStyleBlock = extractShell(aboutHTMLForCSS).styleBlock;
-          console.log(`[extra-pages] Pulled CSS from client about.html (${aboutStyleBlock.length} chars)`);
+          const ex = extractShell(aboutHTMLForCSS);
+          aboutStyleBlock = ex.styleBlock;
+          aboutFontsLink = ex.fontsLinkHTML;
+          console.log(`[extra-pages] Pulled CSS from client about.html (${aboutStyleBlock.length} chars, fonts:${aboutFontsLink ? "yes" : "no"})`);
         }
       } catch (e) {
         console.warn("[extra-pages] Could not load client about.html, will fall back to template:", (e as any)?.message);
@@ -630,8 +633,10 @@ Return ONLY valid JSON. No markdown:
           .download(`${templateId}/about.html`);
         if (templateAboutFile) {
           const tplHTML = await templateAboutFile.text();
-          aboutStyleBlock = extractShell(tplHTML).styleBlock;
-          console.log(`[extra-pages] Pulled CSS from template about.html (${aboutStyleBlock.length} chars)`);
+          const ex = extractShell(tplHTML);
+          aboutStyleBlock = ex.styleBlock;
+          aboutFontsLink = ex.fontsLinkHTML;
+          console.log(`[extra-pages] Pulled CSS from template about.html (${aboutStyleBlock.length} chars, fonts:${aboutFontsLink ? "yes" : "no"})`);
         }
       }
 
@@ -639,6 +644,7 @@ Return ONLY valid JSON. No markdown:
         styleBlock: aboutStyleBlock,
         headerHTML: homeShell.headerHTML,
         footerHTML: homeShell.footerHTML,
+        fontsLinkHTML: aboutFontsLink,
       };
       if (!shell.styleBlock || !shell.headerHTML || !shell.footerHTML) {
         throw new Error(`Failed to extract shell — style:${!!shell.styleBlock} header:${!!shell.headerHTML} footer:${!!shell.footerHTML}`);
