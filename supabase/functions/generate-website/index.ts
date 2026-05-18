@@ -603,7 +603,23 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{STAT_4_LABEL}}": copy.STAT_4_LABEL || "SATISFACTION GUARANTEED",
       // Services
       "{{SERVICES_HEADLINE}}": copy.SERVICES_HEADLINE || "OUR SERVICES",
-      "{{SERVICES_SUBTEXT}}": copy.SERVICES_SUBTEXT || "",
+      "{{SERVICES_SUBHEADING}}": copy.SERVICES_SUBHEADING || "",
+      "{{SERVICES_INTRO}}": copy.SERVICES_INTRO || copy.SERVICES_SUBTEXT || "",
+      "{{SERVICES_SUBTEXT}}": copy.SERVICES_SUBTEXT || copy.SERVICES_INTRO || "",
+      // About page hero (business-professional about.html)
+      "{{ABOUT_HEADLINE_LINE1}}": copy.ABOUT_HEADLINE_LINE1 || copy.ABOUT_HEADLINE || "",
+      "{{ABOUT_HEADLINE_LINE2}}": copy.ABOUT_HEADLINE_LINE2 || "",
+      "{{ABOUT_STORY_SHORT}}": (copy.ABOUT_STORY || "").split(/\n\n/)[0] || copy.ABOUT_STORY || "",
+      // Who We Serve (business-professional index)
+      "{{SERVE_HEADLINE}}": copy.SERVE_HEADLINE || "WHO WE SERVE",
+      "{{SERVE_SUBHEADING}}": copy.SERVE_SUBHEADING || "",
+      "{{SERVE_BODY}}": copy.SERVE_BODY || "",
+      "{{SERVE_1}}": copy.SERVE_1 || "",
+      "{{SERVE_2}}": copy.SERVE_2 || "",
+      "{{SERVE_3}}": copy.SERVE_3 || "",
+      "{{SERVE_4}}": copy.SERVE_4 || "",
+      // Footer legal disclaimer (NOT a copyright)
+      "{{FOOTER_LEGAL_NOTE}}": copy.FOOTER_LEGAL_NOTE || "",
       "{{SERVICE_1_NAME}}": copy.SERVICE_1_NAME || serviceNames[0] || "",
       "{{SERVICE_1_DESC}}": copy.SERVICE_1_DESC || "",
       "{{SERVICE_2_NAME}}": copy.SERVICE_2_NAME || serviceNames[1] || "",
