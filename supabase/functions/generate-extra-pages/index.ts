@@ -772,6 +772,7 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
             title: `${spec.name} | ${businessName}`,
             description: `${spec.name} — ${businessName}, ${businessType} in ${city}, ${state}.`,
             googleFontsUrl: fonts.googleUrl,
+            fontsLinkHTML: shell.fontsLinkHTML,
             styleBlock: shell.styleBlock,
             headerHTML: shell.headerHTML,
             contentHTML,
