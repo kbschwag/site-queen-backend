@@ -512,31 +512,36 @@ Return this exact JSON structure (every field required, no empty strings unless 
   "FINAL_CTA_SUBTEXT": "1-2 sentences urgency and reassurance specific to this business",
   "FOOTER_TAGLINE": "short memorable tagline specific to this business — use their exact words if they provided a tagline (${tagline || "none provided"}), otherwise write a 5-8 word tagline that captures this business's character",
   "FOOTER_NEWSLETTER_TEXT": "1 sentence inviting email signup for deals and tips, specific to this business"${templateId === "feminine-bold" ? `,
-  "ANNOUNCE_TEXT": "short announcement bar text e.g. 'Now booking — Spring cohort open'",
-  "ABOUT_STRIP_DROPCAP": "first letter of the first word of the about strip headline",
-  "ABOUT_STRIP_LINE1": "rest of first word e.g. if dropcap is H, this is ELPING",
-  "ABOUT_STRIP_LINE2": "second line of the about strip e.g. 'WOMEN COACHES,'",
-  "ABOUT_STRIP_LINE3": "third line e.g. 'FOUNDERS WORK LESS'",
-  "ABOUT_STRIP_LINE4": "fourth line e.g. 'PROFIT MORE.'",
-  "ABOUT_STRIP_BODY": "1-2 sentences expanding on the about strip",
-  "ABOUT_INTRO_HEADLINE": "personal intro headline e.g. 'Hi, I'm [name], [title]'",
-  "ABOUT_INTRO_BODY": "2-3 sentences personal intro body",
-  "TRANSFORMATION_BODY": "1-2 sentences about the transformation journey",
-  "BA_1_BEFORE": "before state 1 — what the client struggles with now",
+  "_FEMININE_BOLD_FRAMING_RULES": "This template is used for personal brands, coaches, attorneys, consultants, designers, therapists, photographers, and other professional service providers. Do NOT assume the business is a coaching practice. Use the business_type (${businessType}), services, owner_title (${ownerTitle || "not provided"}), and owner story to determine the correct framing. Never default to coaching language ('coach', 'cohort', 'method', '12 weeks', 'session') unless the intake clearly indicates a coaching practice. Translate every field below into language native to THIS business (e.g. an attorney: 'Consultation' not 'Session'; a designer: 'Project' not 'Cohort'; a therapist: 'Practice' not 'Method').",
+  "OWNER_TITLE": "Full professional title for the owner — e.g. 'Attorney at Law', 'Brand Strategist', 'Family Therapist', 'Business Coach'. Match the actual profession. Use the provided owner_title if any; otherwise infer from business_type and services. 2-4 words.",
+  "ANNOUNCE_TEXT": "short announcement bar text appropriate to this business e.g. 'Now booking new clients — ${city || "local area"}'",
+  "ABOUT_STRIP_DROPCAP": "first letter of ABOUT_STRIP_LINE1 (single capital letter only)",
+  "ABOUT_STRIP_LINE1": "rest of first word in caps after the dropcap letter (e.g. if dropcap is H, this is ELPING)",
+  "ABOUT_STRIP_LINE2": "second line of the about strip — caps, specific to this business and its actual clients",
+  "ABOUT_STRIP_LINE3": "third line — caps",
+  "ABOUT_STRIP_LINE4": "fourth line — caps, ends with a period",
+  "ABOUT_STRIP_BODY": "1-2 sentences expanding on the about strip, specific to this business",
+  "ABOUT_INTRO_HEADLINE": "personal intro headline using the owner's real name and real title (NOT 'coach' unless they are a coach) e.g. 'Hi, I'm ${ownerName || "[name]"}'",
+  "ABOUT_INTRO_BODY": "2-3 sentences personal intro body specific to this business",
+  "TRANSFORMATION_HEADLINE": "Full 4-8 word headline for the transformation/before-after section, written in the voice of THIS business (attorneys: 'From Uncertainty to Confident Decisions.' / designers: 'From Concept to Considered Brand.'). One complete phrase. First letter will be styled as a decorative dropcap automatically — do NOT split or capitalize specially.",
+  "TRANSFORMATION_BODY": "1-2 sentences about the transformation/outcome journey, native to this business type",
+  "BA_1_BEFORE": "before state 1 — what the client struggles with now (use language native to this business)",
   "BA_1_AFTER": "after state 1 — what they achieve after working together",
   "BA_2_BEFORE": "before state 2",
   "BA_2_AFTER": "after state 2",
   "BA_3_BEFORE": "before state 3",
   "BA_3_AFTER": "after state 3",
-  "PHILOSOPHY_HEADLINE_REST": "headline rest after dropcap for philosophy section",
-  "PILLAR_1_TITLE": "first philosophy pillar title e.g. 'Clarity'",
+  "PHILOSOPHY_HEADLINE": "Full 4-8 word headline for the philosophy/approach section, specific to this business (attorney: 'A Practice Built on Trust.' / therapist: 'Care Rooted in Presence.'). First letter is auto-styled as a decorative dropcap.",
+  "PILLAR_1_TITLE": "first philosophy pillar title (1-2 words, native to this business)",
   "PILLAR_1_BODY": "2-3 sentences describing pillar 1",
   "PILLAR_2_TITLE": "second philosophy pillar title",
   "PILLAR_2_BODY": "2-3 sentences describing pillar 2",
   "PILLAR_3_TITLE": "third philosophy pillar title",
   "PILLAR_3_BODY": "2-3 sentences describing pillar 3",
-  "METHODOLOGY_BODY": "1 sentence describing the methodology approach",
-  "STEP_1_TITLE": "step 1 name e.g. 'The Invitation'",
+  "SERVICES_HEADLINE_FB": "Full 4-7 word headline for the services section (attorney: 'How We Can Help.' / designer: 'Ways We Work Together.'). First letter is auto-styled as a decorative dropcap.",
+  "METHODOLOGY_HEADLINE": "Full 3-7 word headline for the methodology/process section (attorney: 'A Considered Process.' / coach: 'A Four-Part Journey.'). First letter is auto-styled as a decorative dropcap.",
+  "METHODOLOGY_BODY": "1 sentence describing the process approach, native to this business",
+  "STEP_1_TITLE": "step 1 name — language native to this business (attorney: 'The Consultation' / designer: 'Discovery')",
   "STEP_1_BODY": "2-3 sentences describing step 1",
   "STEP_2_TITLE": "step 2 name",
   "STEP_2_BODY": "2-3 sentences describing step 2",
@@ -544,8 +549,22 @@ Return this exact JSON structure (every field required, no empty strings unless 
   "STEP_3_BODY": "2-3 sentences describing step 3",
   "STEP_4_TITLE": "step 4 name",
   "STEP_4_BODY": "2-3 sentences describing step 4",
-  "LEAD_MAGNET_BODY": "1-2 sentences describing the free lead magnet offer",
-  "TESTIMONIALS_HEADLINE_REST": "headline rest after dropcap for testimonials section"` : ""}
+  "TESTIMONIALS_HEADLINE_FB": "Full 3-6 word headline for the testimonials section (e.g. 'Words From Our Clients.' / 'Quiet Wins, Loudly Earned.'). First letter is auto-styled as a decorative dropcap.",
+  "LEAD_MAGNET_TITLE": "Full 3-7 word title for a free guide/resource offer specific to this business (attorney: 'The ${businessName} Estate Planning Primer.' / designer: 'The Brand Clarity Workbook.'). First letter is auto-styled as a decorative dropcap.",
+  "LEAD_MAGNET_BODY": "1-2 sentences describing the free resource offer",
+  "FINAL_CTA_HEADLINE_FB": "Full 4-8 word warm closing headline (attorney: 'It Starts With a Conversation.' / designer: 'Let's Make Something Considered.'). First letter is auto-styled as a decorative dropcap.",
+  "SERVICE_1_DURATION_FB": "short duration/format label native to this business in CAPS (attorney: 'FLAT FEE' or 'HOURLY' / designer: '6 WEEKS' / therapist: '50 MIN' / coach: '12 WEEKS'). Leave empty string if no natural duration applies.",
+  "SERVICE_2_DURATION_FB": "short duration/format label native to this business in CAPS, or empty string",
+  "SERVICE_3_DURATION_FB": "short duration/format label native to this business in CAPS, or empty string",
+  "SERVICE_1_INCLUDE_1_FB": "what's included in service 1 — language native to this business (NOT '1:1 sessions' unless they are a coach/therapist)",
+  "SERVICE_1_INCLUDE_2_FB": "what's included in service 1 (distinct)",
+  "SERVICE_1_INCLUDE_3_FB": "what's included in service 1 (distinct)",
+  "SERVICE_2_INCLUDE_1_FB": "what's included in service 2 (native language)",
+  "SERVICE_2_INCLUDE_2_FB": "what's included in service 2",
+  "SERVICE_2_INCLUDE_3_FB": "what's included in service 2",
+  "SERVICE_3_INCLUDE_1_FB": "what's included in service 3 (native language)",
+  "SERVICE_3_INCLUDE_2_FB": "what's included in service 3",
+  "SERVICE_3_INCLUDE_3_FB": "what's included in service 3"` : ""}
 }`;
 
     console.log("[generate] Calling Claude for copy...");
@@ -769,77 +788,117 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{SUPABASE_URL}}": supabaseUrl,
 
       // ── feminine-bold template extras ───────────────────────────────────
+      // Helper: split a single source string into {drop, rest} so the
+      // template's two-span dropcap pattern can never duplicate or mismatch
+      // the first letter. Both halves ALWAYS come from the same source.
+      ...(() => {
+        const splitDrop = (raw: string): { drop: string; rest: string } => {
+          const s = (raw || "").trim();
+          if (!s) return { drop: "", rest: "" };
+          return { drop: s.charAt(0).toUpperCase(), rest: s.slice(1) };
+        };
+
+        // Resolve every dropcap headline from one full-headline source.
+        // Preference order: explicit full headline from Claude → legacy
+        // dropcap+rest combined → safe generic default (NEVER coaching-specific).
+        const owner = splitDrop(copy.OWNER_TITLE || intake.owner_title || ownerTitle || "");
+        const transformation = splitDrop(copy.TRANSFORMATION_HEADLINE || (copy.TRANSFORMATION_HEADLINE_REST ? `F${copy.TRANSFORMATION_HEADLINE_REST}` : ""));
+        const philosophy = splitDrop(copy.PHILOSOPHY_HEADLINE || (copy.PHILOSOPHY_HEADLINE_REST ? `M${copy.PHILOSOPHY_HEADLINE_REST}` : "Our Approach."));
+        const servicesH = splitDrop(copy.SERVICES_HEADLINE_FB || copy.SERVICES_HEADLINE || (copy.SERVICES_HEADLINE_REST ? `C${copy.SERVICES_HEADLINE_REST}` : "How We Help."));
+        const testimonialsH = splitDrop(copy.TESTIMONIALS_HEADLINE_FB || copy.TESTIMONIALS_HEADLINE || (copy.TESTIMONIALS_HEADLINE_REST ? `Q${copy.TESTIMONIALS_HEADLINE_REST}` : "Words From Clients."));
+        const methodology = splitDrop(copy.METHODOLOGY_HEADLINE || (copy.METHODOLOGY_HEADLINE_REST ? `F${copy.METHODOLOGY_HEADLINE_REST}` : "Our Process."));
+        const leadMagnet = splitDrop(copy.LEAD_MAGNET_TITLE || (copy.LEAD_MAGNET_TITLE_REST ? `T${copy.LEAD_MAGNET_TITLE_REST}` : `The ${businessName} Guide.`));
+        const faq = splitDrop("Frequently Asked Questions");
+        const finalCta = splitDrop(copy.FINAL_CTA_HEADLINE_FB || copy.FINAL_CTA_HEADLINE || (copy.FINAL_CTA_HEADLINE_REST ? `S${copy.FINAL_CTA_HEADLINE_REST}` : "Start a Conversation."));
+        const heroName = splitDrop(ownerName || businessName || "");
+        return {
+          "{{HERO_NAME_FIRST_LETTER}}": heroName.drop,
+          "{{HERO_NAME_REST}}": heroName.rest,
+          "{{OWNER_TITLE_DROPCAP}}": owner.drop,
+          "{{OWNER_TITLE_REST}}": owner.rest,
+          "{{TRANSFORMATION_DROPCAP}}": transformation.drop,
+          "{{TRANSFORMATION_HEADLINE_REST}}": transformation.rest,
+          "{{PHILOSOPHY_DROPCAP}}": philosophy.drop,
+          "{{PHILOSOPHY_HEADLINE_REST}}": philosophy.rest,
+          "{{SERVICES_DROPCAP}}": servicesH.drop,
+          "{{SERVICES_HEADLINE_REST}}": servicesH.rest,
+          "{{TESTIMONIALS_DROPCAP}}": testimonialsH.drop,
+          "{{TESTIMONIALS_HEADLINE_REST}}": testimonialsH.rest,
+          "{{METHODOLOGY_DROPCAP}}": methodology.drop,
+          "{{METHODOLOGY_HEADLINE_REST}}": methodology.rest,
+          "{{LEAD_MAGNET_DROPCAP}}": leadMagnet.drop,
+          "{{LEAD_MAGNET_TITLE_REST}}": leadMagnet.rest,
+          "{{FAQ_DROPCAP}}": faq.drop,
+          "{{FAQ_HEADLINE_REST}}": faq.rest,
+          "{{FINAL_CTA_DROPCAP}}": finalCta.drop,
+          "{{FINAL_CTA_HEADLINE_REST}}": finalCta.rest,
+        };
+      })(),
+
       // Business basics
       "{{BUSINESS_NAME_SHORT}}": businessName.split(" ")[0],
       "{{ANNOUNCE_TEXT}}": copy.ANNOUNCE_TEXT || `Now booking new clients — ${city || "local area"}`,
       "{{NAV_CTA}}": "BOOK A CALL",
 
-      // Hero — feminine-bold splits the hero name differently
-      "{{HERO_NAME_FIRST_LETTER}}": (ownerName || businessName).charAt(0).toUpperCase(),
-      "{{HERO_NAME_REST}}": (ownerName || businessName).slice(1),
+      // Hero CTAs (hero name dropcap handled above)
       "{{HERO_CTA_PRIMARY}}": copy.HERO_CTA_PRIMARY || "BOOK A CALL",
       "{{HERO_CTA_SECONDARY}}": copy.HERO_CTA_SECONDARY || "EXPLORE SERVICES",
 
       // About strip
-      "{{ABOUT_STRIP_DROPCAP}}": copy.ABOUT_STRIP_DROPCAP || "H",
+      "{{ABOUT_STRIP_DROPCAP}}": (copy.ABOUT_STRIP_DROPCAP || copy.ABOUT_STRIP_LINE1 || "").charAt(0).toUpperCase() || "H",
       "{{ABOUT_STRIP_LINE1}}": copy.ABOUT_STRIP_LINE1 || "ELPING",
       "{{ABOUT_STRIP_LINE2}}": copy.ABOUT_STRIP_LINE2 || (businessType || "").toUpperCase(),
-      "{{ABOUT_STRIP_LINE3}}": copy.ABOUT_STRIP_LINE3 || "WORK LESS",
-      "{{ABOUT_STRIP_LINE4}}": copy.ABOUT_STRIP_LINE4 || "PROFIT MORE.",
+      "{{ABOUT_STRIP_LINE3}}": copy.ABOUT_STRIP_LINE3 || "",
+      "{{ABOUT_STRIP_LINE4}}": copy.ABOUT_STRIP_LINE4 || "",
       "{{ABOUT_STRIP_BODY}}": copy.ABOUT_STRIP_BODY || copy.ABOUT_STORY || "",
-      "{{ABOUT_EYEBROW}}": copy.ABOUT_EYEBROW || "ABOUT ME",
-      "{{ABOUT_INTRO_HEADLINE}}": copy.ABOUT_INTRO_HEADLINE || `Hi, I'm ${ownerName || "your coach"}`,
+      "{{ABOUT_EYEBROW}}": copy.ABOUT_EYEBROW || "ABOUT",
+      "{{ABOUT_INTRO_HEADLINE}}": copy.ABOUT_INTRO_HEADLINE || (ownerName ? `Hi, I'm ${ownerName}` : `About ${businessName}`),
       "{{ABOUT_INTRO_BODY}}": copy.ABOUT_INTRO_BODY || copy.ABOUT_STORY || "",
       "{{ABOUT_CTA}}": "WORK WITH ME",
-      "{{OWNER_TITLE_DROPCAP}}": (intake.owner_title || "B").charAt(0).toUpperCase(),
-      "{{OWNER_TITLE_REST}}": (intake.owner_title || "Business Coach").slice(1),
 
-      // Transformation (before/after)
+      // Transformation (before/after) — headline handled above
       "{{TRANSFORMATION_EYEBROW}}": copy.TRANSFORMATION_EYEBROW || "✦ THE TRANSFORMATION",
-      "{{TRANSFORMATION_DROPCAP}}": "F",
-      "{{TRANSFORMATION_HEADLINE_REST}}": copy.TRANSFORMATION_HEADLINE_REST || "rom Where You Are to Where You Want to Be.",
       "{{TRANSFORMATION_BODY}}": copy.TRANSFORMATION_BODY || "",
-      "{{BA_1_BEFORE}}": copy.BA_1_BEFORE || "Struggling with consistency",
-      "{{BA_1_AFTER}}": copy.BA_1_AFTER || "Clear systems and momentum",
-      "{{BA_2_BEFORE}}": copy.BA_2_BEFORE || "Overwhelmed and stuck",
-      "{{BA_2_AFTER}}": copy.BA_2_AFTER || "Focused strategy and direction",
-      "{{BA_3_BEFORE}}": copy.BA_3_BEFORE || "Working hard without results",
-      "{{BA_3_AFTER}}": copy.BA_3_AFTER || "Aligned effort and real growth",
+      "{{BA_1_BEFORE}}": copy.BA_1_BEFORE || "",
+      "{{BA_1_AFTER}}": copy.BA_1_AFTER || "",
+      "{{BA_2_BEFORE}}": copy.BA_2_BEFORE || "",
+      "{{BA_2_AFTER}}": copy.BA_2_AFTER || "",
+      "{{BA_3_BEFORE}}": copy.BA_3_BEFORE || "",
+      "{{BA_3_AFTER}}": copy.BA_3_AFTER || "",
 
-      // Philosophy pillars
-      "{{PHILOSOPHY_EYEBROW}}": copy.PHILOSOPHY_EYEBROW || "✦ THE PHILOSOPHY",
-      "{{PHILOSOPHY_DROPCAP}}": "M",
-      "{{PHILOSOPHY_HEADLINE_REST}}": copy.PHILOSOPHY_HEADLINE_REST || "ethod Built on Quiet Truths.",
-      "{{PILLAR_1_TITLE}}": copy.PILLAR_1_TITLE || copy.WHY_US_1_TITLE || "Clarity",
+      // Philosophy pillars — headline handled above
+      "{{PHILOSOPHY_EYEBROW}}": copy.PHILOSOPHY_EYEBROW || "✦ THE APPROACH",
+      "{{PILLAR_1_TITLE}}": copy.PILLAR_1_TITLE || copy.WHY_US_1_TITLE || "",
       "{{PILLAR_1_BODY}}": copy.PILLAR_1_BODY || copy.WHY_US_1_DESC || "",
-      "{{PILLAR_2_TITLE}}": copy.PILLAR_2_TITLE || copy.WHY_US_2_TITLE || "Confidence",
+      "{{PILLAR_2_TITLE}}": copy.PILLAR_2_TITLE || copy.WHY_US_2_TITLE || "",
       "{{PILLAR_2_BODY}}": copy.PILLAR_2_BODY || copy.WHY_US_2_DESC || "",
-      "{{PILLAR_3_TITLE}}": copy.PILLAR_3_TITLE || copy.WHY_US_3_TITLE || "Conversion",
+      "{{PILLAR_3_TITLE}}": copy.PILLAR_3_TITLE || copy.WHY_US_3_TITLE || "",
       "{{PILLAR_3_BODY}}": copy.PILLAR_3_BODY || copy.WHY_US_3_DESC || "",
 
       // Services — feminine-bold tags/prices/duration/includes
+      // NOTE: no coaching-specific defaults. Empty string when unknown so the
+      // template degrades gracefully instead of showing "12 WEEKS" / "Weekly 1:1 sessions"
+      // on attorneys, designers, therapists, etc.
       "{{SERVICES_EYEBROW}}": copy.SERVICES_EYEBROW || "✦ WAYS TO WORK TOGETHER",
-      "{{SERVICES_DROPCAP}}": "C",
-      "{{SERVICES_HEADLINE_REST}}": copy.SERVICES_HEADLINE_REST || "hoose Your Next Chapter.",
       "{{SERVICES_INTRO}}": copy.SERVICES_SUBTEXT || copy.SERVICES_INTRO || "",
       "{{SERVICE_1_TAG}}": copy.SERVICE_1_TAG || "SIGNATURE",
       "{{SERVICE_1_PRICE}}": services[0]?.price_value || services[0]?.price || copy.SERVICE_1_PRICE || "Contact for pricing",
-      "{{SERVICE_1_DURATION}}": copy.SERVICE_1_DURATION || "12 WEEKS",
-      "{{SERVICE_1_INCLUDE_1}}": copy.SERVICE_1_INCLUDE_1 || "Weekly 1:1 sessions",
-      "{{SERVICE_1_INCLUDE_2}}": copy.SERVICE_1_INCLUDE_2 || "Personalised strategy",
-      "{{SERVICE_1_INCLUDE_3}}": copy.SERVICE_1_INCLUDE_3 || "Ongoing support",
-      "{{SERVICE_2_TAG}}": copy.SERVICE_2_TAG || "GROUP",
+      "{{SERVICE_1_DURATION}}": copy.SERVICE_1_DURATION_FB || copy.SERVICE_1_DURATION || "",
+      "{{SERVICE_1_INCLUDE_1}}": copy.SERVICE_1_INCLUDE_1_FB || copy.SERVICE_1_INCLUDE_1 || "",
+      "{{SERVICE_1_INCLUDE_2}}": copy.SERVICE_1_INCLUDE_2_FB || copy.SERVICE_1_INCLUDE_2 || "",
+      "{{SERVICE_1_INCLUDE_3}}": copy.SERVICE_1_INCLUDE_3_FB || copy.SERVICE_1_INCLUDE_3 || "",
+      "{{SERVICE_2_TAG}}": copy.SERVICE_2_TAG || "",
       "{{SERVICE_2_PRICE}}": services[1]?.price_value || services[1]?.price || copy.SERVICE_2_PRICE || "Contact for pricing",
-      "{{SERVICE_2_DURATION}}": copy.SERVICE_2_DURATION || "6 MONTHS",
-      "{{SERVICE_2_INCLUDE_1}}": copy.SERVICE_2_INCLUDE_1 || "Group coaching calls",
-      "{{SERVICE_2_INCLUDE_2}}": copy.SERVICE_2_INCLUDE_2 || "Community access",
-      "{{SERVICE_2_INCLUDE_3}}": copy.SERVICE_2_INCLUDE_3 || "Resource library",
-      "{{SERVICE_3_TAG}}": copy.SERVICE_3_TAG || "SELF-PACED",
+      "{{SERVICE_2_DURATION}}": copy.SERVICE_2_DURATION_FB || copy.SERVICE_2_DURATION || "",
+      "{{SERVICE_2_INCLUDE_1}}": copy.SERVICE_2_INCLUDE_1_FB || copy.SERVICE_2_INCLUDE_1 || "",
+      "{{SERVICE_2_INCLUDE_2}}": copy.SERVICE_2_INCLUDE_2_FB || copy.SERVICE_2_INCLUDE_2 || "",
+      "{{SERVICE_2_INCLUDE_3}}": copy.SERVICE_2_INCLUDE_3_FB || copy.SERVICE_2_INCLUDE_3 || "",
+      "{{SERVICE_3_TAG}}": copy.SERVICE_3_TAG || "",
       "{{SERVICE_3_PRICE}}": services[2]?.price_value || services[2]?.price || copy.SERVICE_3_PRICE || "Contact for pricing",
-      "{{SERVICE_3_DURATION}}": copy.SERVICE_3_DURATION || "LIFETIME ACCESS",
-      "{{SERVICE_3_INCLUDE_1}}": copy.SERVICE_3_INCLUDE_1 || "Video modules",
-      "{{SERVICE_3_INCLUDE_2}}": copy.SERVICE_3_INCLUDE_2 || "Workbooks & templates",
-      "{{SERVICE_3_INCLUDE_3}}": copy.SERVICE_3_INCLUDE_3 || "Bonus resources",
+      "{{SERVICE_3_DURATION}}": copy.SERVICE_3_DURATION_FB || copy.SERVICE_3_DURATION || "",
+      "{{SERVICE_3_INCLUDE_1}}": copy.SERVICE_3_INCLUDE_1_FB || copy.SERVICE_3_INCLUDE_1 || "",
+      "{{SERVICE_3_INCLUDE_2}}": copy.SERVICE_3_INCLUDE_2_FB || copy.SERVICE_3_INCLUDE_2 || "",
+      "{{SERVICE_3_INCLUDE_3}}": copy.SERVICE_3_INCLUDE_3_FB || copy.SERVICE_3_INCLUDE_3 || "",
 
       // Testimonials — feminine-bold uses TITLE instead of LOCATION
       "{{TESTIMONIAL_1_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_LOCATION || copy.TESTIMONIAL_1_TITLE || ""),
@@ -849,46 +908,34 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{TESTIMONIAL_2_AVATAR_URL}}": portfolioPhotos[0] || "",
       "{{TESTIMONIAL_3_AVATAR_URL}}": portfolioPhotos[1] || "",
       "{{TESTIMONIALS_EYEBROW}}": copy.TESTIMONIALS_EYEBROW || "✦ WORDS FROM CLIENTS",
-      "{{TESTIMONIALS_DROPCAP}}": "Q",
-      "{{TESTIMONIALS_HEADLINE_REST}}": copy.TESTIMONIALS_HEADLINE_REST || "uiet Wins, Loudly Earned.",
 
-      // Methodology
-      "{{METHODOLOGY_EYEBROW}}": copy.METHODOLOGY_EYEBROW || "✦ THE METHODOLOGY",
-      "{{METHODOLOGY_DROPCAP}}": "F",
-      "{{METHODOLOGY_HEADLINE_REST}}": copy.METHODOLOGY_HEADLINE_REST || "our-part Journey.",
+      // Methodology — headline handled above
+      "{{METHODOLOGY_EYEBROW}}": copy.METHODOLOGY_EYEBROW || "✦ THE PROCESS",
       "{{METHODOLOGY_BODY}}": copy.METHODOLOGY_BODY || "",
-      "{{STEP_1_TITLE}}": copy.STEP_1_TITLE || "The Invitation",
-      "{{STEP_1_BODY}}": copy.STEP_1_BODY || "We begin with a discovery conversation to understand where you are and where you want to go.",
-      "{{STEP_2_TITLE}}": copy.STEP_2_TITLE || "The Architecture",
-      "{{STEP_2_BODY}}": copy.STEP_2_BODY || "Together we map your vision, offers, and the strategy to get there.",
-      "{{STEP_3_TITLE}}": copy.STEP_3_TITLE || "The Becoming",
-      "{{STEP_3_BODY}}": copy.STEP_3_BODY || "Deep work, accountability, and the integration of who you are becoming.",
-      "{{STEP_4_TITLE}}": copy.STEP_4_TITLE || "The Return",
-      "{{STEP_4_BODY}}": copy.STEP_4_BODY || "You leave with clarity, confidence, and a business that runs on your terms.",
+      "{{STEP_1_TITLE}}": copy.STEP_1_TITLE || "",
+      "{{STEP_1_BODY}}": copy.STEP_1_BODY || "",
+      "{{STEP_2_TITLE}}": copy.STEP_2_TITLE || "",
+      "{{STEP_2_BODY}}": copy.STEP_2_BODY || "",
+      "{{STEP_3_TITLE}}": copy.STEP_3_TITLE || "",
+      "{{STEP_3_BODY}}": copy.STEP_3_BODY || "",
+      "{{STEP_4_TITLE}}": copy.STEP_4_TITLE || "",
+      "{{STEP_4_BODY}}": copy.STEP_4_BODY || "",
 
       // Marquee
-      "{{MARQUEE_1}}": copy.MARQUEE_1 || copy.PILLAR_1_TITLE || "Clarity",
-      "{{MARQUEE_2}}": copy.MARQUEE_2 || copy.PILLAR_2_TITLE || "Confidence",
-      "{{MARQUEE_3}}": copy.MARQUEE_3 || copy.PILLAR_3_TITLE || "Growth",
-      "{{MARQUEE_4}}": copy.MARQUEE_4 || "Results",
+      "{{MARQUEE_1}}": copy.MARQUEE_1 || copy.PILLAR_1_TITLE || "",
+      "{{MARQUEE_2}}": copy.MARQUEE_2 || copy.PILLAR_2_TITLE || "",
+      "{{MARQUEE_3}}": copy.MARQUEE_3 || copy.PILLAR_3_TITLE || "",
+      "{{MARQUEE_4}}": copy.MARQUEE_4 || "",
 
-      // Lead magnet
-      "{{LEAD_MAGNET_EYEBROW}}": copy.LEAD_MAGNET_EYEBROW || "✦ A FREE GIFT",
-      "{{LEAD_MAGNET_DROPCAP}}": "T",
-      "{{LEAD_MAGNET_TITLE_REST}}": copy.LEAD_MAGNET_TITLE_REST || `he ${businessName} Starter Guide.`,
+      // Lead magnet — title handled above
+      "{{LEAD_MAGNET_EYEBROW}}": copy.LEAD_MAGNET_EYEBROW || "✦ A FREE GUIDE",
       "{{LEAD_MAGNET_BODY}}": copy.LEAD_MAGNET_BODY || copy.FOOTER_NEWSLETTER_TEXT || "",
       "{{LEAD_MAGNET_BTN}}": "SEND IT",
       "{{LEAD_MAGNET_NOTE}}": "No spam, ever. Unsubscribe anytime.",
 
-      // FAQ (feminine-bold-style headline)
-      "{{FAQ_EYEBROW}}": "✦ CONSIDERED QUESTIONS",
-      "{{FAQ_DROPCAP}}": "F",
-      "{{FAQ_HEADLINE_REST}}": "requently Asked Questions",
-
-      // Final CTA (feminine-bold-style)
+      // FAQ + Final CTA eyebrows (headlines handled above)
+      "{{FAQ_EYEBROW}}": "✦ COMMON QUESTIONS",
       "{{FINAL_CTA_EYEBROW}}": copy.FINAL_CTA_EYEBROW || "✦ YOUR NEXT STEP",
-      "{{FINAL_CTA_DROPCAP}}": "S",
-      "{{FINAL_CTA_HEADLINE_REST}}": copy.FINAL_CTA_HEADLINE_REST || "tarts With a Conversation.",
       "{{FINAL_CTA_BODY}}": copy.FINAL_CTA_SUBTEXT || "",
       "{{FINAL_CTA_BTN}}": copy.FINAL_CTA_BTN || "BOOK YOUR DISCOVERY CALL",
 
