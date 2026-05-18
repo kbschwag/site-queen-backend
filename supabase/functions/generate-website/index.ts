@@ -1058,7 +1058,13 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
           }
 
           // CSS is inline in these templates, so no stylesheet swap needed.
-          // Strip any unfilled placeholders.
+          // Auto-fill leftover placeholders, then strip anything still missing.
+          const autoFilledPage = await autoFillPlaceholders(
+            pageHtml,
+            { businessName, businessType, city: intake.business_city || intake.city || "", services: services.map((s: any) => typeof s === "string" ? s : s?.name || s?.title).filter(Boolean).join(", "), notes: tagline },
+            stockTerms,
+          );
+          pageHtml = autoFilledPage.html;
           await logUnfilledPlaceholders(supabase, clientId, templateId, page.slug, pageHtml);
           pageHtml = pageHtml.replace(/\{\{[^}]+\}\}/g, "");
 
