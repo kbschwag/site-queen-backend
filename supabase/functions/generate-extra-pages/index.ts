@@ -1155,6 +1155,7 @@ function assemblePage(opts: {
   <meta name="description" content="${escapeHTML(opts.description)}" />
   ${opts.googleFontsUrl ? `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link href="${opts.googleFontsUrl}" rel="stylesheet" />` : ""}
   ${opts.styleBlock}
+  ${FORM_STYLES}
 </head>
 <body>
 ${opts.headerHTML}
