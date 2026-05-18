@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
+import { autoFillPlaceholders } from "../_shared/autofill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -345,6 +346,12 @@ Return ONLY valid JSON. No markdown. No explanation:
       for (const [key, value] of Object.entries(aboutFill)) {
         aboutHTML = aboutHTML.split(key).join(value);
       }
+      const autoFilledAbout = await autoFillPlaceholders(
+        aboutHTML,
+        { businessName, businessType, city, services: services.map((s: any) => typeof s === "string" ? s : s?.name || s?.title).filter(Boolean).join(", ") },
+        stockTerms,
+      );
+      aboutHTML = autoFilledAbout.html;
       await logUnfilledPlaceholders(supabase, clientId, templateId, "about", aboutHTML);
       aboutHTML = aboutHTML.replace(/\{\{[^}]+\}\}/g, "");
       aboutHTML = aboutHTML.replace("</body>", analyticsScript + "\n</body>");
@@ -560,6 +567,12 @@ Return ONLY valid JSON. No markdown:
       for (const [key, value] of Object.entries(servicesFill)) {
         servicesHTML = servicesHTML.split(key).join(value);
       }
+      const autoFilledServices = await autoFillPlaceholders(
+        servicesHTML,
+        { businessName, businessType, city, services: services.map((s: any) => typeof s === "string" ? s : s?.name || s?.title).filter(Boolean).join(", ") },
+        stockTerms,
+      );
+      servicesHTML = autoFilledServices.html;
       await logUnfilledPlaceholders(supabase, clientId, templateId, "services", servicesHTML);
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");

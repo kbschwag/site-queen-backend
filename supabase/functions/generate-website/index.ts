@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
+import { autoFillPlaceholders } from "../_shared/autofill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -820,7 +821,13 @@ Return this exact JSON structure (every field required, no empty strings unless 
       );
     }
 
-    // Clean up any remaining unfilled placeholders
+    // Auto-fill any remaining placeholders with AI text + Unsplash images
+    const autoFilled = await autoFillPlaceholders(
+      html,
+      { businessName, businessType, city: intake.business_city || intake.city || "", services: services.map((s: any) => typeof s === "string" ? s : s?.name || s?.title).filter(Boolean).join(", "), notes: tagline },
+      stockTerms,
+    );
+    html = autoFilled.html;
     await logUnfilledPlaceholders(supabase, clientId, templateId, "index", html);
     html = html.replace(/\{\{[^}]+\}\}/g, "");
 
@@ -1051,7 +1058,13 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
           }
 
           // CSS is inline in these templates, so no stylesheet swap needed.
-          // Strip any unfilled placeholders.
+          // Auto-fill leftover placeholders, then strip anything still missing.
+          const autoFilledPage = await autoFillPlaceholders(
+            pageHtml,
+            { businessName, businessType, city: intake.business_city || intake.city || "", services: services.map((s: any) => typeof s === "string" ? s : s?.name || s?.title).filter(Boolean).join(", "), notes: tagline },
+            stockTerms,
+          );
+          pageHtml = autoFilledPage.html;
           await logUnfilledPlaceholders(supabase, clientId, templateId, page.slug, pageHtml);
           pageHtml = pageHtml.replace(/\{\{[^}]+\}\}/g, "");
 
