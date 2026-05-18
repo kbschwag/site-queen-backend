@@ -1660,7 +1660,7 @@ async function fetchUnsplashPhotoUrl(searchTerms: string[]): Promise<string> {
       );
       if (r.ok) {
         const p = await r.json();
-        if (p?.urls?.raw) return `${p.urls.raw}&w=1600&h=900&fit=crop&auto=format&q=80`;
+        if (p?.urls?.raw) return `${p.urls.raw}&w=1200&h=1200&fit=crop&crop=entropy&auto=format&q=80`;
       }
     } catch (e) {
       console.error(`[unsplash] error for "${term}":`, e);
