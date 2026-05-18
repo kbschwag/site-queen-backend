@@ -821,7 +821,13 @@ Return this exact JSON structure (every field required, no empty strings unless 
       );
     }
 
-    // Clean up any remaining unfilled placeholders
+    // Auto-fill any remaining placeholders with AI text + Unsplash images
+    const autoFilled = await autoFillPlaceholders(
+      html,
+      { businessName, businessType, city: intake.business_city || intake.city || "", services: services.map((s: any) => typeof s === "string" ? s : s?.name || s?.title).filter(Boolean).join(", "), notes: tagline },
+      stockTerms,
+    );
+    html = autoFilled.html;
     await logUnfilledPlaceholders(supabase, clientId, templateId, "index", html);
     html = html.replace(/\{\{[^}]+\}\}/g, "");
 
