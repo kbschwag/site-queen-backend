@@ -317,7 +317,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       }
 
       // Inject CSS variables
-      aboutHTML = injectCSSVars(aboutHTML, primaryColor, accentColor, fonts);
+      aboutHTML = injectCSSVars(aboutHTML, primaryColor, accentColor, fonts, templateId);
 
       // Fill all placeholders
       const aboutFill: Record<string, string> = {
