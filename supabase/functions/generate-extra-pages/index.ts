@@ -1075,10 +1075,20 @@ function formatBusinessHours(input: any): string {
   return "";
 }
 
-function extractShell(html: string): { styleBlock: string; headerHTML: string; footerHTML: string } {
+function extractShell(html: string): { styleBlock: string; headerHTML: string; footerHTML: string; fontsLinkHTML: string } {
   // Capture the FIRST <style>...</style> block (and any topbar styles too — usually only one)
   const styleMatch = html.match(/<style[^>]*>[\s\S]*?<\/style>/i);
   const styleBlock = styleMatch ? styleMatch[0] : "";
+
+  // Capture every Google Fonts <link> from <head> so we can reuse the EXACT
+  // typography the about page loads (otherwise contact/services fall back to
+  // Helvetica when the template's default fonts differ from the brand fonts).
+  const headMatch = html.match(/<head[\s\S]*?<\/head>/i);
+  const headHTML = headMatch ? headMatch[0] : html;
+  const fontLinks = [...headHTML.matchAll(/<link[^>]+href=["'][^"']*fonts\.(?:googleapis|gstatic)\.com[^"']*["'][^>]*\/?>/gi)].map((m) => m[0]);
+  // Always include preconnects (cheap, harmless) so the fonts load fast.
+  const preconnects = `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />`;
+  const fontsLinkHTML = fontLinks.length ? `${preconnects}${fontLinks.join("")}` : "";
 
   // Header: prefer the first <header>...</header>; fall back to any
   // top-of-page navigation element since some templates (e.g. feminine-bold)
@@ -1123,7 +1133,7 @@ function extractShell(html: string): { styleBlock: string; headerHTML: string; f
     if (divFooter) footerHTML = divFooter[0];
   }
 
-  return { styleBlock, headerHTML, footerHTML };
+  return { styleBlock, headerHTML, footerHTML, fontsLinkHTML };
 }
 
 function listClassNames(styleBlock: string): string[] {
