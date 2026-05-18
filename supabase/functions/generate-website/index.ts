@@ -802,7 +802,7 @@ Return this exact JSON structure (every field required, no empty strings unless 
         // Preference order: explicit full headline from Claude → legacy
         // dropcap+rest combined → safe generic default (NEVER coaching-specific).
         const owner = splitDrop(copy.OWNER_TITLE || intake.owner_title || ownerTitle || "");
-        const transformation = splitDrop(copy.TRANSFORMATION_HEADLINE || copy.TRANSFORMATION_HEADLINE_REST ? `F${copy.TRANSFORMATION_HEADLINE_REST}` : (copy.TRANSFORMATION_HEADLINE || ""));
+        const transformation = splitDrop(copy.TRANSFORMATION_HEADLINE || (copy.TRANSFORMATION_HEADLINE_REST ? `F${copy.TRANSFORMATION_HEADLINE_REST}` : ""));
         const philosophy = splitDrop(copy.PHILOSOPHY_HEADLINE || (copy.PHILOSOPHY_HEADLINE_REST ? `M${copy.PHILOSOPHY_HEADLINE_REST}` : "Our Approach."));
         const servicesH = splitDrop(copy.SERVICES_HEADLINE_FB || copy.SERVICES_HEADLINE || (copy.SERVICES_HEADLINE_REST ? `C${copy.SERVICES_HEADLINE_REST}` : "How We Help."));
         const testimonialsH = splitDrop(copy.TESTIMONIALS_HEADLINE_FB || copy.TESTIMONIALS_HEADLINE || (copy.TESTIMONIALS_HEADLINE_REST ? `Q${copy.TESTIMONIALS_HEADLINE_REST}` : "Words From Clients."));
