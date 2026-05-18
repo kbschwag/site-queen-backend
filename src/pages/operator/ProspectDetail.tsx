@@ -203,8 +203,23 @@ export default function ProspectDetail() {
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2">
-          <CardHeader><CardTitle className="text-base">Contact Log</CardTitle></CardHeader>
+        <Card className="md:col-span-3">
+          <CardHeader>
+            <CardTitle className="text-base">Request Changes</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Refine this prospect's demo site — same revision flow used for active clients. Changes deploy to staging immediately.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {demoUrl ? (
+              <InlineRevisionPanel clientId={c.id} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Generate the demo site first before requesting changes.</p>
+            )}
+          </CardContent>
+        </Card>
+
+
           <CardContent>
             {contactLog.length === 0 ? (
               <p className="text-sm text-muted-foreground">No contacts logged yet.</p>
