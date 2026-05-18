@@ -1221,7 +1221,7 @@ const FORM_STYLES = `<style id="sq-form-styles">
   }
 </style>`;
 
-
+function assemblePage(opts: {
   title: string;
   description: string;
   googleFontsUrl: string;
