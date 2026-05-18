@@ -567,6 +567,12 @@ Return ONLY valid JSON. No markdown:
       for (const [key, value] of Object.entries(servicesFill)) {
         servicesHTML = servicesHTML.split(key).join(value);
       }
+      const autoFilledServices = await autoFillPlaceholders(
+        servicesHTML,
+        { businessName, businessType, city, services: services.map((s: any) => typeof s === "string" ? s : s?.name || s?.title).filter(Boolean).join(", ") },
+        stockTerms,
+      );
+      servicesHTML = autoFilledServices.html;
       await logUnfilledPlaceholders(supabase, clientId, templateId, "services", servicesHTML);
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");
