@@ -33,12 +33,12 @@ async function fetchUnsplash(searchTerms: string[]): Promise<string> {
     if (!term) continue;
     try {
       const r = await fetch(
-        `https://api.unsplash.com/photos/random?query=${encodeURIComponent(term)}&orientation=landscape`,
+        `https://api.unsplash.com/photos/random?query=${encodeURIComponent(term)}`,
         { headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" } },
       );
       if (r.ok) {
         const p = await r.json();
-        if (p?.urls?.raw) return `${p.urls.raw}&w=1600&h=900&fit=crop&auto=format&q=80`;
+        if (p?.urls?.raw) return `${p.urls.raw}&w=1200&h=1200&fit=crop&crop=entropy&auto=format&q=80`;
       }
     } catch (e) {
       console.error(`[autofill/unsplash] error for "${term}":`, e);
