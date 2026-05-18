@@ -300,7 +300,55 @@ serve(async (req) => {
 
     const copyPrompt = `You are a professional copywriter for SiteQueen. Generate website copy for a ${businessType} business. Return ONLY valid JSON — no markdown, no explanation, no code blocks. Start with { and end with }.
 
-CRITICAL: Every field in this JSON must be filled. Empty strings are never acceptable unless the client has explicitly opted out of that section (like no_testimonials). If the client didn't provide information for a field, generate something specific and relevant based on everything you know about this business — their type, services, location, story, and tone. A trades contractor in Utah gets different content than a spa in Miami. Never use generic placeholder text. Every word should feel like it was written specifically for this business.
+${templateId === "business-professional" ? `═══════════════════════════════════════════════════════════
+CRITICAL CONTENT RULES — FOLLOW THESE EXACTLY (business-professional template)
+═══════════════════════════════════════════════════════════
+
+1) MULTI-SLOT HEADLINES MUST READ AS A COMPLETE SENTENCE.
+   The hero has three slots: HERO_HEADLINE_LINE1, HERO_HEADLINE_HIGHLIGHT, HERO_HEADLINE_LINE2.
+   They render stacked as one continuous headline. Read left-to-right top-to-bottom they MUST form a complete, grammatical phrase. NO hanging prepositions. NO fragments. NO incomplete thoughts.
+
+   GOOD:
+     LINE1="PHOENIX'S PREMIER" / HIGHLIGHT="TAX & ACCOUNTING" / LINE2="PARTNERS"
+     → "Phoenix's Premier Tax & Accounting Partners" ✓
+     LINE1="TRUSTED LEGAL" / HIGHLIGHT="COUNSEL" / LINE2="FOR ARIZONA BUSINESSES"
+     → "Trusted Legal Counsel for Arizona Businesses" ✓
+
+   BAD (never do this):
+     LINE1="PHOENIX'S PREMIER" / HIGHLIGHT="TAX & ACCOUNTING" / LINE2="SOLUTIONS FOR"
+     → "...Solutions For" ✗ (hanging "for")
+     LINE1="EXPERT GUIDANCE" / HIGHLIGHT="FOR EVERY" / LINE2="BUSINESS THAT"
+     → "...business that" ✗ (incomplete clause)
+
+   The same rule applies to ABOUT_HEADLINE_LINE1 + ABOUT_HEADLINE_LINE2 on about.html and SERVICES_HEADLINE + SERVICES_SUBHEADING on services.html.
+
+2) HEADLINE SLOTS ARE FOR SHORT PHRASES. BODY SLOTS ARE FOR SENTENCES.
+   Per-slot length limits:
+     - HERO_HEADLINE_LINE1, _HIGHLIGHT, _LINE2: 2-5 words each, max 30 characters
+     - ABOUT_HEADLINE_LINE1, ABOUT_HEADLINE_LINE2: 2-5 words each, max 30 characters
+     - SERVICES_HEADLINE, SERVICES_SUBHEADING: max 6 words each, MUST be noun phrases
+     - SERVE_HEADLINE, SERVE_SUBHEADING: max 6 words each
+     - Any other *_HEADLINE / SECTION_HEADING field: max 8 words
+
+   Body slots (HERO_SUBHEADING, SERVE_BODY, SERVICES_INTRO, ABOUT_STORY, *_DESC, etc.) take 1-3 full sentences (15-50 words).
+
+   If unsure whether content fits a headline or body slot, put it in the body slot. NEVER put a 15+ word sentence in a headline slot — it will render at 56-88px and break the page.
+
+3) FOOTER_LEGAL_NOTE IS A SHORT PROFESSIONAL DISCLAIMER, NOT A COPYRIGHT.
+   The footer already includes the copyright line ("© YYYY {Business Name} — All Rights Reserved") automatically. FOOTER_LEGAL_NOTE is a SEPARATE small-print disclaimer.
+
+   Good examples:
+     - "Not a law firm. Information provided is general and not legal advice."
+     - "Tax services provided by licensed professionals. Past performance does not guarantee results."
+     - "Information on this site is for general guidance only and does not constitute professional advice."
+
+   NEVER include "© YYYY", "All Rights Reserved", or repeat the business name in FOOTER_LEGAL_NOTE — that creates a duplicate copyright. If a meaningful disclaimer isn't appropriate for this business, return "".
+
+4) WHEN IN DOUBT, BE CONCISE.
+   Premium professional brands use restraint. A 4-word headline is more powerful than an 8-word one. Trust the design — short copy looks better in this template.
+═══════════════════════════════════════════════════════════
+
+` : ""}CRITICAL: Every field in this JSON must be filled. Empty strings are never acceptable unless the client has explicitly opted out of that section (like no_testimonials). If the client didn't provide information for a field, generate something specific and relevant based on everything you know about this business — their type, services, location, story, and tone. A trades contractor in Utah gets different content than a spa in Miami. Never use generic placeholder text. Every word should feel like it was written specifically for this business.
 
 FIELD-FILLING RULES:
 1. Client provided data → use it exactly, incorporating their exact words and phrases verbatim where possible.
