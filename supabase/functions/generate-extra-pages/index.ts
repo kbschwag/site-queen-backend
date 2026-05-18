@@ -317,7 +317,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       }
 
       // Inject CSS variables
-      aboutHTML = injectCSSVars(aboutHTML, primaryColor, accentColor, fonts);
+      aboutHTML = injectCSSVars(aboutHTML, primaryColor, accentColor, fonts, templateId);
 
       // Fill all placeholders
       const aboutFill: Record<string, string> = {
@@ -486,7 +486,7 @@ Return ONLY valid JSON. No markdown:
       }
 
       // Inject CSS variables
-      servicesHTML = injectCSSVars(servicesHTML, primaryColor, accentColor, fonts);
+      servicesHTML = injectCSSVars(servicesHTML, primaryColor, accentColor, fonts, templateId);
 
       // Fill all placeholders
       const servicesFill: Record<string, string> = {
@@ -841,8 +841,15 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-function injectCSSVars(html: string, primaryColor: string, accentColor: string, fonts: any): string {
-  const rootCSS = `:root {
+function injectCSSVars(
+  html: string,
+  primaryColor: string,
+  accentColor: string,
+  fonts: any,
+  templateId: string,
+): string {
+  if (templateId === "trades-hero") {
+    const rootCSS = `:root {
       --navy: #0d1d3b;
       --red: ${primaryColor};
       --gold: ${accentColor};
@@ -854,7 +861,35 @@ function injectCSSVars(html: string, primaryColor: string, accentColor: string, 
       --max-width: 1400px;
       --section-pad: 80px 24px;
     }`;
-  return html.replace(/:root\s*\{[^}]+\}/s, rootCSS);
+    return html.replace(/:root\s*\{[^}]+\}/s, rootCSS);
+  }
+
+  const varMap: Record<string, { primary: string[]; accent: string[] }> = {
+    "feminine-bold": { primary: ["--burgundy"], accent: ["--gold"] },
+    "business-professional": { primary: ["--navy", "--navy-mid"], accent: ["--gold", "--gold-dark"] },
+    "warm-welcome": { primary: ["--dark"], accent: ["--muted"] },
+    "restaurant": { primary: ["--red"], accent: ["--gold"] },
+  };
+
+  const mapping = varMap[templateId];
+  if (!mapping) return html;
+
+  return html.replace(/:root\s*\{([\s\S]*?)\}/, (_match, body) => {
+    let out = body;
+    if (primaryColor) {
+      for (const name of mapping.primary) {
+        const re = new RegExp(`(${name.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
+        if (re.test(out)) out = out.replace(re, `$1${primaryColor}$3`);
+      }
+    }
+    if (accentColor) {
+      for (const name of mapping.accent) {
+        const re = new RegExp(`(${name.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
+        if (re.test(out)) out = out.replace(re, `$1${accentColor}$3`);
+      }
+    }
+    return `:root {${out}}`;
+  });
 }
 
 function injectNoindex(html: string): string {
