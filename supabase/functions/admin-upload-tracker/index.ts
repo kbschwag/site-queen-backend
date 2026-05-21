@@ -21,28 +21,28 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const sharedSecret = Deno.env.get("STAGING_UPLOAD_SECRET") || "";
 
-  // Auth: must be owner
+  // Auth: accept EITHER an Owner-role JWT OR the shared STAGING_UPLOAD_SECRET header.
+  const headerSecret = req.headers.get("x-admin-secret") || "";
   const authHeader = req.headers.get("Authorization") || "";
-  if (!authHeader.startsWith("Bearer ")) {
+  let authorized = false;
+  if (sharedSecret && headerSecret && headerSecret === sharedSecret) {
+    authorized = true;
+  } else if (authHeader.startsWith("Bearer ")) {
+    const authClient = createClient(supabaseUrl, serviceKey);
+    const { data: { user } } =
+      await authClient.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (user) {
+      const { data: isOwner } = await authClient.rpc("has_role", {
+        _user_id: user.id, _role: "owner",
+      });
+      if (isOwner) authorized = true;
+    }
+  }
+  if (!authorized) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  const authClient = createClient(supabaseUrl, serviceKey);
-  const { data: { user }, error: userErr } =
-    await authClient.auth.getUser(authHeader.replace("Bearer ", ""));
-  if (userErr || !user) {
-    return new Response(JSON.stringify({ error: "Invalid token" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  const { data: isOwner } = await authClient.rpc("has_role", {
-    _user_id: user.id, _role: "owner",
-  });
-  if (!isOwner) {
-    return new Response(JSON.stringify({ error: "Forbidden — owner role required" }), {
-      status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
