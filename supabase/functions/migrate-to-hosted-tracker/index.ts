@@ -66,24 +66,30 @@ serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // Auth: owner-only
-  const authHeader = req.headers.get("Authorization") || "";
-  if (!authHeader.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401, headers: { ...CORS, "Content-Type": "application/json" },
-    });
-  }
-  const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-  if (!user) {
-    return new Response(JSON.stringify({ error: "Invalid token" }), {
-      status: 401, headers: { ...CORS, "Content-Type": "application/json" },
-    });
-  }
-  const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: user.id, _role: "admin" });
-  if (!isAdmin) {
-    return new Response(JSON.stringify({ error: "Forbidden — admin role required" }), {
-      status: 403, headers: { ...CORS, "Content-Type": "application/json" },
-    });
+  // Auth: secret-header fallback OR owner JWT
+  const migrationSecret = Deno.env.get("MIGRATION_SECRET");
+  const providedSecret = req.headers.get("X-Migration-Secret");
+  const secretOk = migrationSecret && providedSecret && providedSecret === migrationSecret;
+
+  if (!secretOk) {
+    const authHeader = req.headers.get("Authorization") || "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...CORS, "Content-Type": "application/json" },
+      });
+    }
+    const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (!user) {
+      return new Response(JSON.stringify({ error: "Invalid token" }), {
+        status: 401, headers: { ...CORS, "Content-Type": "application/json" },
+      });
+    }
+    const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: user.id, _role: "admin" });
+    if (!isAdmin) {
+      return new Response(JSON.stringify({ error: "Forbidden — admin role required" }), {
+        status: 403, headers: { ...CORS, "Content-Type": "application/json" },
+      });
+    }
   }
 
   let mode: "dry-run" | "live" = "dry-run";
