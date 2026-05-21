@@ -68,7 +68,9 @@ export type Database = {
           page_title: string | null
           referrer: string | null
           session_id: string | null
+          session_id_fk: string | null
           user_agent: string | null
+          visitor_id: string | null
         }
         Insert: {
           client_id: string
@@ -82,7 +84,9 @@ export type Database = {
           page_title?: string | null
           referrer?: string | null
           session_id?: string | null
+          session_id_fk?: string | null
           user_agent?: string | null
+          visitor_id?: string | null
         }
         Update: {
           client_id?: string
@@ -96,11 +100,164 @@ export type Database = {
           page_title?: string | null
           referrer?: string | null
           session_id?: string | null
+          session_id_fk?: string | null
           user_agent?: string | null
+          visitor_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "analytics_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_events_session_id_fk_fkey"
+            columns: ["session_id_fk"]
+            isOneToOne: false
+            referencedRelation: "analytics_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_events_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_visitors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analytics_sessions: {
+        Row: {
+          browser: string | null
+          client_id: string
+          converted: boolean
+          created_at: string
+          device_type: string | null
+          duration_seconds: number
+          ended_at: string
+          entry_page: string | null
+          exit_page: string | null
+          id: string
+          is_bounce: boolean
+          medium: string | null
+          page_count: number
+          referrer: string | null
+          source: string | null
+          started_at: string
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          visitor_id: string
+        }
+        Insert: {
+          browser?: string | null
+          client_id: string
+          converted?: boolean
+          created_at?: string
+          device_type?: string | null
+          duration_seconds?: number
+          ended_at?: string
+          entry_page?: string | null
+          exit_page?: string | null
+          id?: string
+          is_bounce?: boolean
+          medium?: string | null
+          page_count?: number
+          referrer?: string | null
+          source?: string | null
+          started_at?: string
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          visitor_id: string
+        }
+        Update: {
+          browser?: string | null
+          client_id?: string
+          converted?: boolean
+          created_at?: string
+          device_type?: string | null
+          duration_seconds?: number
+          ended_at?: string
+          entry_page?: string | null
+          exit_page?: string | null
+          id?: string
+          is_bounce?: boolean
+          medium?: string | null
+          page_count?: number
+          referrer?: string | null
+          source?: string | null
+          started_at?: string
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_sessions_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_visitors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analytics_visitors: {
+        Row: {
+          city: string | null
+          client_id: string
+          country: string | null
+          created_at: string
+          device_type: string | null
+          first_seen_at: string
+          first_source: string | null
+          id: string
+          last_seen_at: string
+          region: string | null
+          total_sessions: number
+          visitor_hash: string
+        }
+        Insert: {
+          city?: string | null
+          client_id: string
+          country?: string | null
+          created_at?: string
+          device_type?: string | null
+          first_seen_at?: string
+          first_source?: string | null
+          id?: string
+          last_seen_at?: string
+          region?: string | null
+          total_sessions?: number
+          visitor_hash: string
+        }
+        Update: {
+          city?: string | null
+          client_id?: string
+          country?: string | null
+          created_at?: string
+          device_type?: string | null
+          first_seen_at?: string
+          first_source?: string | null
+          id?: string
+          last_seen_at?: string
+          region?: string | null
+          total_sessions?: number
+          visitor_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_visitors_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
