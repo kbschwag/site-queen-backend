@@ -40,7 +40,7 @@ function buildInlineTrackerRegex(clientId: string): RegExp {
   const escUuid = clientId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // Non-greedy across newlines. Anchor on the unique CLIENT_ID line.
   return new RegExp(
-    `\\s*<script>\\s*\\n\\s*\\(function\\(\\) \\{\\s*\\n\\s*var CLIENT_ID = '${escUuid}';[\\s\\S]*?\\}\\)\\(\\);\\s*\\n<\\/script>`,
+    `\\s*<script>\\s*\\n\\s*\\(function\\(\\) \\{\\s*\\n\\s*var CLIENT_ID = '${escUuid}';[\\s\\S]*?\\}\\)\\(\\);\\s*<\\/script>`,
     "g",
   );
 }
