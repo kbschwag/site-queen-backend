@@ -63,6 +63,7 @@ export type Database = {
           device_type: string | null
           event_type: string
           id: string
+          is_bot: boolean
           metadata: Json | null
           page_path: string | null
           page_title: string | null
@@ -79,6 +80,7 @@ export type Database = {
           device_type?: string | null
           event_type: string
           id?: string
+          is_bot?: boolean
           metadata?: Json | null
           page_path?: string | null
           page_title?: string | null
@@ -95,6 +97,7 @@ export type Database = {
           device_type?: string | null
           event_type?: string
           id?: string
+          is_bot?: boolean
           metadata?: Json | null
           page_path?: string | null
           page_title?: string | null
