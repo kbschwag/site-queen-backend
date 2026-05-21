@@ -265,7 +265,6 @@ serve(async (req) => {
             if (!sErr) {
               sessionFkId = newSession.id;
               // Bump total_sessions
-              await supabase.rpc("noop").then(() => undefined).catch(() => undefined);
               const { data: vRow } = await supabase
                 .from("analytics_visitors").select("total_sessions").eq("id", visitorId).maybeSingle();
               if (vRow) {
