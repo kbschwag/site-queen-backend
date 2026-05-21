@@ -1804,6 +1804,48 @@ export type Database = {
           },
         ]
       }
+      tracker_migration_log: {
+        Row: {
+          client_id: string
+          created_at: string
+          diff_sample: string | null
+          error_message: string | null
+          file_path: string
+          file_size_after: number | null
+          file_size_before: number | null
+          id: string
+          match_count: number
+          mode: string
+          result: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          diff_sample?: string | null
+          error_message?: string | null
+          file_path: string
+          file_size_after?: number | null
+          file_size_before?: number | null
+          id?: string
+          match_count?: number
+          mode: string
+          result: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          diff_sample?: string | null
+          error_message?: string | null
+          file_path?: string
+          file_size_after?: number | null
+          file_size_before?: number | null
+          id?: string
+          match_count?: number
+          mode?: string
+          result?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
