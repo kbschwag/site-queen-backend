@@ -41,6 +41,7 @@ import OperatorSupportMessages from "./pages/operator/OperatorSupportMessages";
 import OperatorRevenue from "./pages/operator/OperatorRevenue";
 import OperatorTeam from "./pages/operator/OperatorTeam";
 import OperatorSettings from "./pages/operator/OperatorSettings";
+import OperatorTools from "./pages/operator/OperatorTools";
 import ClaimProspect from "./pages/ClaimProspect";
 
 const queryClient = new QueryClient();
