@@ -85,6 +85,11 @@ export function OperatorSidebar() {
     navItems.push({ title: "Settings", url: "/operator/settings", icon: Settings });
   }
 
+  // Tools — Owner only (one-time maintenance actions)
+  if (isOwner) {
+    navItems.push({ title: "Tools", url: "/operator/tools", icon: Wrench });
+  }
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/operator/login");
