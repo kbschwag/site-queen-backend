@@ -1,139 +1,230 @@
-# Prospects Feature — Build Plan
+# Analytics Infrastructure Upgrade — Build Plan
 
-## ⚠️ Constraints to confirm before I start
+Scope: add cookieless visitor + session tracking on top of the existing `analytics_events` / `analytics_daily_summary` / `track-event` stack. Prospect tracking (`track-prospect-view`, `clients.demo_view_count`) is explicitly out of scope and untouched.
 
-Three "already working" systems you reference need clarification — what's actually in the codebase doesn't fully match:
+---
 
-1. **Stripe** — there is **no Stripe integration in the project today**. No `stripe` edge functions, no checkout flow, no payment links. Client subscriptions today appear to be tracked manually (`stripe_customer_id` column exists but nothing writes to it). For "Convert to Client → send payment link / charge card," I'll need to either (a) enable Lovable's built-in Stripe payments now as part of this build, or (b) ship v1 with **Manual Paid only** and stub the Stripe options as "coming soon." Which do you want?
-2. **Call scheduling** — there's a `BookCall` page that links to your Calendly URL (stored in app settings). The banner's "Schedule a 10-min call" will deep-link to that same Calendly. There's no native booking system, so "auto-flip status to Call Booked on booking" can't happen automatically without a Calendly webhook — I'll add a manual "Mark call booked" action and we can wire the webhook later. OK?
-3. **Welcome email** — `resend-welcome-email` exists and will be reused for the converted-client email.
+## A. Schema changes
 
-Everything else (site generation pipeline, change_requests, notifications, client model, intake snapshot) is in place and will be reused as you described.
+### A1. New table — `analytics_visitors`
 
-## Data model changes
+```sql
+CREATE TABLE public.analytics_visitors (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id       uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+  visitor_hash    text NOT NULL,            -- sha256(client_id|ip|ua|daily_salt)
+  first_seen_at   timestamptz NOT NULL DEFAULT now(),
+  last_seen_at    timestamptz NOT NULL DEFAULT now(),
+  total_sessions  integer NOT NULL DEFAULT 1,
+  first_source    text,                     -- e.g. "google / organic", "(direct)"
+  country         text,
+  region          text,
+  city            text,
+  device_type     text,                     -- mobile | tablet | desktop
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (client_id, visitor_hash)
+);
 
-Extend `clients` (no new table — prospect is just a lifecycle stage):
-
-- `lifecycle_stage` text (enum): `prospect | pitched | viewed_demo | call_booked | replied | cold | converted | active_client`. Default `active_client` for existing rows so nothing breaks; new prospect inserts get `prospect`.
-- `outreach_channel` text
-- `date_last_contacted` timestamptz
-- `next_followup_date` date
-- `demo_url` text (mirrors `sites.staging_url` for fast list queries)
-- `demo_view_count` int default 0
-- `demo_last_viewed_at` timestamptz
-- `conversion_source` text (`self_serve_banner | operator_manual | applied`)
-- `payment_method_at_conversion` text (`stripe_subscription | manual_paid | charge_now`)
-- `pending_payment_expires_at` timestamptz (for 7-day manual-paid expiry)
-- `prospect_category` text, `prospect_city` text, `prospect_services` text, `prospect_notes` text, `prospect_existing_url` text (intake-light fields used until full intake is done)
-
-New table `prospect_contact_log`:
-- `id`, `client_id` (fk), `created_at`, `created_by`, `channel`, `note`, `next_followup_date`
-
-RLS: Owner + Partner full access; clients see nothing of this table.
-
-Index on `clients(lifecycle_stage, next_followup_date)` for the list view.
-
-## Sidebar + routes
-
-`OperatorSidebar`: insert **Prospects** (Target icon) between Dashboard and Applications, gated to Owner + Partner. Badge = count where `next_followup_date <= today` AND stage in active prospect stages.
-
-New routes under `/operator/prospects`:
-- `/operator/prospects` — list view
-- `/operator/prospects/:id` — detail page
-
-## List view (`OperatorProspects.tsx`)
-
-Dense table (shadcn `Table`), default sort `next_followup_date asc nulls last` with overdue highlighted red.
-
-Columns exactly as specced (business / category / city / status pill / added / last contacted / channel / follow-up / demo URL with copy / demo views with heat color / quick actions).
-
-Filter bar: status multi-select, category, city, follow-up bucket (Today / Week / Overdue / All).
-
-Row selection → bulk bar with: bulk status update, bulk follow-up date, CSV export (client-side blob download).
-
-`+ Add Prospect` button top-right opens modal.
-
-## Add Prospect modal
-
-Form fields per spec. On submit:
-1. Insert `clients` row with `lifecycle_stage='prospect'`, the prospect-light intake fields, no `user_id`.
-2. Insert minimal `sites` row + `intake_data` snapshot derived from the form (category → template, brand color, services, city).
-3. Invoke `generate-website` edge function.
-4. Toast + return to list with new row highlighted; demo URL column shows spinner until `sites.generation_status = ready`, then renders link (polled via React Query).
-
-## Detail page (`ProspectDetail.tsx`)
-
-Sections: header (name + status pill + actions), editable intake card, demo card (preview iframe thumbnail + Preview button + copy URL + view stats), contact log timeline, notes, danger-zone (Regenerate, Convert).
-
-Buttons: Status changer (Select), Log Contact (modal), Regenerate Site (calls `generate-website`), Convert to Client (modal).
-
-## Log Contact modal
-
-3 fields (channel / note / next follow-up, default = today + 3d). On submit:
-- Insert `prospect_contact_log` row
-- Update `clients.date_last_contacted`, `next_followup_date`, `outreach_channel`
-- If stage = `prospect`, auto-advance to `pitched`
-
-## Convert to Client modal
-
-Fields per spec. On submit (single edge function `convert-prospect-to-client`):
-- Set `lifecycle_stage='converted'`, `conversion_source='operator_manual'`, `payment_method_at_conversion=<choice>`, `plan=<choice>`, `domain_name`, `subscription_status='pending_payment'` (or `active` if manual paid + confirmed).
-- If `notes_from_conversation` present → insert `change_requests` row (status `pending`, `is_pre_launch=true`).
-- Payment branching:
-  - `stripe_subscription` → **needs Stripe decision above.** If enabled, create Stripe payment link via new edge function and return URL for operator to copy. If not enabled in v1, this radio option is hidden.
-  - `charge_now` → same dependency on Stripe.
-  - `manual_paid` → set `pending_payment_expires_at = now()+7d`; daily-checks function will flip back / notify on expiry.
-- Banner removal is automatic (banner only renders when stage is in prospect set).
-- Send welcome email via existing `resend-welcome-email`.
-
-## Demo banner
-
-Banner is injected by the **generation pipeline**, not added to live sites. In `generate-website/index.ts` (and any post-processing step), when the client's `lifecycle_stage` is in the prospect set at generation time, prepend a fixed-position banner template to each generated HTML page:
-
-```html
-<div id="sq-prospect-banner">
-  Sample preview built for <b>{{business_name}}</b> by SiteQueen
-  <a class="primary" href="{{claim_url}}">Claim this site — $39/month →</a>
-  <a class="secondary" href="{{call_url}}">Have questions? Schedule a 10-minute call →</a>
-</div>
-<script src="{{tracker_url}}" async></script>
+CREATE INDEX idx_visitors_client_lastseen
+  ON public.analytics_visitors (client_id, last_seen_at DESC);
+CREATE INDEX idx_visitors_hash_lookup
+  ON public.analytics_visitors (client_id, visitor_hash);
 ```
 
-- `claim_url` → `https://sitequeen.ai/claim/{prospect_id}` (new public page that pre-fills payment with Beta plan; on success calls edge fn that flips stage to `converted`, source `self_serve_banner`).
-- `call_url` → existing Calendly URL with prospect info as query params.
-- Tracker script pings new public edge fn `track-prospect-view` → increments `demo_view_count`, sets `demo_last_viewed_at`, fires notifications at first view and ≥3 views.
+RLS:
+```sql
+ALTER TABLE public.analytics_visitors ENABLE ROW LEVEL SECURITY;
 
-When prospect converts, banner persists in already-deployed HTML until next regeneration. Convert flow will auto-trigger a silent regenerate to strip the banner. (Acceptable trade-off — alternative is JS-based banner that checks status live, which I can do instead if you prefer; let me know.)
+CREATE POLICY "Clients read own visitors"
+  ON public.analytics_visitors FOR SELECT
+  USING (EXISTS (SELECT 1 FROM clients c
+                 WHERE c.id = analytics_visitors.client_id AND c.user_id = auth.uid()));
 
-## Dashboard metric card
+CREATE POLICY "Admins read all visitors"
+  ON public.analytics_visitors FOR SELECT
+  USING (has_role(auth.uid(), 'admin'));
 
-Add "Active Prospects" card to top row of `OperatorDashboard`: count of clients in active prospect stages, subtitle `X pitched this week` (count where stage moved to `pitched` in last 7d — derived from `date_last_contacted`).
+CREATE POLICY "Partners read all visitors"
+  ON public.analytics_visitors FOR SELECT
+  USING (EXISTS (SELECT 1 FROM profiles p
+                 WHERE p.user_id = auth.uid() AND p.role = 'partner'));
+```
+No INSERT/UPDATE/DELETE policies — writes happen via service-role inside `track-event`.
 
-## Notifications (reuses existing `notifications` table)
+### A2. New table — `analytics_sessions`
 
-New `type` values, all `target_role='operator'`:
-- `prospect_demo_first_view`
-- `prospect_demo_hot` (≥3 views)
-- `prospect_call_booked` (manual for now; webhook later)
-- `prospect_claim_abandoned` (1h after claim click w/o conversion — handled in `daily-checks`)
-- `prospect_self_serve_converted`
+```sql
+CREATE TABLE public.analytics_sessions (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id        uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+  visitor_id       uuid NOT NULL REFERENCES public.analytics_visitors(id) ON DELETE CASCADE,
+  started_at       timestamptz NOT NULL DEFAULT now(),
+  ended_at         timestamptz NOT NULL DEFAULT now(),
+  duration_seconds integer NOT NULL DEFAULT 0,
+  page_count       integer NOT NULL DEFAULT 0,
+  entry_page       text,
+  exit_page        text,
+  source           text,                  -- google, facebook, direct, ...
+  medium           text,                  -- organic, cpc, referral, ...
+  referrer         text,
+  utm_campaign     text,
+  utm_source       text,
+  utm_medium       text,
+  device_type      text,
+  browser          text,
+  is_bounce        boolean NOT NULL DEFAULT true,   -- true while page_count <= 1
+  converted        boolean NOT NULL DEFAULT false,  -- form_submission / phone_click / cta_click
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
 
-## Edge functions (new)
+CREATE INDEX idx_sessions_visitor_ended
+  ON public.analytics_sessions (visitor_id, ended_at DESC);
+CREATE INDEX idx_sessions_client_started
+  ON public.analytics_sessions (client_id, started_at DESC);
+```
 
-- `convert-prospect-to-client` — handles operator-initiated conversion, atomic
-- `track-prospect-view` — public (no JWT), increments view counter + fires notifications
-- `claim-prospect-site` — handles self-serve banner claim → payment → conversion (depends on Stripe decision)
+RLS: same three policies as visitors (client-own, admin-all, partner-all). SELECT only.
 
-Existing `daily-checks` extended to: expire `manual_paid` after 7d, fire claim-abandoned notifications.
+### A3. Additive changes to `analytics_events`
 
-## Out of scope (per your spec)
+```sql
+ALTER TABLE public.analytics_events
+  ADD COLUMN visitor_id    uuid REFERENCES public.analytics_visitors(id) ON DELETE SET NULL,
+  ADD COLUMN session_id_fk uuid REFERENCES public.analytics_sessions(id) ON DELETE SET NULL;
 
-Google Maps scrape, automated outreach sequences, A/B demos, funnel analytics charts, prospect-facing portal.
+CREATE INDEX idx_events_visitor    ON public.analytics_events (visitor_id);
+CREATE INDEX idx_events_session_fk ON public.analytics_events (session_id_fk);
+CREATE INDEX idx_events_client_created
+  ON public.analytics_events (client_id, created_at DESC);
+```
 
-## Open questions before I build
+Existing string `session_id`, `page_path`, `country`, etc. are untouched. No drops, no renames.
 
-1. **Stripe** — enable Lovable Payments now, or ship v1 with Manual Paid only?
-2. **Banner removal on convert** — auto-regenerate (small delay, clean) or live JS check (instant, slightly hacky)?
-3. **Call Booked auto-flip** — OK with manual mark for v1 (Calendly webhook later), or block on webhook setup?
+---
 
-Once you answer those I'll start. Roughly 1 migration + ~12 new files + edits to sidebar, dashboard, generate-website, daily-checks.
+## B. Edge Function changes (`track-event`)
+
+Modify in place; keep existing CORS, UUID check, event_type whitelist, rate limiting, sanitization, and `increment_analytics_summary` RPC call.
+
+### B1. Visitor hashing (cookieless, daily-rotating salt)
+
+```ts
+// daily salt rotates at UTC midnight, stable for 24h
+const todayUTC = new Date().toISOString().slice(0, 10);          // "2026-05-21"
+const dailySalt = await sha256(`${Deno.env.get("ANALYTICS_SALT_SECRET")}|${todayUTC}`);
+
+const ip = (req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || "")
+  .split(",")[0].trim();
+const ua = req.headers.get("user-agent") || "";
+const visitorHash = await sha256(`${event.client_id}|${ip}|${ua}|${dailySalt}`);
+```
+
+Properties:
+- No cookie, no localStorage, GDPR-friendly.
+- Same person across the day → same hash → same visitor row.
+- Next UTC day → new hash → new visitor row (acceptable; matches Plausible/Fathom).
+- Requires a new secret `ANALYTICS_SALT_SECRET` (one-time setup).
+
+### B2. Visitor + session resolution (per event)
+
+```
+1. UPSERT analytics_visitors on (client_id, visitor_hash):
+     - INSERT with first_seen_at=now, country/region/city/device_type, first_source
+     - ON CONFLICT: update last_seen_at = now (do NOT overwrite first_*)
+
+2. Find active session:
+     SELECT id FROM analytics_sessions
+     WHERE visitor_id = $1 AND ended_at > now() - interval '30 minutes'
+     ORDER BY ended_at DESC LIMIT 1;
+
+3a. If found → reuse: increment page_count (only on page_view),
+     set exit_page = current page_path,
+     update ended_at = now,
+     duration_seconds = ended_at - started_at,
+     is_bounce = (page_count <= 1),
+     converted = converted OR event_type IN ('form_submission','phone_click','cta_click').
+
+3b. If not found → create new session with entry_page, referrer, utm_*,
+     source/medium parsed from referrer + utm, device_type, browser.
+     Also bump analytics_visitors.total_sessions += 1.
+
+4. INSERT analytics_events with visitor_id + session_id_fk populated
+   (string session_id continues to be written for backward compatibility).
+
+5. Existing RPC increment_analytics_summary unchanged.
+```
+
+All five steps share one service-role client; total added latency budget ~30–60 ms.
+
+### B3. Country / geo population
+
+Read from edge CDN / Supabase request headers (in priority order):
+- `cf-ipcountry`, `x-vercel-ip-country` → country
+- `cf-ipcity` / `x-vercel-ip-city` → city
+- `cf-region` / `x-vercel-ip-country-region` → region
+
+Fallback: if none present, leave null (no third-party IP lookup yet — keeps function dependency-free and fast). Country is written to both `analytics_events.country` and `analytics_visitors.country` on first insert.
+
+### B4. Source / medium / UTM parsing
+
+Helper inline in the function. Parses `referrer` host against a small known-engine map (google/bing/duckduckgo → organic; facebook/instagram/linkedin/twitter → social; else referral) and reads `utm_*` from a `metadata.url` field that the JS tracker will start sending (additive — old tracker still works, just no UTMs).
+
+---
+
+## C. Migration approach
+
+- **Existing 681 events**: leave as legacy. No backfill of `visitor_id` / `session_id_fk` — we don't have raw IP/UA on historical rows, so a backfill would be guesswork. Dashboard queries that need visitor/session granularity will simply filter `visitor_id IS NOT NULL`. Aggregate counts (page_views, etc.) keep working from `analytics_daily_summary` unchanged.
+- **Ingest pause**: not needed. ALTERs are additive and non-blocking on a 681-row table. Function will be redeployed atomically. Worst case: a handful of events during the deploy window land with the old code (no visitor_id) — those just become "legacy" rows too.
+- **Rollback**: if the new function misbehaves we redeploy the previous version; the new columns sit empty and harm nothing.
+
+---
+
+## D. Order of operations (phased, each phase verifiable)
+
+**Phase 1 — Schema only**
+1. Migration creating `analytics_visitors` + `analytics_sessions` + indexes + RLS.
+2. Migration ALTERing `analytics_events` (add two FK cols + indexes).
+Verify: tables visible in DB, RLS on, indexes present, existing app still works (no code touched yet).
+
+**Phase 2 — Secret + ingest rewrite**
+3. Add secret `ANALYTICS_SALT_SECRET` (random 32-byte hex).
+4. Rewrite `track-event` per Section B. Deploy.
+Verify: hit `/track-event` from one live client site (or curl), confirm one new row in `analytics_visitors`, one in `analytics_sessions`, event row with both FKs populated, country populated, summary RPC still incremented.
+
+**Phase 3 — Tracker UTM upgrade (optional, additive)**
+5. Update the JS snippet embedded in deployed sites to send `metadata.url` (current page URL with query string) so UTMs are captured.
+Verify: a test page hit with `?utm_source=test&utm_campaign=foo` shows up correctly on the session row.
+
+**Phase 4 — Dashboard reads (separate prompt)**
+Out of scope for this build; queue for next round.
+
+**Phase 5 — `form_submissions` reconciliation (recommendation, not built)**
+See Section E.
+
+---
+
+## E. Risks, decisions to weigh, recommendations
+
+### Decisions I need from you
+
+1. **Daily salt rotation window.** UTC midnight is industry standard but means a visitor browsing across midnight counts as 2 visitors. Alternative: per-client local-tz midnight (more complex, marginal benefit). **Recommend: UTC.**
+2. **`ANALYTICS_SALT_SECRET`**: I'll generate and add it via the secrets tool in Phase 2 unless you want to provide one.
+3. **`form_submissions` vs `analytics_events.form_submission` (Section 5 of your spec).** Recommendation: **keep `form_submissions` as the source of truth for actual lead data** (name/email/phone/message) and stop double-writing a `form_submission` event row. Instead, the `handle-contact-form` function should call `increment_analytics_summary(..., 'form_submission')` directly so the daily counter still moves, and the session's `converted=true` flag gets set via a lightweight ping to `track-event` with `event_type='form_submission'` and no PII. Net effect: one row of truth per lead, no duplication, dashboards still accurate. **Confirm before I implement in a later phase.**
+4. **Geo source.** Hostinger-hosted client sites usually don't pass `cf-ipcountry` unless Cloudflare is fronted. If the headers are missing in practice we'll want to add a lightweight IP→country lookup (ipapi.co free tier, or a static MaxMind GeoLite DB). I'll measure in Phase 2 and report back before adding a dependency.
+
+### Assumptions
+
+- The JS tracker on deployed client sites already POSTs to `track-event` with `client_id`, `event_type`, `page_path`, `referrer`, `user_agent`, `session_id`, `metadata`. (Confirmed in `track-event/index.ts`.)
+- `clients.id` is the only client identifier sent — no spoofing protection beyond the existing UUID-format check. Acceptable for analytics (worst case: noisy data on one client).
+- We are OK that prospect demo traffic, which goes through `track-prospect-view` (separate function), will **not** appear in `analytics_visitors` / `analytics_sessions`. Hard rule per your spec.
+
+### Things that could go wrong
+
+- **Hash collisions across CG-NAT / corporate proxies**: many people behind one IP+UA become one "visitor". Mitigation: accept it (same limitation as Plausible/Fathom); UA usually differs enough.
+- **Bot traffic** will inflate visitor counts. Phase 2 will add a simple UA-based bot filter (skip writing visitor/session for known bot UAs) but still log the event.
+- **Race condition on visitor upsert**: two simultaneous events for the same new visitor could both try to INSERT. The unique constraint `(client_id, visitor_hash)` + `ON CONFLICT DO UPDATE` handles this safely.
+- **Session row updates on every event** add write load. With 14 clients / 681 events to date, not a concern; if/when traffic grows 100x we can move session updates to a periodic flush.
+
+---
+
+Stopping here. Awaiting your approval before Phase 1.
