@@ -41,6 +41,7 @@ import OperatorSupportMessages from "./pages/operator/OperatorSupportMessages";
 import OperatorRevenue from "./pages/operator/OperatorRevenue";
 import OperatorTeam from "./pages/operator/OperatorTeam";
 import OperatorSettings from "./pages/operator/OperatorSettings";
+import OperatorTools from "./pages/operator/OperatorTools";
 import ClaimProspect from "./pages/ClaimProspect";
 
 const queryClient = new QueryClient();
@@ -99,6 +100,7 @@ const App = () => (
               <Route path="revenue" element={<OperatorRevenue />} />
               <Route path="team" element={<OperatorTeam />} />
               <Route path="settings" element={<OperatorSettings />} />
+              <Route path="tools" element={<OperatorTools />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

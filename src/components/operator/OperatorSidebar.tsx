@@ -10,6 +10,7 @@ import {
   LogOut,
   Crown,
   Target,
+  Wrench,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -82,6 +83,11 @@ export function OperatorSidebar() {
   // Settings — Owner only
   if (isOwner) {
     navItems.push({ title: "Settings", url: "/operator/settings", icon: Settings });
+  }
+
+  // Tools — Owner only (one-time maintenance actions)
+  if (isOwner) {
+    navItems.push({ title: "Tools", url: "/operator/tools", icon: Wrench });
   }
 
   const handleSignOut = async () => {
