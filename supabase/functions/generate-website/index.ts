@@ -1051,20 +1051,16 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
 `;
     html = html.replace("</body>", safetyNet + "\n</body>");
 
-    // ── Inject analytics script before </body> ───────────────────────────
+    // ── Inject hosted-tracker loader snippet before </body> ──────────────
+    // Tracker JS lives at the tracker-v2 edge function (full cache-header
+    // control, immutable per version). DO NOT inline tracker logic here.
+    // To roll out a new tracker version: deploy tracker-v3 edge function,
+    // bump the URL below. Existing sites keep loading tracker-v2 safely.
     const analyticsScript = `
-<script>
-(function() {
-  var CLIENT_ID = '${clientId}';
-  var ENDPOINT = '${supabaseUrl}/functions/v1/track-event';
-  function getDevice() { return /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop'; }
-  function getSid() { var s = sessionStorage.getItem('sq_sid'); if (!s) { s = Math.random().toString(36).substr(2,9); sessionStorage.setItem('sq_sid',s); } return s; }
-  function track(type, meta) { fetch(ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ client_id:CLIENT_ID, event_type:type, page_path:window.location.pathname, page_title:document.title, referrer:document.referrer, device_type:getDevice(), session_id:getSid(), metadata:meta||{} }) }).catch(function(){}); }
-  track('page_view');
-  document.addEventListener('click', function(e) { var a = e.target.closest('a'); if (!a) return; if (a.href && a.href.indexOf('tel:') === 0) track('phone_click'); if (a.href && a.href.indexOf('mailto:') === 0) track('email_click'); });
-  document.addEventListener('submit', function() { track('form_submission'); });
-})();
-</script>`;
+<script async
+  src="${supabaseUrl}/functions/v1/tracker-v2"
+  data-client-id="${clientId}"
+  data-endpoint="${supabaseUrl}/functions/v1/track-event"></script>`;
     html = html.replace("</body>", analyticsScript + "\n</body>");
 
     // ── Wire any <form> on the page to handle-contact-form ───────────────

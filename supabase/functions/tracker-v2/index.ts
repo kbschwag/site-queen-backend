@@ -1,14 +1,19 @@
-/* SiteQueen analytics tracker v2 — hosted at:
- * https://onrvqbygwzhmhgkctcrm.supabase.co/storage/v1/object/public/tracker/tracker-v2.js
- *
- * Loaded by client sites via:
- *   <script async src="...tracker-v2.js"
- *           data-client-id="<uuid>"
- *           data-endpoint="<track-event url>"></script>
- *
- * This file is IMMUTABLE once 18+ sites point at it. Behavior changes
- * require a new filename (tracker-v3.js) + generator template update.
- */
+// Hosted SiteQueen analytics tracker — served as static JS with full
+// cache-header control. Loaded by client sites via:
+//
+//   <script async
+//     src="https://<project>.functions.supabase.co/tracker-v2"
+//     data-client-id="<uuid>"
+//     data-endpoint="<track-event url>"></script>
+//
+// IMMUTABILITY RULE: once any client site points at /tracker-v2, the JS
+// body returned here is frozen. Behavior-changing fixes ship as a new
+// function file `tracker-v3/index.ts` with the same shape. Only safe
+// in-place edits are zero-behavior-change patches (comments, whitespace).
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const TRACKER_JS = `/* SiteQueen analytics tracker v2 */
 (function () {
   var s = document.currentScript;
   if (!s) return;
@@ -58,3 +63,30 @@
   });
   document.addEventListener('submit', function () { track('form_submission'); });
 })();
+`;
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+};
+
+serve((req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
+  if (req.method !== "GET") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { ...CORS, "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+  return new Response(TRACKER_JS, {
+    status: 200,
+    headers: {
+      ...CORS,
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Cache-Control": "public, max-age=14400, immutable",
+    },
+  });
+});

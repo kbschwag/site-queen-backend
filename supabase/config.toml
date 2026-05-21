@@ -9,3 +9,7 @@ verify_jwt = false
 [functions.prospect-banner-js]
 verify_jwt = false
 
+[functions.tracker-v2]
+verify_jwt = false
+
+
