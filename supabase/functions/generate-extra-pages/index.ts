@@ -222,27 +222,21 @@ serve(async (req) => {
       "{{LEAD_MAGNET_IMAGE_URL}}": portfolioPhotos[4] || portfolioPhotos[0] || heroImageUrl,
     };
 
-    // ── Analytics script ─────────────────────────────────────────────────
+    // ── Analytics script (hosted tracker-v3) ─────────────────────────────
+    // Same loader as generate-website-part1 so home + extra pages emit the
+    // same v3 event set (click coords, scroll milestones, element_visible,
+    // engagement pings, page_exit, custom_event).
+    const clientTier = ((clientData as any)?.plan || "growth").toString();
+    const projectRefForBanner = (Deno.env.get("SUPABASE_URL") || "").replace("https://", "").split(".")[0];
     const analyticsScript = `
-<script>
-(function() {
-  var CLIENT_ID = '${clientId}';
-  var ENDPOINT = '${supabaseUrl}/functions/v1/track-event';
-  function getDevice() { return /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop'; }
-  function getSid() { var s = sessionStorage.getItem('sq_sid'); if (!s) { s = Math.random().toString(36).substr(2,9); sessionStorage.setItem('sq_sid',s); } return s; }
-  function track(type, meta) { fetch(ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ client_id:CLIENT_ID, event_type:type, page_path:window.location.pathname, page_title:document.title, referrer:document.referrer, device_type:getDevice(), session_id:getSid(), metadata:meta||{} }) }).catch(function(){}); }
-  track('page_view');
-  document.addEventListener('click', function(e) {
-    var a = e.target.closest('a');
-    if (!a) return;
-    if (a.href && a.href.indexOf('tel:') === 0) track('phone_click');
-    if (a.href && a.href.indexOf('mailto:') === 0) track('email_click');
-    if (a.classList.contains('btn')) track('cta_click', {text: a.textContent.trim().substring(0,50)});
-  });
-  document.addEventListener('submit', function(e) { track('form_submission', {form_id: e.target.id || 'unknown'}); });
-})();
-</script>
-<script async src="https://${(Deno.env.get('SUPABASE_URL')||'').replace('https://','').split('.')[0]}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
+<script async
+  src="${supabaseUrl}/functions/v1/tracker-v3"
+  data-client-id="${clientId}"
+  data-endpoint="${supabaseUrl}/functions/v1/track-event"
+  data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"
+  data-tier="${clientTier}"></script>
+<script async src="https://${projectRefForBanner}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
+
 
     const generated: string[] = [];
     const failed: string[] = [];
