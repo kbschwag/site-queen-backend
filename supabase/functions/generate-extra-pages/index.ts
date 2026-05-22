@@ -226,7 +226,10 @@ serve(async (req) => {
     // Same loader as generate-website-part1 so home + extra pages emit the
     // same v3 event set (click coords, scroll milestones, element_visible,
     // engagement pings, page_exit, custom_event).
-    const clientTier = ((clientData as any)?.plan || "growth").toString();
+    // Maps clients.plan -> tracker tier vocabulary. Only 'pro' enables Premium events.
+    const planToTrackerTier = (plan: string | null | undefined): string =>
+      plan === "pro" ? "premium" : "growth";
+    const clientTier = planToTrackerTier((clientData as any)?.plan);
     const projectRefForBanner = (Deno.env.get("SUPABASE_URL") || "").replace("https://", "").split(".")[0];
     const analyticsScript = `
 <script async
