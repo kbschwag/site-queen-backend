@@ -1436,3 +1436,88 @@ function applyBusinessProfessionalTokens(html: string, intake: any): string {
   }
   return out;
 }
+
+// ── Analytics tagging helpers (v3) ─────────────────────────────────────
+// Adds data-sq-track to CTAs and data-sq-milestone to key sections so the
+// tracker fires click/element_visible events with friendly names.
+// Idempotent: skipped if data-sq-track already present.
+function addAnalyticsTags(html: string, pageName: string): string {
+  if (/\bdata-sq-track=/.test(html)) return html;
+
+  let firstQuoteTagged = false;
+  // 1. Quote buttons/anchors → quote_click (+ milestone on first home-page match)
+  html = html.replace(
+    /(<(a|button)\b[^>]*?)(>[\s\S]{0,200}?(?:get\s+a\s+|request\s+a\s+|free\s+)?quote[\s\S]{0,200}?<\/\2>)/gi,
+    (_m, open, _tag, rest) => {
+      let extras = ` data-sq-track="quote_click"`;
+      if (!firstQuoteTagged && pageName === "home") {
+        extras += ` data-sq-milestone="get_a_quote_cta"`;
+        firstQuoteTagged = true;
+      }
+      return open + extras + rest;
+    },
+  );
+
+  // 2. Hero CTA fallback: if no quote button on this page, tag the first .btn-primary / .cta
+  if (!firstQuoteTagged) {
+    html = html.replace(
+      /(<a\b[^>]*class=["'][^"']*(?:btn-primary|cta-primary|hero-cta)[^"']*["'][^>]*?)(>)/i,
+      (_m, open, close) => `${open} data-sq-track="cta_${pageName}_hero"${close}`,
+    );
+  }
+
+  // 3. Learn More links
+  html = html.replace(
+    /(<(a|button)\b[^>]*?)(>[\s\S]{0,100}?learn\s+more[\s\S]{0,100}?<\/\2>)/gi,
+    (_m, open, _tag, rest) => `${open} data-sq-track="learn_more_${pageName}"${rest}`,
+  );
+
+  // 4. PDF download anchors
+  html = html.replace(
+    /(<a\b[^>]*?\bhref=["'][^"']*\.pdf[^"'#?]*[^"']*["'][^>]*?)(>)/gi,
+    (_m, open, close) => `${open} data-sq-track="pdf_download"${close}`,
+  );
+
+  // 5. Footer milestone (every page)
+  html = html.replace(
+    /(<footer\b)([^>]*?)(>)/i,
+    (_m, tag, attrs, close) =>
+      attrs.includes("data-sq-milestone") ? _m : `${tag}${attrs} data-sq-milestone="footer"${close}`,
+  );
+
+  // 6. Page-specific milestones
+  if (pageName === "contact") {
+    html = html.replace(
+      /(<form\b)([^>]*?)(>)/i,
+      (_m, t, a, c) => (a.includes("data-sq-milestone") ? _m : `${t}${a} data-sq-milestone="contact_form"${c}`),
+    );
+  }
+  if (pageName === "services") {
+    html = html.replace(
+      /(<(?:section|ul|div)\b[^>]*class=["'][^"']*service[^"']*["'][^>]*)(>)/i,
+      (_m, o, c) => (o.includes("data-sq-milestone") ? _m : `${o} data-sq-milestone="service_list"${c}`),
+    );
+    html = html.replace(
+      /(<form\b)([^>]*?)(>)/i,
+      (_m, t, a, c) => (a.includes("data-sq-milestone") ? _m : `${t}${a} data-sq-milestone="contact_form"${c}`),
+    );
+  }
+  if (pageName === "about") {
+    html = html.replace(
+      /(<section\b[^>]*class=["'][^"']*(?:team|our-team)[^"']*["'][^>]*)(>)/i,
+      (_m, o, c) => (o.includes("data-sq-milestone") ? _m : `${o} data-sq-milestone="our_team"${c}`),
+    );
+    html = html.replace(
+      /(<section\b[^>]*class=["'][^"']*(?:story|about)[^"']*["'][^>]*)(>)/i,
+      (_m, o, c) => (o.includes("data-sq-milestone") ? _m : `${o} data-sq-milestone="our_story"${c}`),
+    );
+  }
+  if (pageName === "gallery") {
+    html = html.replace(
+      /(<(?:div|section|ul)\b[^>]*class=["'][^"']*(?:gallery|portfolio|grid)[^"']*["'][^>]*)(>)/i,
+      (_m, o, c) => (o.includes("data-sq-milestone") ? _m : `${o} data-sq-milestone="gallery_grid"${c}`),
+    );
+  }
+
+  return html;
+}
