@@ -829,7 +829,26 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
       read: false,
     });
 
+    // ── Conditional screenshot capture (Phase 5 dormant) ─────────────────
+    // Only fires when SCREENSHOTONE_API_KEY is set. Today: unset → no-op.
+    if (Deno.env.get("SCREENSHOTONE_API_KEY")) {
+      const domain = (clientData as any)?.domain_name || `${STAGING_BASE_URL}/${clientId}`;
+      const baseUrl = domain.startsWith("http") ? domain : `https://${domain}`;
+      const pageList = [{ path: "/", url: `${baseUrl}/`, name: "Home" }];
+      for (const slug of generated) {
+        if (slug === "home" || slug === "index") continue;
+        const niceName = slug.charAt(0).toUpperCase() + slug.slice(1);
+        pageList.push({ path: `/${slug}`, url: `${baseUrl}/${slug}.html`, name: niceName });
+      }
+      fetch(`${supabaseUrl}/functions/v1/capture-page-screenshots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({ client_id: clientId, pages: pageList }),
+      }).catch((e) => console.error("[extra-pages] screenshot capture failed (non-blocking):", e));
+    }
+
     console.log(`[extra-pages] ✓ All done. Built: ${generated.join(", ")}`);
+
 
     return new Response(
       JSON.stringify({ success: true, generated, failed, staging_url: stagingURL }),
