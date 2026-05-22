@@ -18,6 +18,10 @@ verify_jwt = false
 [functions.track-form-submission]
 verify_jwt = false
 
+[functions.capture-page-screenshots]
+verify_jwt = false
+
+
 
 
 
