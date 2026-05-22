@@ -1059,7 +1059,10 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
     // control, immutable per version). DO NOT inline tracker logic here.
     // To roll out a new tracker version: deploy tracker-v4 edge function,
     // bump the URL below. Existing sites keep loading tracker-v3 safely.
-    const clientTier = ((clientData as any)?.plan || "growth").toString();
+    // Maps clients.plan -> tracker tier vocabulary. Only 'pro' enables Premium events.
+    const planToTrackerTier = (plan: string | null | undefined): string =>
+      plan === "pro" ? "premium" : "growth";
+    const clientTier = planToTrackerTier((clientData as any)?.plan);
     const analyticsScript = `
 <script async
   src="${supabaseUrl}/functions/v1/tracker-v3"

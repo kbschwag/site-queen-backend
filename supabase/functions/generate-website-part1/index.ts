@@ -473,7 +473,10 @@ Return this exact JSON structure (every field required, no empty strings unless 
     // Inject hosted-tracker loader snippet before </body> (tracker-v3)
     // Tracker JS lives at the tracker-v3 edge function (immutable per version).
     // To roll out a new version, deploy tracker-v4 and bump the URL below.
-    const clientTier = ((clientData as any)?.plan || "growth").toString();
+    // Maps clients.plan -> tracker tier vocabulary. Only 'pro' enables Premium events.
+    const planToTrackerTier = (plan: string | null | undefined): string =>
+      plan === "pro" ? "premium" : "growth";
+    const clientTier = planToTrackerTier((clientData as any)?.plan);
     const analyticsScript = `
 <script async
   src="${supabaseUrl}/functions/v1/tracker-v3"
