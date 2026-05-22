@@ -222,27 +222,21 @@ serve(async (req) => {
       "{{LEAD_MAGNET_IMAGE_URL}}": portfolioPhotos[4] || portfolioPhotos[0] || heroImageUrl,
     };
 
-    // ── Analytics script ─────────────────────────────────────────────────
+    // ── Analytics script (hosted tracker-v3) ─────────────────────────────
+    // Same loader as generate-website-part1 so home + extra pages emit the
+    // same v3 event set (click coords, scroll milestones, element_visible,
+    // engagement pings, page_exit, custom_event).
+    const clientTier = ((clientData as any)?.plan || "growth").toString();
+    const projectRefForBanner = (Deno.env.get("SUPABASE_URL") || "").replace("https://", "").split(".")[0];
     const analyticsScript = `
-<script>
-(function() {
-  var CLIENT_ID = '${clientId}';
-  var ENDPOINT = '${supabaseUrl}/functions/v1/track-event';
-  function getDevice() { return /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop'; }
-  function getSid() { var s = sessionStorage.getItem('sq_sid'); if (!s) { s = Math.random().toString(36).substr(2,9); sessionStorage.setItem('sq_sid',s); } return s; }
-  function track(type, meta) { fetch(ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ client_id:CLIENT_ID, event_type:type, page_path:window.location.pathname, page_title:document.title, referrer:document.referrer, device_type:getDevice(), session_id:getSid(), metadata:meta||{} }) }).catch(function(){}); }
-  track('page_view');
-  document.addEventListener('click', function(e) {
-    var a = e.target.closest('a');
-    if (!a) return;
-    if (a.href && a.href.indexOf('tel:') === 0) track('phone_click');
-    if (a.href && a.href.indexOf('mailto:') === 0) track('email_click');
-    if (a.classList.contains('btn')) track('cta_click', {text: a.textContent.trim().substring(0,50)});
-  });
-  document.addEventListener('submit', function(e) { track('form_submission', {form_id: e.target.id || 'unknown'}); });
-})();
-</script>
-<script async src="https://${(Deno.env.get('SUPABASE_URL')||'').replace('https://','').split('.')[0]}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
+<script async
+  src="${supabaseUrl}/functions/v1/tracker-v3"
+  data-client-id="${clientId}"
+  data-endpoint="${supabaseUrl}/functions/v1/track-event"
+  data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"
+  data-tier="${clientTier}"></script>
+<script async src="https://${projectRefForBanner}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
+
 
     const generated: string[] = [];
     const failed: string[] = [];
@@ -354,6 +348,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       aboutHTML = autoFilledAbout.html;
       await logUnfilledPlaceholders(supabase, clientId, templateId, "about", aboutHTML);
       aboutHTML = aboutHTML.replace(/\{\{[^}]+\}\}/g, "");
+      aboutHTML = addAnalyticsTags(aboutHTML, "about");
       aboutHTML = aboutHTML.replace("</body>", analyticsScript + "\n</body>");
       aboutHTML = wireContactForms(aboutHTML, clientId, supabaseUrl);
       aboutHTML = injectFavicon(aboutHTML, faviconTag);
@@ -575,6 +570,7 @@ Return ONLY valid JSON. No markdown:
       servicesHTML = autoFilledServices.html;
       await logUnfilledPlaceholders(supabase, clientId, templateId, "services", servicesHTML);
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
+      servicesHTML = addAnalyticsTags(servicesHTML, "services");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");
       servicesHTML = wireContactForms(servicesHTML, clientId, supabaseUrl);
       servicesHTML = injectFavicon(servicesHTML, faviconTag);
@@ -781,6 +777,9 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
           });
 
           // Wire any <form> on the page to handle-contact-form
+          const slugLower = (spec.slug || "").toLowerCase();
+          const pageName = ["contact","gallery","about","services","home"].includes(slugLower) ? slugLower : "other";
+          fullHTML = addAnalyticsTags(fullHTML, pageName);
           fullHTML = wireContactForms(fullHTML, clientId, supabaseUrl);
           fullHTML = injectFavicon(fullHTML, faviconTag);
 
@@ -830,7 +829,26 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
       read: false,
     });
 
+    // ── Conditional screenshot capture (Phase 5 dormant) ─────────────────
+    // Only fires when SCREENSHOTONE_API_KEY is set. Today: unset → no-op.
+    if (Deno.env.get("SCREENSHOTONE_API_KEY")) {
+      const domain = (clientData as any)?.domain_name || `${STAGING_BASE_URL}/${clientId}`;
+      const baseUrl = domain.startsWith("http") ? domain : `https://${domain}`;
+      const pageList = [{ path: "/", url: `${baseUrl}/`, name: "Home" }];
+      for (const slug of generated) {
+        if (slug === "home" || slug === "index") continue;
+        const niceName = slug.charAt(0).toUpperCase() + slug.slice(1);
+        pageList.push({ path: `/${slug}`, url: `${baseUrl}/${slug}.html`, name: niceName });
+      }
+      fetch(`${supabaseUrl}/functions/v1/capture-page-screenshots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({ client_id: clientId, pages: pageList }),
+      }).catch((e) => console.error("[extra-pages] screenshot capture failed (non-blocking):", e));
+    }
+
     console.log(`[extra-pages] ✓ All done. Built: ${generated.join(", ")}`);
+
 
     return new Response(
       JSON.stringify({ success: true, generated, failed, staging_url: stagingURL }),
@@ -1435,4 +1453,89 @@ function applyBusinessProfessionalTokens(html: string, intake: any): string {
     }
   }
   return out;
+}
+
+// ── Analytics tagging helpers (v3) ─────────────────────────────────────
+// Adds data-sq-track to CTAs and data-sq-milestone to key sections so the
+// tracker fires click/element_visible events with friendly names.
+// Idempotent: skipped if data-sq-track already present.
+function addAnalyticsTags(html: string, pageName: string): string {
+  if (/\bdata-sq-track=/.test(html)) return html;
+
+  let firstQuoteTagged = false;
+  // 1. Quote buttons/anchors → quote_click (+ milestone on first home-page match)
+  html = html.replace(
+    /(<(a|button)\b[^>]*?)(>[\s\S]{0,200}?(?:get\s+a\s+|request\s+a\s+|free\s+)?quote[\s\S]{0,200}?<\/\2>)/gi,
+    (_m, open, _tag, rest) => {
+      let extras = ` data-sq-track="quote_click"`;
+      if (!firstQuoteTagged && pageName === "home") {
+        extras += ` data-sq-milestone="get_a_quote_cta"`;
+        firstQuoteTagged = true;
+      }
+      return open + extras + rest;
+    },
+  );
+
+  // 2. Hero CTA fallback: if no quote button on this page, tag the first .btn-primary / .cta
+  if (!firstQuoteTagged) {
+    html = html.replace(
+      /(<a\b[^>]*class=["'][^"']*(?:btn-primary|cta-primary|hero-cta)[^"']*["'][^>]*?)(>)/i,
+      (_m, open, close) => `${open} data-sq-track="cta_${pageName}_hero"${close}`,
+    );
+  }
+
+  // 3. Learn More links
+  html = html.replace(
+    /(<(a|button)\b[^>]*?)(>[\s\S]{0,100}?learn\s+more[\s\S]{0,100}?<\/\2>)/gi,
+    (_m, open, _tag, rest) => `${open} data-sq-track="learn_more_${pageName}"${rest}`,
+  );
+
+  // 4. PDF download anchors
+  html = html.replace(
+    /(<a\b[^>]*?\bhref=["'][^"']*\.pdf[^"'#?]*[^"']*["'][^>]*?)(>)/gi,
+    (_m, open, close) => `${open} data-sq-track="pdf_download"${close}`,
+  );
+
+  // 5. Footer milestone (every page)
+  html = html.replace(
+    /(<footer\b)([^>]*?)(>)/i,
+    (_m, tag, attrs, close) =>
+      attrs.includes("data-sq-milestone") ? _m : `${tag}${attrs} data-sq-milestone="footer"${close}`,
+  );
+
+  // 6. Page-specific milestones
+  if (pageName === "contact") {
+    html = html.replace(
+      /(<form\b)([^>]*?)(>)/i,
+      (_m, t, a, c) => (a.includes("data-sq-milestone") ? _m : `${t}${a} data-sq-milestone="contact_form"${c}`),
+    );
+  }
+  if (pageName === "services") {
+    html = html.replace(
+      /(<(?:section|ul|div)\b[^>]*class=["'][^"']*service[^"']*["'][^>]*)(>)/i,
+      (_m, o, c) => (o.includes("data-sq-milestone") ? _m : `${o} data-sq-milestone="service_list"${c}`),
+    );
+    html = html.replace(
+      /(<form\b)([^>]*?)(>)/i,
+      (_m, t, a, c) => (a.includes("data-sq-milestone") ? _m : `${t}${a} data-sq-milestone="contact_form"${c}`),
+    );
+  }
+  if (pageName === "about") {
+    html = html.replace(
+      /(<section\b[^>]*class=["'][^"']*(?:team|our-team)[^"']*["'][^>]*)(>)/i,
+      (_m, o, c) => (o.includes("data-sq-milestone") ? _m : `${o} data-sq-milestone="our_team"${c}`),
+    );
+    html = html.replace(
+      /(<section\b[^>]*class=["'][^"']*(?:story|about)[^"']*["'][^>]*)(>)/i,
+      (_m, o, c) => (o.includes("data-sq-milestone") ? _m : `${o} data-sq-milestone="our_story"${c}`),
+    );
+  }
+  if (pageName === "gallery") {
+    html = html.replace(
+      /(<(?:div|section|ul)\b[^>]*class=["'][^"']*(?:gallery|portfolio|grid)[^"']*["'][^>]*)(>)/i,
+      (_m, o, c) => (o.includes("data-sq-milestone") ? _m : `${o} data-sq-milestone="gallery_grid"${c}`),
+    );
+  }
+
+  return html;
 }
