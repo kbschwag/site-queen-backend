@@ -107,11 +107,15 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const validEvents = ["page_view", "phone_click", "email_click", "cta_click", "form_submission"];
+    const V2_EVENTS = ["page_view", "phone_click", "email_click", "cta_click", "form_submission"];
+    const V3_EVENTS = ["click", "scroll_depth", "element_visible", "engagement_ping", "page_exit", "custom_event"];
+    const validEvents = [...V2_EVENTS, ...V3_EVENTS];
     if (!validEvents.includes(event.event_type)) {
       return new Response(JSON.stringify({ error: "Invalid event_type" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    const isV3Event = V3_EVENTS.includes(event.event_type);
+
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -282,6 +286,31 @@ serve(async (req) => {
       }
     }
 
+    // ---------- v3 column routing from metadata ----------
+    const v3Cols: Record<string, unknown> = {};
+    if (event.event_type === "click") {
+      if (typeof metadata.x_pct === "number") v3Cols.click_x_pct = metadata.x_pct;
+      if (typeof metadata.y_pct === "number") v3Cols.click_y_pct = metadata.y_pct;
+    }
+    if (event.event_type === "scroll_depth" && typeof metadata.milestone === "number") {
+      v3Cols.scroll_milestone = metadata.milestone;
+    }
+    if (event.event_type === "element_visible" && typeof metadata.milestone_name === "string") {
+      v3Cols.milestone_name = metadata.milestone_name;
+    }
+    if (event.event_type === "page_exit" && typeof metadata.seconds_on_page === "number") {
+      v3Cols.seconds_on_page = metadata.seconds_on_page;
+    }
+    if (event.event_type === "custom_event" && typeof metadata.event_name === "string") {
+      v3Cols.event_name = metadata.event_name;
+    }
+    if (metadata.element && typeof metadata.element === "object") {
+      v3Cols.element = metadata.element;
+    }
+    if (typeof event.tier === "string") {
+      v3Cols.tier = event.tier;
+    }
+
     // ---------- event insert (always) ----------
     await supabase.from("analytics_events").insert({
       client_id: event.client_id,
@@ -297,10 +326,11 @@ serve(async (req) => {
       visitor_id: visitorId,
       session_id_fk: sessionFkId,
       is_bot: isBot,
+      ...v3Cols,
     });
 
-    // Daily summary (unchanged) — skip for bots so dashboards stay clean
-    if (!isBot) {
+    // Daily summary — skip for bots AND for v3-only event types (no bucket exists)
+    if (!isBot && !isV3Event) {
       const today = new Date().toISOString().split("T")[0];
       await supabase.rpc("increment_analytics_summary", {
         p_date: today,
@@ -308,6 +338,7 @@ serve(async (req) => {
         p_event_type: event.event_type,
       });
     }
+
 
     return new Response(
       JSON.stringify({ success: true, is_bot: isBot, new_session: isNewSession }),
