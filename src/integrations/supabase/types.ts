@@ -57,53 +57,77 @@ export type Database = {
       }
       analytics_events: {
         Row: {
+          click_x_pct: number | null
+          click_y_pct: number | null
           client_id: string
           country: string | null
           created_at: string
           device_type: string | null
+          element: Json | null
+          event_name: string | null
           event_type: string
           id: string
           is_bot: boolean
           metadata: Json | null
+          milestone_name: string | null
           page_path: string | null
           page_title: string | null
           referrer: string | null
+          scroll_milestone: number | null
+          seconds_on_page: number | null
           session_id: string | null
           session_id_fk: string | null
+          tier: string | null
           user_agent: string | null
           visitor_id: string | null
         }
         Insert: {
+          click_x_pct?: number | null
+          click_y_pct?: number | null
           client_id: string
           country?: string | null
           created_at?: string
           device_type?: string | null
+          element?: Json | null
+          event_name?: string | null
           event_type: string
           id?: string
           is_bot?: boolean
           metadata?: Json | null
+          milestone_name?: string | null
           page_path?: string | null
           page_title?: string | null
           referrer?: string | null
+          scroll_milestone?: number | null
+          seconds_on_page?: number | null
           session_id?: string | null
           session_id_fk?: string | null
+          tier?: string | null
           user_agent?: string | null
           visitor_id?: string | null
         }
         Update: {
+          click_x_pct?: number | null
+          click_y_pct?: number | null
           client_id?: string
           country?: string | null
           created_at?: string
           device_type?: string | null
+          element?: Json | null
+          event_name?: string | null
           event_type?: string
           id?: string
           is_bot?: boolean
           metadata?: Json | null
+          milestone_name?: string | null
           page_path?: string | null
           page_title?: string | null
           referrer?: string | null
+          scroll_milestone?: number | null
+          seconds_on_page?: number | null
           session_id?: string | null
           session_id_fk?: string | null
+          tier?: string | null
           user_agent?: string | null
           visitor_id?: string | null
         }
@@ -773,6 +797,56 @@ export type Database = {
           },
         ]
       }
+      client_page_screenshots: {
+        Row: {
+          captured_at: string | null
+          client_id: string
+          desktop_height: number | null
+          desktop_url: string | null
+          desktop_width: number | null
+          id: string
+          mobile_height: number | null
+          mobile_url: string | null
+          mobile_width: number | null
+          page_name: string | null
+          page_path: string
+        }
+        Insert: {
+          captured_at?: string | null
+          client_id: string
+          desktop_height?: number | null
+          desktop_url?: string | null
+          desktop_width?: number | null
+          id?: string
+          mobile_height?: number | null
+          mobile_url?: string | null
+          mobile_width?: number | null
+          page_name?: string | null
+          page_path: string
+        }
+        Update: {
+          captured_at?: string | null
+          client_id?: string
+          desktop_height?: number | null
+          desktop_url?: string | null
+          desktop_width?: number | null
+          id?: string
+          mobile_height?: number | null
+          mobile_url?: string | null
+          mobile_width?: number | null
+          page_name?: string | null
+          page_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_page_screenshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           accent_color: string | null
@@ -1063,6 +1137,50 @@ export type Database = {
           },
         ]
       }
+      custom_event_definitions: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          description: string | null
+          display_name: string
+          event_name: string
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          description?: string | null
+          display_name: string
+          event_name: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          description?: string | null
+          display_name?: string
+          event_name?: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_event_definitions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emails_log: {
         Row: {
           application_id: string | null
@@ -1111,38 +1229,70 @@ export type Database = {
       form_submissions: {
         Row: {
           client_id: string
+          created_at: string
           email: string | null
+          fields: Json | null
           id: string
           ip_address: string | null
+          is_spam: boolean | null
           message: string | null
           name: string | null
+          page_path: string | null
           phone: string | null
+          referrer: string | null
           service: string | null
+          session_id: string | null
+          source: string | null
           submitted_at: string
+          visitor_id: string | null
         }
         Insert: {
           client_id: string
+          created_at?: string
           email?: string | null
+          fields?: Json | null
           id?: string
           ip_address?: string | null
+          is_spam?: boolean | null
           message?: string | null
           name?: string | null
+          page_path?: string | null
           phone?: string | null
+          referrer?: string | null
           service?: string | null
+          session_id?: string | null
+          source?: string | null
           submitted_at?: string
+          visitor_id?: string | null
         }
         Update: {
           client_id?: string
+          created_at?: string
           email?: string | null
+          fields?: Json | null
           id?: string
           ip_address?: string | null
+          is_spam?: boolean | null
           message?: string | null
           name?: string | null
+          page_path?: string | null
           phone?: string | null
+          referrer?: string | null
           service?: string | null
+          session_id?: string | null
+          source?: string | null
           submitted_at?: string
+          visitor_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "form_submissions_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_visitors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       generation_diagnostics: {
         Row: {
