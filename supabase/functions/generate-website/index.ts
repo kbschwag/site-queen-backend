@@ -1051,17 +1051,24 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
 `;
     html = html.replace("</body>", safetyNet + "\n</body>");
 
-    // ── Inject hosted-tracker loader snippet before </body> ──────────────
-    // Tracker JS lives at the tracker-v2 edge function (full cache-header
+    // ── Tag interactive elements + milestones for v3 analytics ───────────
+    html = addAnalyticsTags(html, "home");
+
+    // ── Inject hosted-tracker loader snippet before </body> (tracker-v3) ─
+    // Tracker JS lives at the tracker-v3 edge function (full cache-header
     // control, immutable per version). DO NOT inline tracker logic here.
-    // To roll out a new tracker version: deploy tracker-v3 edge function,
-    // bump the URL below. Existing sites keep loading tracker-v2 safely.
+    // To roll out a new tracker version: deploy tracker-v4 edge function,
+    // bump the URL below. Existing sites keep loading tracker-v3 safely.
+    const clientTier = ((clientData as any)?.plan || "growth").toString();
     const analyticsScript = `
 <script async
-  src="${supabaseUrl}/functions/v1/tracker-v2"
+  src="${supabaseUrl}/functions/v1/tracker-v3"
   data-client-id="${clientId}"
-  data-endpoint="${supabaseUrl}/functions/v1/track-event"></script>`;
+  data-endpoint="${supabaseUrl}/functions/v1/track-event"
+  data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"
+  data-tier="${clientTier}"></script>`;
     html = html.replace("</body>", analyticsScript + "\n</body>");
+
 
     // ── Wire any <form> on the page to handle-contact-form ───────────────
     html = wireContactForms(html, clientId, supabaseUrl);

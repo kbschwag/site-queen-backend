@@ -467,15 +467,22 @@ Return this exact JSON structure (every field required, no empty strings unless 
     // Clean up any remaining unfilled placeholders
     html = html.replace(/\{\{[^}]+\}\}/g, "");
 
-    // Inject hosted-tracker loader snippet before </body>
-    // Tracker JS lives at the tracker-v2 edge function (immutable per version).
-    // To roll out a new version, deploy tracker-v3 and bump the URL below.
+    // Tag interactive elements + section milestones for v3 analytics
+    html = addAnalyticsTags(html, "home");
+
+    // Inject hosted-tracker loader snippet before </body> (tracker-v3)
+    // Tracker JS lives at the tracker-v3 edge function (immutable per version).
+    // To roll out a new version, deploy tracker-v4 and bump the URL below.
+    const clientTier = ((clientData as any)?.plan || "growth").toString();
     const analyticsScript = `
 <script async
-  src="${supabaseUrl}/functions/v1/tracker-v2"
+  src="${supabaseUrl}/functions/v1/tracker-v3"
   data-client-id="${clientId}"
-  data-endpoint="${supabaseUrl}/functions/v1/track-event"></script>`;
+  data-endpoint="${supabaseUrl}/functions/v1/track-event"
+  data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"
+  data-tier="${clientTier}"></script>`;
     html = html.replace("</body>", analyticsScript + "\n</body>");
+
 
     // ── Upload to Hostinger staging ──────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
