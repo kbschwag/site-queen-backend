@@ -12,4 +12,9 @@ verify_jwt = false
 [functions.tracker-v2]
 verify_jwt = false
 
+[functions.tracker-v3]
+verify_jwt = false
+
+
+
 
