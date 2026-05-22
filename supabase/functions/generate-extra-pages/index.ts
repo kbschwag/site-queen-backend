@@ -348,6 +348,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       aboutHTML = autoFilledAbout.html;
       await logUnfilledPlaceholders(supabase, clientId, templateId, "about", aboutHTML);
       aboutHTML = aboutHTML.replace(/\{\{[^}]+\}\}/g, "");
+      aboutHTML = addAnalyticsTags(aboutHTML, "about");
       aboutHTML = aboutHTML.replace("</body>", analyticsScript + "\n</body>");
       aboutHTML = wireContactForms(aboutHTML, clientId, supabaseUrl);
       aboutHTML = injectFavicon(aboutHTML, faviconTag);
@@ -569,6 +570,7 @@ Return ONLY valid JSON. No markdown:
       servicesHTML = autoFilledServices.html;
       await logUnfilledPlaceholders(supabase, clientId, templateId, "services", servicesHTML);
       servicesHTML = servicesHTML.replace(/\{\{[^}]+\}\}/g, "");
+      servicesHTML = addAnalyticsTags(servicesHTML, "services");
       servicesHTML = servicesHTML.replace("</body>", analyticsScript + "\n</body>");
       servicesHTML = wireContactForms(servicesHTML, clientId, supabaseUrl);
       servicesHTML = injectFavicon(servicesHTML, faviconTag);
@@ -775,6 +777,9 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
           });
 
           // Wire any <form> on the page to handle-contact-form
+          const slugLower = (spec.slug || "").toLowerCase();
+          const pageName = ["contact","gallery","about","services","home"].includes(slugLower) ? slugLower : "other";
+          fullHTML = addAnalyticsTags(fullHTML, pageName);
           fullHTML = wireContactForms(fullHTML, clientId, supabaseUrl);
           fullHTML = injectFavicon(fullHTML, faviconTag);
 
