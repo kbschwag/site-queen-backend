@@ -10,42 +10,48 @@ export default function AnalyticsJourney() {
   const { data } = useAnalyticsEvents(clientId, period, isPremium);
   const { data: forms } = useFormSubmissions(clientId, period, isPremium);
 
-  // Build session paths — ordered page_view sequences per session
+  // Build session paths — ordered page_view sequences per session.
+  // Tag each session "submitted" iff a form_submission in this period has the same session_id_fk.
   const sessions = useMemo(() => {
-    if (!data) return [];
-    const curr = data.rows.filter((r) => new Date(r.created_at) >= data.start && r.event_type === "page_view" && r.session_id_fk);
+    if (!data) return [] as { sid: string; path: string[]; submitted: boolean }[];
+    const submittedSids = new Set<string>(
+      (forms || [])
+        .filter((f: any) => f.session_id_fk && new Date(f.created_at) >= data.start)
+        .map((f: any) => f.session_id_fk as string)
+    );
+    const curr = data.rows.filter(
+      (r) => new Date(r.created_at) >= data.start && r.event_type === "page_view" && r.session_id_fk
+    );
     const bySession: Record<string, string[]> = {};
     curr.forEach((r) => {
       const sid = r.session_id_fk!;
       bySession[sid] = bySession[sid] || [];
       const name = pageNameFromPath(r.page_path || "/");
-      // collapse consecutive duplicates
       if (bySession[sid][bySession[sid].length - 1] !== name) bySession[sid].push(name);
     });
-    const submittedSessions = new Set<string>();
-    (forms || []).forEach((f) => {
-      // best-effort: match by visitor + window. We rely on session_id_fk indirectly via events.
-      // The data hook doesn't return session for forms, so we treat any session containing a Contact page as "submitted candidate".
-    });
     return Object.entries(bySession).map(([sid, path]) => ({
-      sid, path, ended: path[path.length - 1] || "",
+      sid, path, submitted: submittedSids.has(sid),
     }));
   }, [data, forms]);
 
   const submittedCount = (forms || []).filter((f) => data && new Date(f.created_at) >= data.start).length;
 
-  // Top paths — sequence-string → count
+  // Top paths — sequence-string → { count, submittedCount }
   const topPaths = useMemo(() => {
-    if (!sessions.length) return [];
-    const counts: Record<string, { steps: string[]; n: number }> = {};
+    if (!sessions.length) return [] as { steps: string[]; n: number; submittedN: number; pct: number; submitted: boolean }[];
+    const counts: Record<string, { steps: string[]; n: number; submittedN: number }> = {};
     sessions.forEach((s) => {
       const key = s.path.slice(0, 5).join(" → ");
-      if (!counts[key]) counts[key] = { steps: s.path.slice(0, 5), n: 0 };
+      if (!counts[key]) counts[key] = { steps: s.path.slice(0, 5), n: 0, submittedN: 0 };
       counts[key].n++;
+      if (s.submitted) counts[key].submittedN++;
     });
     const total = sessions.length;
     return Object.values(counts).sort((a, b) => b.n - a.n).slice(0, 5).map((p) => ({
-      ...p, pct: Math.round((p.n / total) * 100),
+      ...p,
+      pct: Math.round((p.n / total) * 100),
+      // Path is "Submitted" if majority of sessions following it ended with a form submission
+      submitted: p.submittedN > 0 && p.submittedN >= p.n / 2,
     }));
   }, [sessions]);
 
@@ -113,8 +119,8 @@ export default function AnalyticsJourney() {
                           {i < p.steps.length - 1 && <span className="path-arrow">→</span>}
                         </span>
                       ))}
-                      <span className={`path-end-tag ${/contact|thank/i.test(p.steps[p.steps.length - 1]) ? "converted" : "exit"}`}>
-                        {/contact|thank/i.test(p.steps[p.steps.length - 1]) ? "Submitted" : "Exit"}
+                      <span className={`path-end-tag ${p.submitted ? "converted" : "exit"}`}>
+                        {p.submitted ? "Submitted" : "Exit"}
                       </span>
                     </div>
                   </div>
