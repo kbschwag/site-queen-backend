@@ -102,10 +102,15 @@ serve(async (req) => {
       target = "client_ftp";
       await uploadToClientFtp(ftp, files);
     } else {
-      // Fallback — push to SiteQueen shared Hostinger receiver under
-      // /public_html/<clientId>/<file>.
+      // Fallback — push to SiteQueen shared Hostinger receiver. Use the
+      // client's configured hostinger_folder_path when present (e.g.
+      // /public_html/clientdomain.com); otherwise fall back to the
+      // per-client UUID folder under /public_html.
+      const rawFolder = (client.hostinger_folder_path && String(client.hostinger_folder_path).trim()) ||
+        `/public_html/${clientId}`;
+      const folder = rawFolder.startsWith("/") ? rawFolder.replace(/\/+$/, "") : `/${rawFolder.replace(/\/+$/, "")}`;
       const uploads = files.map((f) => ({
-        remotePath: `/public_html/${clientId}/${f.filename}`,
+        remotePath: `${folder}/${f.filename}`,
         content: f.content,
       }));
       await uploadToHostingerFtp(uploads);
