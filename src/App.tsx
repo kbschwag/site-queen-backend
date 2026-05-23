@@ -30,6 +30,10 @@ import ClientBilling from "./pages/client/ClientBilling";
 import ClientHelp from "./pages/client/ClientHelp";
 import ClientSettings from "./pages/client/ClientSettings";
 import ClientAnalytics from "./pages/client/ClientAnalytics";
+import AnalyticsConversions from "./pages/client/analytics/Conversions";
+import AnalyticsSearch from "./pages/client/analytics/Search";
+import AnalyticsBehavior from "./pages/client/analytics/Behavior";
+import AnalyticsJourney from "./pages/client/analytics/Journey";
 import OperatorLogin from "./pages/operator/OperatorLogin";
 import OperatorDashboard from "./pages/operator/OperatorDashboard";
 import OperatorApplications from "./pages/operator/OperatorApplications";
@@ -82,6 +86,10 @@ const App = () => (
               <Route path="support" element={<ClientSupport />} />
               <Route path="contact" element={<ClientContact />} />
               <Route path="analytics" element={<ClientAnalytics />} />
+              <Route path="analytics/conversions" element={<AnalyticsConversions />} />
+              <Route path="analytics/search" element={<AnalyticsSearch />} />
+              <Route path="analytics/behavior" element={<AnalyticsBehavior />} />
+              <Route path="analytics/journey" element={<AnalyticsJourney />} />
               <Route path="billing" element={<ClientBilling />} />
               <Route path="help" element={<ClientHelp />} />
               <Route path="settings" element={<ClientSettings />} />
