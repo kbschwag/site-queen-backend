@@ -16,34 +16,46 @@ export type Database = {
     Tables: {
       analytics_daily_summary: {
         Row: {
+          click_events: number
           client_id: string
           cta_clicks: number
           date: string
+          engagement_pings: number
           form_submissions: number
           id: string
           page_views: number
           phone_clicks: number
+          scroll_depth_events: number
           unique_sessions: number
+          unique_visitors: number
         }
         Insert: {
+          click_events?: number
           client_id: string
           cta_clicks?: number
           date: string
+          engagement_pings?: number
           form_submissions?: number
           id?: string
           page_views?: number
           phone_clicks?: number
+          scroll_depth_events?: number
           unique_sessions?: number
+          unique_visitors?: number
         }
         Update: {
+          click_events?: number
           client_id?: string
           cta_clicks?: number
           date?: string
+          engagement_pings?: number
           form_submissions?: number
           id?: string
           page_views?: number
           phone_clicks?: number
+          scroll_depth_events?: number
           unique_sessions?: number
+          unique_visitors?: number
         }
         Relationships: [
           {
@@ -63,11 +75,15 @@ export type Database = {
           country: string | null
           created_at: string
           device_type: string | null
+          doc_height: number | null
+          doc_width: number | null
           element: Json | null
           event_name: string | null
           event_type: string
+          exit_page_path: string | null
           id: string
           is_bot: boolean
+          last_scroll_milestone: number | null
           metadata: Json | null
           milestone_name: string | null
           page_path: string | null
@@ -88,11 +104,15 @@ export type Database = {
           country?: string | null
           created_at?: string
           device_type?: string | null
+          doc_height?: number | null
+          doc_width?: number | null
           element?: Json | null
           event_name?: string | null
           event_type: string
+          exit_page_path?: string | null
           id?: string
           is_bot?: boolean
+          last_scroll_milestone?: number | null
           metadata?: Json | null
           milestone_name?: string | null
           page_path?: string | null
@@ -113,11 +133,15 @@ export type Database = {
           country?: string | null
           created_at?: string
           device_type?: string | null
+          doc_height?: number | null
+          doc_width?: number | null
           element?: Json | null
           event_name?: string | null
           event_type?: string
+          exit_page_path?: string | null
           id?: string
           is_bot?: boolean
+          last_scroll_milestone?: number | null
           metadata?: Json | null
           milestone_name?: string | null
           page_path?: string | null
@@ -1242,6 +1266,7 @@ export type Database = {
           referrer: string | null
           service: string | null
           session_id: string | null
+          session_id_fk: string | null
           source: string | null
           submitted_at: string
           visitor_id: string | null
@@ -1261,6 +1286,7 @@ export type Database = {
           referrer?: string | null
           service?: string | null
           session_id?: string | null
+          session_id_fk?: string | null
           source?: string | null
           submitted_at?: string
           visitor_id?: string | null
@@ -1280,11 +1306,19 @@ export type Database = {
           referrer?: string | null
           service?: string | null
           session_id?: string | null
+          session_id_fk?: string | null
           source?: string | null
           submitted_at?: string
           visitor_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "form_submissions_session_id_fk_fkey"
+            columns: ["session_id_fk"]
+            isOneToOne: false
+            referencedRelation: "analytics_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "form_submissions_visitor_id_fkey"
             columns: ["visitor_id"]
@@ -2019,6 +2053,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bump_unique_visitor_today: {
+        Args: { p_client_id: string; p_date: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
