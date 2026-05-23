@@ -52,10 +52,10 @@ const TRACKER_JS = `(function() {
     return 0;
   }
 
-  function send(type, meta) {
+  function buildPayload(type, meta) {
     var m = meta || {};
     try { m.url = window.location.href; } catch (_) {}
-    var payload = {
+    return {
       client_id: CLIENT_ID,
       event_type: type,
       page_path: window.location.pathname,
@@ -66,6 +66,26 @@ const TRACKER_JS = `(function() {
       tier: TIER,
       metadata: m
     };
+  }
+
+  // Standard event send — uses fetch so the browser can report CORS issues
+  // and we get a real response. Used for page_view, click, scroll_depth, etc.
+  function send(type, meta) {
+    var payload = buildPayload(type, meta);
+    try {
+      fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(function() {});
+    } catch (_) {}
+  }
+
+  // Page-exit-specific send — uses sendBeacon because the page is unloading
+  // and a normal fetch may be cancelled. Only used by the page_exit handler.
+  function sendOnExit(type, meta) {
+    var payload = buildPayload(type, meta);
     var body = JSON.stringify(payload);
     try {
       if (navigator.sendBeacon) {
@@ -92,13 +112,6 @@ const TRACKER_JS = `(function() {
       page_path: window.location.pathname,
       fields: formData
     };
-    try {
-      if (navigator.sendBeacon) {
-        var blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-        navigator.sendBeacon(FORM_ENDPOINT, blob);
-        return;
-      }
-    } catch (_) {}
     try {
       fetch(FORM_ENDPOINT, {
         method: 'POST',
@@ -297,7 +310,7 @@ const TRACKER_JS = `(function() {
     if (exitSent) return;
     exitSent = true;
     var secondsOnPage = Math.round((Date.now() - pageLoadedAt) / 1000);
-    send('page_exit', { seconds_on_page: secondsOnPage });
+    sendOnExit('page_exit', { seconds_on_page: secondsOnPage });
   }
   window.addEventListener('pagehide', sendExit);
   window.addEventListener('beforeunload', sendExit);
