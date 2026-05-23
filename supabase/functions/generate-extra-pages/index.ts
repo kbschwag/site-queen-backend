@@ -233,7 +233,7 @@ serve(async (req) => {
     const projectRefForBanner = (Deno.env.get("SUPABASE_URL") || "").replace("https://", "").split(".")[0];
     const analyticsScript = `
 <script async
-  src="${supabaseUrl}/functions/v1/tracker-v4"
+  src="${supabaseUrl}/functions/v1/tracker-v5"
   data-client-id="${clientId}"
   data-endpoint="${supabaseUrl}/functions/v1/track-event"
   data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"

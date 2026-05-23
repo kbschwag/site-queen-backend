@@ -479,7 +479,7 @@ Return this exact JSON structure (every field required, no empty strings unless 
     const clientTier = planToTrackerTier((clientData as any)?.plan);
     const analyticsScript = `
 <script async
-  src="${supabaseUrl}/functions/v1/tracker-v4"
+  src="${supabaseUrl}/functions/v1/tracker-v5"
   data-client-id="${clientId}"
   data-endpoint="${supabaseUrl}/functions/v1/track-event"
   data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"
