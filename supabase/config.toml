@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.tracker-v3]
 verify_jwt = false
 
+[functions.tracker-v4]
+verify_jwt = false
+
 [functions.track-form-submission]
 verify_jwt = false
 
