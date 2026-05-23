@@ -51,14 +51,28 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
+  const { isPremium } = useClientPlan();
+  const location = useLocation();
+  const analyticsOpen = location.pathname.startsWith("/dashboard/analytics");
+  const [forceOpen, setForceOpen] = useState(false);
+  const isAnalyticsExpanded = analyticsOpen || forceOpen;
+
   const navItems = [
     { title: "Overview", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Website", url: "/dashboard/website", icon: Globe },
-    { title: "Analytics", url: "/dashboard/analytics", icon: BarChart3 },
+    // Analytics handled separately (expandable group)
     { title: "Support Tickets", url: "/dashboard/support", icon: MessageSquare, badge: creditsBalance },
     { title: "Support", url: "/dashboard/contact", icon: LifeBuoy },
     { title: "Billing", url: "/dashboard/billing", icon: CreditCard },
     { title: "Help", url: "/dashboard/help", icon: HelpCircle },
+  ];
+
+  const analyticsSubItems = [
+    { title: "Overview", url: "/dashboard/analytics", premium: false },
+    { title: "Conversions", url: "/dashboard/analytics/conversions", premium: true },
+    { title: "Search", url: "/dashboard/analytics/search", premium: true },
+    { title: "Behavior", url: "/dashboard/analytics/behavior", premium: true },
+    { title: "Journey", url: "/dashboard/analytics/journey", premium: true },
   ];
 
   const handleSignOut = async () => {
