@@ -213,6 +213,13 @@ serve(async (req) => {
             visitorId = raceVisitor?.id || null;
           } else {
             visitorId = newVisitor.id;
+            // First time seeing this visitor — bump today's unique_visitors counter.
+            try {
+              await supabase.rpc("bump_unique_visitor_today", {
+                p_date: new Date().toISOString().slice(0, 10),
+                p_client_id: event.client_id,
+              });
+            } catch (_) { /* non-fatal */ }
           }
         }
 
