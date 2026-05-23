@@ -1,10 +1,9 @@
 // Receives form submission CONTENT (name, email, message, etc.) from
-// tracker-v3 and stores it in the form_submissions table.
+// tracker-v4 / v5 and stores it in the form_submissions table.
 //
-// Separate from track-event because:
-//   1. PII isolation — form content has stricter RLS than analytics events
-//   2. The analytics events table stays "behavioral data only"
-//   3. If we ever need to purge PII (GDPR request), we only touch this table
+// Now also resolves the visitor's current analytics session and writes the
+// FK to session_id_fk so the dashboard can join form_submissions to the
+// session that produced them.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -86,8 +85,7 @@ Deno.serve(async (req) => {
   }
 
   const userAgent = req.headers.get("user-agent") || "";
-  const isBotUA = /bot|crawl|spider|scrape|headless/i.test(userAgent);
-  if (isBotUA) {
+  if (/bot|crawl|spider|scrape|headless/i.test(userAgent)) {
     return new Response(JSON.stringify({ ok: true, dropped: "bot" }), {
       status: 200,
       headers: { ...corsHeaders(), "content-type": "application/json" },
@@ -97,28 +95,67 @@ Deno.serve(async (req) => {
   const cleanFields = sanitizeFields(fields);
   const isSpam = looksLikeSpam(cleanFields);
 
+  // Resolve visitor's current session via the 30-min activity window.
+  // We don't know visitor_id directly from the form payload; the tracker
+  // uses a sessionStorage `sq_sid` as the text session_id. We find the
+  // matching analytics_sessions row by joining through analytics_events.
   let visitorId: string | null = null;
+  let sessionFkId: string | null = null;
   let source: string | null = null;
   let referrer: string | null = null;
 
   if (session_id) {
-    const { data: session } = await supabase
-      .from("analytics_sessions")
-      .select("visitor_id, source, referrer")
+    // Find the most recent event with this text session_id to recover the
+    // visitor_id and (via session_id_fk) the session UUID.
+    const { data: recentEvent } = await supabase
+      .from("analytics_events")
+      .select("visitor_id, session_id_fk")
       .eq("client_id", client_id)
       .eq("session_id", session_id)
-      .single();
+      .not("visitor_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (session) {
-      visitorId = session.visitor_id;
-      source = session.source;
-      referrer = session.referrer;
+    if (recentEvent?.visitor_id) {
+      visitorId = recentEvent.visitor_id;
+
+      // Confirm the session is still active within the 30-min window.
+      const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data: activeSession } = await supabase
+        .from("analytics_sessions")
+        .select("id, source, referrer")
+        .eq("client_id", client_id)
+        .eq("visitor_id", visitorId)
+        .gt("ended_at", thirtyMinAgo)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activeSession) {
+        sessionFkId = activeSession.id;
+        source = activeSession.source;
+        referrer = activeSession.referrer;
+      } else if (recentEvent.session_id_fk) {
+        // Fall back to the session referenced by the most recent event.
+        sessionFkId = recentEvent.session_id_fk;
+        const { data: sFallback } = await supabase
+          .from("analytics_sessions")
+          .select("source, referrer")
+          .eq("id", sessionFkId)
+          .maybeSingle();
+        if (sFallback) {
+          source = sFallback.source;
+          referrer = sFallback.referrer;
+        }
+      }
     }
   }
 
   const { error } = await supabase.from("form_submissions").insert({
     client_id,
     session_id: session_id || null,
+    session_id_fk: sessionFkId,
     page_path: page_path || null,
     fields: cleanFields,
     visitor_id: visitorId,
@@ -134,7 +171,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
+  return new Response(JSON.stringify({ ok: true, session_id_fk: sessionFkId }), {
     status: 200,
     headers: { ...corsHeaders(), "content-type": "application/json" },
   });

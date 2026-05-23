@@ -1054,8 +1054,8 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
     // ── Tag interactive elements + milestones for v3 analytics ───────────
     html = addAnalyticsTags(html, "home");
 
-    // ── Inject hosted-tracker loader snippet before </body> (tracker-v4) ─
-    // Tracker JS lives at the tracker-v4 edge function (full cache-header
+    // ── Inject hosted-tracker loader snippet before </body> (tracker-v5) ─
+    // Tracker JS lives at the tracker-v5 edge function (full cache-header
     // control, immutable per version). DO NOT inline tracker logic here.
     // To roll out a new tracker version: deploy tracker-v4 edge function,
     // bump the URL below. Existing sites keep loading tracker-v4 safely.
@@ -1065,7 +1065,7 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
     const clientTier = planToTrackerTier((clientData as any)?.plan);
     const analyticsScript = `
 <script async
-  src="${supabaseUrl}/functions/v1/tracker-v4"
+  src="${supabaseUrl}/functions/v1/tracker-v5"
   data-client-id="${clientId}"
   data-endpoint="${supabaseUrl}/functions/v1/track-event"
   data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"
