@@ -41,20 +41,29 @@ function getCreds() {
   return { url, secret };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Pull `client_id` and `filename` out of a remotePath. */
 function splitRemotePath(remotePath: string): { clientId: string; filename: string } {
   const parts = remotePath.split("/").filter(Boolean);
   const filename = parts[parts.length - 1] || "index.html";
   // Recognise patterns:
-  //   public_html/<clientId>/<file>             → clientId = <clientId>
+  //   public_html/<uuid>/<file>                 → clientId = <uuid>           (staging)
+  //   public_html/staging/<uuid>/<file>         → clientId = <uuid>           (legacy)
+  //   public_html/<domain>/<file>               → clientId = "__root__"       (live deploy
+  //     to an addon-domain docroot — the receiver resolves the actual folder)
   //   public_html/<file>                        → clientId = "__root__"
-  // The receiver decides the destination folder; we just pass these tokens.
-  // Tolerate a stray "staging" segment by stripping it (legacy callers).
   if (parts.length >= 4 && parts[0] === "public_html" && parts[1] === "staging") {
     return { clientId: parts[2], filename };
   }
   if (parts.length >= 3 && parts[0] === "public_html") {
-    return { clientId: parts[1], filename };
+    // Only treat the second segment as a client_id when it's a UUID. A
+    // non-UUID second segment is a domain name (live deploy target) and the
+    // receiver only accepts UUIDs or the literal "__root__".
+    if (UUID_RE.test(parts[1])) {
+      return { clientId: parts[1], filename };
+    }
+    return { clientId: "__root__", filename };
   }
   return { clientId: "__root__", filename };
 }
