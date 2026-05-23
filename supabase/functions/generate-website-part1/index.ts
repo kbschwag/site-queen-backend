@@ -470,8 +470,8 @@ Return this exact JSON structure (every field required, no empty strings unless 
     // Tag interactive elements + section milestones for v3 analytics
     html = addAnalyticsTags(html, "home");
 
-    // Inject hosted-tracker loader snippet before </body> (tracker-v3)
-    // Tracker JS lives at the tracker-v3 edge function (immutable per version).
+    // Inject hosted-tracker loader snippet before </body> (tracker-v4)
+    // Tracker JS lives at the tracker-v4 edge function (immutable per version).
     // To roll out a new version, deploy tracker-v4 and bump the URL below.
     // Maps clients.plan -> tracker tier vocabulary. Only 'pro' enables Premium events.
     const planToTrackerTier = (plan: string | null | undefined): string =>
@@ -479,7 +479,7 @@ Return this exact JSON structure (every field required, no empty strings unless 
     const clientTier = planToTrackerTier((clientData as any)?.plan);
     const analyticsScript = `
 <script async
-  src="${supabaseUrl}/functions/v1/tracker-v3"
+  src="${supabaseUrl}/functions/v1/tracker-v4"
   data-client-id="${clientId}"
   data-endpoint="${supabaseUrl}/functions/v1/track-event"
   data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"

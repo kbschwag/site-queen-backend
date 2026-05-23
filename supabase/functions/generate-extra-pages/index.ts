@@ -222,7 +222,7 @@ serve(async (req) => {
       "{{LEAD_MAGNET_IMAGE_URL}}": portfolioPhotos[4] || portfolioPhotos[0] || heroImageUrl,
     };
 
-    // ── Analytics script (hosted tracker-v3) ─────────────────────────────
+    // ── Analytics script (hosted tracker-v4) ─────────────────────────────
     // Same loader as generate-website-part1 so home + extra pages emit the
     // same v3 event set (click coords, scroll milestones, element_visible,
     // engagement pings, page_exit, custom_event).
@@ -233,7 +233,7 @@ serve(async (req) => {
     const projectRefForBanner = (Deno.env.get("SUPABASE_URL") || "").replace("https://", "").split(".")[0];
     const analyticsScript = `
 <script async
-  src="${supabaseUrl}/functions/v1/tracker-v3"
+  src="${supabaseUrl}/functions/v1/tracker-v4"
   data-client-id="${clientId}"
   data-endpoint="${supabaseUrl}/functions/v1/track-event"
   data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"
