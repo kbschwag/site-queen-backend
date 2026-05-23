@@ -286,7 +286,7 @@ serve(async (req) => {
       }
     }
 
-    // ---------- v3 column routing from metadata ----------
+    // ---------- v3/v5 column routing from metadata ----------
     const v3Cols: Record<string, unknown> = {};
     if (event.event_type === "click") {
       if (typeof metadata.x_pct === "number") v3Cols.click_x_pct = metadata.x_pct;
@@ -298,8 +298,16 @@ serve(async (req) => {
     if (event.event_type === "element_visible" && typeof metadata.milestone_name === "string") {
       v3Cols.milestone_name = metadata.milestone_name;
     }
-    if (event.event_type === "page_exit" && typeof metadata.seconds_on_page === "number") {
-      v3Cols.seconds_on_page = metadata.seconds_on_page;
+    if (event.event_type === "page_exit") {
+      if (typeof metadata.seconds_on_page === "number") v3Cols.seconds_on_page = metadata.seconds_on_page;
+      // v5 additions
+      if (typeof metadata.last_scroll_milestone === "number") v3Cols.last_scroll_milestone = metadata.last_scroll_milestone;
+      if (typeof metadata.exit_page_path === "string") v3Cols.exit_page_path = metadata.exit_page_path;
+    }
+    if (event.event_type === "page_view") {
+      // v5 additions
+      if (typeof metadata.doc_width === "number") v3Cols.doc_width = metadata.doc_width;
+      if (typeof metadata.doc_height === "number") v3Cols.doc_height = metadata.doc_height;
     }
     if (event.event_type === "custom_event" && typeof metadata.event_name === "string") {
       v3Cols.event_name = metadata.event_name;
