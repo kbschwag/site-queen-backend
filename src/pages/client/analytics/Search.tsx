@@ -13,7 +13,7 @@ export default function AnalyticsSearch() {
     <div className="analytics-root">
       <AnalyticsHeader title="Search Performance" subtitle="How people find your site on Google" period={period} onPeriodChange={setPeriod} />
       {!isPremium ? (
-        <UpgradeLock title="Search Performance is a Premium feature" blurb="See impressions, clicks, average ranking position, and the exact search terms bringing people to your site." />
+        <UpgradeLock title="Search Performance is a Premium feature." blurb="Search Performance shows the keywords people use to find your site on Google, plus your ranking position." />
       ) : (
         <>
           <div className="gsc-banner">

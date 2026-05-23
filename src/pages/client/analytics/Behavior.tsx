@@ -77,7 +77,7 @@ export default function AnalyticsBehavior() {
     <div className="analytics-root">
       <AnalyticsHeader title="Behavior" subtitle="How visitors interact with your pages" period={period} onPeriodChange={setPeriod} />
       {!isPremium ? (
-        <UpgradeLock title="Behavior is a Premium feature" blurb="See how far visitors scroll, which buttons and links they actually click, and which custom actions they take across your site." />
+        <UpgradeLock title="Behavior tracking is a Premium feature." blurb="Behavior tracking shows you exactly where visitors scroll and click on each page — so you know what's working and what isn't." />
       ) : (
         <>
           {/* Scroll depth */}

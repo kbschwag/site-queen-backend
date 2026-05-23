@@ -70,7 +70,7 @@ export default function AnalyticsJourney() {
     <div className="analytics-root">
       <AnalyticsHeader title="Visitor Journey" subtitle="The paths visitors take through your site" period={period} onPeriodChange={setPeriod} />
       {!isPremium ? (
-        <UpgradeLock title="Visitor Journey is a Premium feature" blurb="See the exact step-by-step paths visitors take through your site, the most common journeys, and the recent leads who converted." />
+        <UpgradeLock title="Visitor Journey is a Premium feature." blurb="Visitor Journey shows the paths visitors take through your site and surfaces your latest leads with their full message." />
       ) : (
         <>
           <div className="card" style={{ marginBottom: 14 }}>
