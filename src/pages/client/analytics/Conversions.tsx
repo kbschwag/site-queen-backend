@@ -70,7 +70,7 @@ export default function AnalyticsConversions() {
     <div className="analytics-root">
       <AnalyticsHeader title="Conversions" subtitle="How visitors turn into leads on your site" period={period} onPeriodChange={setPeriod} />
       {!isPremium ? (
-        <UpgradeLock title="Conversions is a Premium feature" blurb="See exactly where visitors drop off, which sources actually drive form submissions, and which pages convert best — so you know where to focus." />
+        <UpgradeLock title="Conversion tracking is a Premium feature." blurb="Conversion tracking shows you exactly where visitors come from and which pages turn them into leads." />
       ) : !funnel ? (
         <EmptyState>Loading…</EmptyState>
       ) : (
