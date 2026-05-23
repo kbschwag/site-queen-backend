@@ -9,7 +9,12 @@ import {
   Settings,
   LogOut,
   BarChart3,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { useState } from "react";
+import { useClientPlan } from "@/hooks/useClientPlan";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
