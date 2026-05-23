@@ -35,7 +35,7 @@ export function useFormSubmissions(clientId: string | null, period: Period, enab
     queryFn: async () => {
       const { data, error } = await supabase
         .from("form_submissions")
-        .select("id, name, email, phone, message, source, referrer, page_path, created_at, fields")
+        .select("id, name, email, phone, message, source, referrer, page_path, created_at, fields, session_id_fk")
         .eq("client_id", clientId!)
         .or("is_spam.is.null,is_spam.eq.false")
         .gte("created_at", prevStart.toISOString())
