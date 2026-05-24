@@ -381,7 +381,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       if (!servicesFile) throw new Error(`Template not found: ${templateId}/services.html`);
       let servicesHTML = await servicesFile.text();
       if (templateId === "business-professional") {
-        servicesHTML = applyBusinessProfessionalTokens(servicesHTML, intake);
+        servicesHTML = applyBusinessProfessionalFonts(servicesHTML, intake);
       }
 
       // Generate services-specific copy
