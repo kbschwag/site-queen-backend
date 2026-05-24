@@ -17,6 +17,7 @@ import { LogContactModal } from "@/components/operator/LogContactModal";
 import { ConvertToClientModal } from "@/components/operator/ConvertToClientModal";
 import { ALL_PROSPECT_STAGES, STAGE_LABELS, STAGE_COLORS, CHANNEL_LABELS } from "@/lib/prospect-utils";
 import { InlineRevisionPanel } from "@/components/operator/InlineRevisionPanel";
+import { MyTickets } from "@/components/client/MyTickets";
 
 export default function ProspectDetail() {
   const { id } = useParams();
