@@ -364,12 +364,32 @@ export function InlineRevisionPanel({ clientId }: Props) {
 
       {status === "applying" && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying…</div>}
       {status === "success" && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="flex items-center gap-2 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {statusMsg}</span>
-          {lastVersionTs && (
-            <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => handleRestore(lastVersionTs)} disabled={!!restoringTs}>
-              {restoringTs === lastVersionTs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />} Undo
-            </Button>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-2 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {statusMsg}</span>
+            {lastVersionTs && (
+              <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => handleRestore(lastVersionTs)} disabled={!!restoringTs}>
+                {restoringTs === lastVersionTs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />} Undo
+              </Button>
+            )}
+          </div>
+          {subFixResults && subFixResults.length > 0 && (
+            <ul className="space-y-1 text-xs">
+              {subFixResults.map((r) => (
+                <li key={r.id} className="flex items-start gap-2">
+                  {r.status === "success"
+                    ? <CheckCircle2 className="h-3 w-3 text-emerald-600 mt-0.5 shrink-0" />
+                    : <AlertCircle className="h-3 w-3 text-destructive mt-0.5 shrink-0" />}
+                  <span className={r.status === "success" ? "text-emerald-800" : "text-destructive"}>
+                    {r.description}
+                    {r.status === "failed" && r.error ? ` — ${r.error}` : ""}
+                    {r.status === "success" && r.edited_files?.length
+                      ? ` (${r.changes ?? 0} change${(r.changes ?? 0) === 1 ? "" : "s"} across ${r.edited_files.length} page${r.edited_files.length === 1 ? "" : "s"})`
+                      : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}
