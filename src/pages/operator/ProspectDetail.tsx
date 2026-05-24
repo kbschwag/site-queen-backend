@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, ArrowLeft, ExternalLink, Copy, RefreshCw, MessageCirclePlus, Crown, Eye, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, ExternalLink, Copy, RefreshCw, MessageCirclePlus, Crown, Eye, Trash2, Code2 } from "lucide-react";
+import { CodeEditorModal } from "@/components/operator/CodeEditorModal";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ export default function ProspectDetail() {
   const [showLog, setShowLog] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [showCodeEditor, setShowCodeEditor] = useState(false);
   const [edits, setEdits] = useState<Record<string, any>>({});
 
   const { data: client, isLoading } = useQuery({
@@ -195,6 +197,9 @@ export default function ProspectDetail() {
               <div className="flex items-center gap-2"><Eye className="h-4 w-4 text-muted-foreground" /><b>{c.demo_view_count || 0}</b> total views</div>
               {c.demo_last_viewed_at && <div className="text-xs text-muted-foreground">Last viewed {format(new Date(c.demo_last_viewed_at), "MMM d, h:mm a")}</div>}
             </div>
+            <Button size="sm" variant="outline" className="w-full" onClick={() => setShowCodeEditor(true)} disabled={!demoUrl}>
+              <Code2 className="h-4 w-4 mr-1" /> Edit Code ♛
+            </Button>
             <Button size="sm" variant="outline" className="w-full" onClick={regenerate} disabled={regenerating}>
               {regenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
               Regenerate Site
@@ -263,6 +268,7 @@ export default function ProspectDetail() {
 
       <LogContactModal open={showLog} onOpenChange={setShowLog} clientId={c.id} currentStage={c.lifecycle_stage} onLogged={() => { qc.invalidateQueries({ queryKey: ["prospect-contact-log", id] }); qc.invalidateQueries({ queryKey: ["prospect-detail", id] }); }} />
       <ConvertToClientModal open={showConvert} onOpenChange={setShowConvert} clientId={c.id} businessName={c.business_name} onConverted={() => { qc.invalidateQueries({ queryKey: ["prospect-detail", id] }); navigate("/operator/clients"); }} />
+      <CodeEditorModal open={showCodeEditor} onOpenChange={setShowCodeEditor} clientId={c.id} onSaved={() => qc.invalidateQueries({ queryKey: ["prospect-detail", id] })} />
     </div>
   );
 }
