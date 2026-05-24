@@ -268,6 +268,7 @@ export default function ProspectDetail() {
 
       <LogContactModal open={showLog} onOpenChange={setShowLog} clientId={c.id} currentStage={c.lifecycle_stage} onLogged={() => { qc.invalidateQueries({ queryKey: ["prospect-contact-log", id] }); qc.invalidateQueries({ queryKey: ["prospect-detail", id] }); }} />
       <ConvertToClientModal open={showConvert} onOpenChange={setShowConvert} clientId={c.id} businessName={c.business_name} onConverted={() => { qc.invalidateQueries({ queryKey: ["prospect-detail", id] }); navigate("/operator/clients"); }} />
+      <CodeEditorModal open={showCodeEditor} onOpenChange={setShowCodeEditor} clientId={c.id} onSaved={() => qc.invalidateQueries({ queryKey: ["prospect-detail", id] })} />
     </div>
   );
 }
