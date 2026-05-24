@@ -55,6 +55,20 @@ export default function ProspectDetail() {
     enabled: !!id,
   });
 
+  const { data: changeRequests = [] } = useQuery({
+    queryKey: ["prospect-change-requests", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("change_requests")
+        .select("*")
+        .eq("client_id", id!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
   const c: any = client;
   const demoUrl = c?.sites?.[0]?.staging_url;
   const genStatus = c?.sites?.[0]?.generation_status;
