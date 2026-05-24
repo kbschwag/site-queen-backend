@@ -220,7 +220,7 @@ export async function generateRestaurantSite(opts: {
     let pageHtml = await file.text();
 
     // Inject brand tokens into :root (works on --red / --gold for restaurant)
-    pageHtml = injectBrandTokensIntoRoot(pageHtml, { primaryColor, accentColor });
+    pageHtml = applyBrandColorsToHTML(pageHtml, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, "local-favorite").html;
 
     // Apply fill map
     for (const [key, value] of Object.entries(fill)) {
