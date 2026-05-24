@@ -486,8 +486,10 @@ Return ONLY valid JSON. No markdown:
         console.error("[extra-pages] Services copy JSON parse failed:", e);
       }
 
-      // Inject CSS variables
-      servicesHTML = injectCSSVars(servicesHTML, primaryColor, accentColor, fonts, templateId);
+      // Apply brand colors via the canonical color system
+      const __servicesColor = applyBrandColorsToHTML(servicesHTML, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId);
+      servicesHTML = __servicesColor.html;
+      console.log("[color-system] services", JSON.stringify({ templateId, applied: __servicesColor.result.appliedPlacements, skipped: __servicesColor.result.skippedBrandColors }));
 
       // Fill all placeholders
       const servicesFill: Record<string, string> = {
