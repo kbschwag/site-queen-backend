@@ -65,6 +65,9 @@ export function InlineRevisionPanel({ clientId }: Props) {
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [auditPlan, setAuditPlan] = useState<AuditPlan | null>(null);
+  const [enabledFixIds, setEnabledFixIds] = useState<Set<string>>(new Set());
+  const [subFixResults, setSubFixResults] = useState<SubFixResult[] | null>(null);
   const [clarify, setClarify] = useState<{ reason: string; suggestions: string[] } | null>(null);
   const [fallback, setFallback] = useState<{ reason: string; summary: string } | null>(null);
 
