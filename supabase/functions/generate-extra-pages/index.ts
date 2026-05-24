@@ -585,6 +585,23 @@ Return ONLY valid JSON. No markdown:
         { upsert: true, contentType: "text/html; charset=utf-8" }
       );
 
+      // local-favorite (restaurants): the nav links to ./menu.html. Upload the
+      // exact same services HTML as menu.html so the MENU nav link resolves.
+      if (templateId === "local-favorite") {
+        try {
+          await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/menu.html`, injectNoindex(servicesHTML));
+          await supabase.storage.from("generated-sites").upload(
+            `${clientId}/deploy/menu.html`,
+            new Blob([servicesHTML], { type: "text/html" }),
+            { upsert: true, contentType: "text/html; charset=utf-8" }
+          );
+          generated.push("menu");
+          console.log(`[extra-pages] ✓ menu.html (local-favorite alias of services.html)`);
+        } catch (menuErr: any) {
+          console.warn(`[extra-pages] menu.html alias upload failed: ${menuErr.message}`);
+        }
+      }
+
       generated.push("services");
       console.log(`[extra-pages] ✓ services.html (${servicesCopyResult.outputTokens} tokens)`);
     } catch (e: any) {
@@ -753,7 +770,7 @@ HARD RULES — VIOLATING ANY OF THESE MEANS THE PAGE WILL BE REJECTED:
 
 6. INTERNAL LINKS — Link to other pages with relative URLs: index.html, about.html, services.html, contact.html.
 
-7. NO HEADER / FOOTER / DOCTYPE in your output. Return ONLY the inner content (typically a <main> wrapper or a sequence of <section> blocks). Mobile-responsive via existing classes only.
+7. NO HEADER / FOOTER / DOCTYPE / NAV in your output. The site's canonical <nav> and <footer> are pulled from the homepage and injected around your content automatically — so DO NOT include any <nav>, <header>, <footer>, or top-bar/announcement-bar markup. Return ONLY the inner content (typically a <main> wrapper or a sequence of <section> blocks). Mobile-responsive via existing classes only.
 
 8. SPECIFICITY — Every line must be specific to ${businessName} in ${city}. No generic filler.
 
@@ -873,49 +890,36 @@ function injectCSSVars(
   html: string,
   primaryColor: string,
   accentColor: string,
-  fonts: any,
+  _fonts: any,
   templateId: string,
 ): string {
-  if (templateId === "trades-hero") {
-    const rootCSS = `:root {
-      --navy: #0d1d3b;
-      --red: ${primaryColor};
-      --gold: ${accentColor};
-      --white: #ffffff;
-      --gray: #f3f5f7;
-      --text-muted: #47546b;
-      --font-heading: "${fonts.heading}", Helvetica, sans-serif;
-      --font-body: "${fonts.body}", Helvetica, sans-serif;
-      --max-width: 1400px;
-      --section-pad: 80px 24px;
-    }`;
-    return html.replace(/:root\s*\{[^}]+\}/s, rootCSS);
-  }
-
+  // Per-template variable mapping. Each entry lists the candidate CSS variable
+  // names the brand primary/accent should replace, in priority order. First
+  // match wins. If no name matches an existing variable in the template's
+  // :root, the template default is preserved — we NEVER append a new variable.
   const varMap: Record<string, { primary: string[]; accent: string[] }> = {
     "feminine-bold": { primary: ["--burgundy"], accent: ["--gold"] },
     "business-professional": { primary: ["--navy", "--navy-mid"], accent: ["--gold", "--gold-dark"] },
     "warm-welcome": { primary: ["--dark"], accent: ["--muted"] },
-    "restaurant": { primary: ["--red"], accent: ["--gold"] },
+    "local-favorite": { primary: ["--red"], accent: ["--gold"] },
+    "trades-hero": { primary: ["--navy"], accent: ["--red", "--gold"] },
   };
 
   const mapping = varMap[templateId];
   if (!mapping) return html;
 
+  const replaceFirst = (body: string, names: string[], value: string): string => {
+    for (const n of names) {
+      const re = new RegExp(`(${n.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
+      if (re.test(body)) return body.replace(re, `$1${value}$3`);
+    }
+    return body;
+  };
+
   return html.replace(/:root\s*\{([\s\S]*?)\}/, (_match, body) => {
     let out = body;
-    if (primaryColor) {
-      for (const name of mapping.primary) {
-        const re = new RegExp(`(${name.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
-        if (re.test(out)) out = out.replace(re, `$1${primaryColor}$3`);
-      }
-    }
-    if (accentColor) {
-      for (const name of mapping.accent) {
-        const re = new RegExp(`(${name.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
-        if (re.test(out)) out = out.replace(re, `$1${accentColor}$3`);
-      }
-    }
+    if (primaryColor) out = replaceFirst(out, mapping.primary, primaryColor);
+    if (accentColor) out = replaceFirst(out, mapping.accent, accentColor);
     return `:root {${out}}`;
   });
 }
