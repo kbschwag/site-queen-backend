@@ -24,6 +24,31 @@ interface Plan {
   warnings?: string[];
 }
 
+interface AuditSubFix {
+  id: string;
+  description: string;
+  tool: string;
+  params: any;
+  confidence: "high" | "medium";
+  enabled_by_default: boolean;
+}
+interface AuditPlan {
+  is_audit_plan: true;
+  tool: "audit_and_fix";
+  summary: string;
+  target_scope: string;
+  target_page: string;
+  sub_fixes: AuditSubFix[];
+}
+interface SubFixResult {
+  id: string;
+  description: string;
+  status: "success" | "failed";
+  error?: string;
+  edited_files?: string[];
+  changes?: number;
+}
+
 export function InlineRevisionPanel({ clientId }: Props) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
