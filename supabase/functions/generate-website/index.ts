@@ -1370,17 +1370,16 @@ const PRIMARY_VAR_NAMES = ["--burgundy", "--red", "--primary", "--color-primary"
 const ACCENT_VAR_NAMES = ["--gold", "--accent", "--color-accent"];
 
 function replaceCssVarInRoot(rootBody: string, names: string[], value: string): string {
+  // First-match-wins: replace the first variable in `names` that already exists
+  // in the template's :root. If none match, return body UNCHANGED — the template
+  // default wins. NEVER append a new variable; doing so leaks colors through
+  // `var(--missing, var(--burgundy, ...))` fallback chains in downstream CSS.
   let out = rootBody;
-  let replaced = false;
   for (const n of names) {
     const re = new RegExp(`(${n.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
     if (re.test(out)) {
-      out = out.replace(re, `$1${value}$3`);
-      replaced = true;
+      return out.replace(re, `$1${value}$3`);
     }
-  }
-  if (!replaced) {
-    out = `${out.replace(/\s*$/, "")}\n  ${names[0]}: ${value};\n`;
   }
   return out;
 }
