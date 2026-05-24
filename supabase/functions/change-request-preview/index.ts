@@ -442,9 +442,18 @@ async function executeAuditAndFix(
     ? Object.keys(ctx.deployedHtml)
     : [pageFile(params.target_page)].filter(Boolean);
 
-  const extractedHtml = extractScopedHtml(ctx.deployedHtml, targetFiles, params.target_scope);
+  let extractedHtml = extractScopedHtml(ctx.deployedHtml, targetFiles, params.target_scope);
   if (!extractedHtml || extractedHtml.length < 50) {
-    throw new Error(`Could not extract ${params.target_scope} from ${params.target_page} — section may not exist`);
+    // Fall back to whole page so the audit can still proceed
+    console.warn(`[audit] scope "${params.target_scope}" not found on ${params.target_page}; falling back to whole_page`);
+    extractedHtml = extractScopedHtml(ctx.deployedHtml, targetFiles, "whole_page");
+  }
+  if (!extractedHtml || extractedHtml.length < 50) {
+    return {
+      is_audit_plan: true,
+      audit_summary: `No content found on ${params.target_page} to audit for "${params.target_scope}".`,
+      fixes: [],
+    } as AuditPlan;
   }
 
   const businessData = {
