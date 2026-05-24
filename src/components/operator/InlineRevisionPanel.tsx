@@ -355,7 +355,7 @@ export function InlineRevisionPanel({ clientId }: Props) {
           </div>
           <div className="flex gap-2">
             <Button onClick={() => handleApply(true)} size="sm" className="gap-2" disabled={busy}>
-              {status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Try AI edit
+              {busy && status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Try AI edit
             </Button>
             <Button onClick={handleCancel} size="sm" variant="ghost">Cancel</Button>
           </div>
