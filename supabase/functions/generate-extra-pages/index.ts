@@ -585,6 +585,23 @@ Return ONLY valid JSON. No markdown:
         { upsert: true, contentType: "text/html; charset=utf-8" }
       );
 
+      // local-favorite (restaurants): the nav links to ./menu.html. Upload the
+      // exact same services HTML as menu.html so the MENU nav link resolves.
+      if (templateId === "local-favorite") {
+        try {
+          await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/menu.html`, injectNoindex(servicesHTML));
+          await supabase.storage.from("generated-sites").upload(
+            `${clientId}/deploy/menu.html`,
+            new Blob([servicesHTML], { type: "text/html" }),
+            { upsert: true, contentType: "text/html; charset=utf-8" }
+          );
+          generated.push("menu");
+          console.log(`[extra-pages] ✓ menu.html (local-favorite alias of services.html)`);
+        } catch (menuErr: any) {
+          console.warn(`[extra-pages] menu.html alias upload failed: ${menuErr.message}`);
+        }
+      }
+
       generated.push("services");
       console.log(`[extra-pages] ✓ services.html (${servicesCopyResult.outputTokens} tokens)`);
     } catch (e: any) {
