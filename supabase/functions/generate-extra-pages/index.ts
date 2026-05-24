@@ -615,6 +615,117 @@ Return ONLY valid JSON. No markdown:
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // CONTACT PAGE — per-template contact.html, Claude fills copy only
+    // ════════════════════════════════════════════════════════════════════
+    try {
+      const { data: contactFile } = await supabase.storage
+        .from("templates")
+        .download(`${templateId}/contact.html`);
+      if (!contactFile) throw new Error(`Template not found: ${templateId}/contact.html`);
+      let contactHTML = await contactFile.text();
+
+      if (templateId === "business-professional") {
+        contactHTML = applyBusinessProfessionalFonts(contactHTML, intake);
+      }
+
+      const contactPrompt = `You are a professional copywriter for SiteQueen. Generate copy for the CONTACT page of ${businessName}, a ${businessType} in ${city}, ${state}.
+
+BUSINESS DATA:
+- Phone: ${phone || "not provided"}
+- Email: ${email || "not provided"}
+- Address: ${address || "not provided"}
+- Service area: ${intake.service_area || (city ? `${city} & Surrounding Areas` : "")}
+- Services offered: ${serviceNames.join(", ") || "not provided"}
+
+CALL NOTES (highest priority):
+${callNotes ? JSON.stringify({
+  tone_of_voice: (callNotes as any).tone_of_voice,
+  tone_custom: (callNotes as any).tone_custom,
+  exact_phrases: (callNotes as any).exact_phrases,
+}, null, 2) : "No call notes."}
+
+TONE: Match call notes tone. If not specified, default based on business type:
+- Restaurant/cafe/food: warm and inviting, "stop by", "come see us"
+- Spa/salon/wellness: calm and welcoming, "schedule", "visit"
+- Law firm/accounting/professional: formal and reassuring, "schedule consultation", "contact us"
+- Trades/contracting: confident and direct, "request quote", "call now"
+
+Return ONLY valid JSON. No markdown. No explanation:
+{
+  "CONTACT_META_DESC": "150-character meta description for contact page",
+  "CONTACT_PAGE_HEADLINE": "2-4 words for page hero h1",
+  "CONTACT_PAGE_SUBTITLE": "one sentence below the page title, ~15 words, inviting tone",
+  "CONTACT_EYEBROW": "2-4 words uppercase eyebrow (e.g., 'GET IN TOUCH')",
+  "CONTACT_INFO_HEADING": "3-6 words heading for left column",
+  "CONTACT_INFO_BODY": "2-3 sentences about how to reach the business, warm and specific to ${city}",
+  "CONTACT_FORM_HEADING": "3-5 words form heading",
+  "CONTACT_FORM_INTRO": "one sentence inviting them to fill out the form",
+  "CONTACT_SERVICE_LABEL": "uppercase label for the service dropdown matching the business type",
+  "CONTACT_MESSAGE_PLACEHOLDER": "placeholder text inside the message textarea, helpful prompt specific to this business",
+  "CONTACT_SUBMIT_LABEL": "2-3 word uppercase button text matching the business type"
+}`;
+
+      console.log(`[extra-pages] Generating contact copy...`);
+      const contactCopyResult = await callAI(ANTHROPIC_API_KEY, contactPrompt, "contact-copy");
+      let contactCopy: any = {};
+      try {
+        contactCopy = JSON.parse(stripMarkdown(contactCopyResult.text));
+      } catch (e) {
+        console.error("[extra-pages] Contact copy JSON parse failed:", e);
+      }
+
+      // Apply brand colors via the canonical color system
+      const __contactColor = applyBrandColorsToHTML(contactHTML, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId);
+      contactHTML = __contactColor.html;
+      console.log("[color-system] contact", JSON.stringify({ templateId, applied: __contactColor.result.appliedPlacements, skipped: __contactColor.result.skippedBrandColors }));
+
+      const hoursLines = buildContactHoursLines(intake.business_hours);
+      const zip = intake.business_zip || intake.zip || intake.postal_code || intake.zip_code || "";
+
+      const contactFill: Record<string, string> = {
+        ...sharedFill,
+        "{{BUSINESS_ZIP}}": zip,
+        "{{CONTACT_META_DESC}}": contactCopy.CONTACT_META_DESC || `Contact ${businessName} in ${city}, ${state}.`,
+        "{{CONTACT_PAGE_HEADLINE}}": contactCopy.CONTACT_PAGE_HEADLINE || "Get in Touch",
+        "{{CONTACT_PAGE_SUBTITLE}}": contactCopy.CONTACT_PAGE_SUBTITLE || `We'd love to hear from you. Reach out anytime.`,
+        "{{CONTACT_EYEBROW}}": contactCopy.CONTACT_EYEBROW || "GET IN TOUCH",
+        "{{CONTACT_INFO_HEADING}}": contactCopy.CONTACT_INFO_HEADING || "Contact Information",
+        "{{CONTACT_INFO_BODY}}": contactCopy.CONTACT_INFO_BODY || `We're here to help. Reach out by phone, email, or send us a message using the form.`,
+        "{{CONTACT_FORM_HEADING}}": contactCopy.CONTACT_FORM_HEADING || "Send Us a Message",
+        "{{CONTACT_FORM_INTRO}}": contactCopy.CONTACT_FORM_INTRO || "Fill out the form below and we'll get back to you within one business day.",
+        "{{CONTACT_SERVICE_LABEL}}": contactCopy.CONTACT_SERVICE_LABEL || "SERVICE NEEDED",
+        "{{CONTACT_MESSAGE_PLACEHOLDER}}": contactCopy.CONTACT_MESSAGE_PLACEHOLDER || "Tell us how we can help...",
+        "{{CONTACT_SUBMIT_LABEL}}": contactCopy.CONTACT_SUBMIT_LABEL || "SEND MESSAGE",
+        "{{BUSINESS_HOURS_LINE_1}}": hoursLines[0] || "",
+        "{{BUSINESS_HOURS_LINE_2}}": hoursLines[1] || "",
+        "{{BUSINESS_HOURS_LINE_3}}": hoursLines[2] || "",
+      };
+
+      for (const [key, value] of Object.entries(contactFill)) {
+        contactHTML = contactHTML.split(key).join(value);
+      }
+      await logUnfilledPlaceholders(supabase, clientId, templateId, "contact", contactHTML);
+      contactHTML = contactHTML.replace(/\{\{[^}]+\}\}/g, "");
+      contactHTML = addAnalyticsTags(contactHTML, "contact");
+      contactHTML = contactHTML.replace("</body>", analyticsScript + "\n</body>");
+      contactHTML = wireContactForms(contactHTML, clientId, supabaseUrl);
+      contactHTML = injectFavicon(contactHTML, faviconTag);
+
+      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/contact.html`, injectNoindex(contactHTML));
+      await supabase.storage.from("generated-sites").upload(
+        `${clientId}/deploy/contact.html`,
+        new Blob([contactHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" }
+      );
+
+      generated.push("contact");
+      console.log(`[extra-pages] ✓ contact.html (${contactCopyResult.outputTokens} tokens)`);
+    } catch (e: any) {
+      console.error("[extra-pages] ✗ contact failed:", e.message);
+      failed.push(`contact: ${e.message}`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // UNIVERSAL CUSTOM PAGE GENERATOR
     // CSS comes from the ABOUT page (correct simple page-hero style).
     // Header + footer come from the HOMEPAGE (always correct).
@@ -675,16 +786,8 @@ Return ONLY valid JSON. No markdown:
       type CustomPageSpec = { name: string; description: string; slug: string; source: string };
       const pageMap = new Map<string, CustomPageSpec>();
 
-      // Always include Contact
-      const isRestaurant = templateId === "local-favorite" || /restaurant|cafe|food|bakery|burger|pizza|ice ?cream|creamery|coffee|bistro/i.test(`${businessType} ${(intake as any).business_type || ""}`);
-      pageMap.set("contact", {
-        name: "Contact",
-        slug: "contact",
-        source: "always",
-        description: isRestaurant
-          ? `Contact page for a restaurant / food business. Do NOT use a dark full-bleed hero. Start with a simple PAGE HEADER — breadcrumb "HOME › CONTACT", a clean title "Visit ${businessName}", and a one-sentence subtitle inviting guests to stop by or get in touch. Use existing CSS classes only (.page-header, .breadcrumb, .container, .section-title) — never .hero/.hero-section. Below the header use a two-column layout. LEFT column: visit info — address (${intake.business_address || intake.address || "n/a"}), phone (${phone}) as tel:, email (${email || "n/a"}) as mailto:, hours (${intake.business_hours ? JSON.stringify(intake.business_hours) : "see homepage"}), plus prominent CTAs "RESERVE A TABLE" and "ORDER NOW" / "GET DIRECTIONS" (never "BOOK A CALL" / "SCHEDULE A CONSULTATION"). RIGHT column: a contact <form> with inputs (the platform wires them): name="name" (full name, required), name="phone" (required), name="email" (type=email, required), name="service" (a <select> with options like "General Inquiry", "Private Event", "Catering", "Reservation Question"), name="message" (textarea, required), and a <button type="submit"> labelled "SEND MESSAGE". Tone is warm and local — "Stop by", "Come see us", "We can't wait to feed you" — never coaching/services-business vocabulary. Do NOT add action, onsubmit, or hidden inputs.`
-          : `Contact page. IMPORTANT: Do NOT use the dark full-bleed hero section with a giant headline that the homepage uses. Instead start with a simple, understated PAGE HEADER (same visual weight as the about page header) — a small breadcrumb "HOME › CONTACT", a clean page title "Contact ${businessName}", and a short one-sentence subtitle. Use existing CSS classes only (e.g. .page-header, .breadcrumb, .container, .section-title) — never the .hero or .hero-section classes. Below the header use a two-column layout. LEFT column: contact info — phone (${phone}) as a tel: link, email (${email || "n/a"}) as a mailto: link, service area (${intake.service_area || city}), business hours (${intake.business_hours ? JSON.stringify(intake.business_hours) : "by appointment"}). RIGHT column: a contact <form> element. The form MUST contain inputs with EXACTLY these name attributes (the platform wires them to the backend): name="name" (full name, required), name="phone" (required), name="email" (type=email, required), name="service" (a <select> populated with options for these services [${serviceNames.join(", ") || "General Inquiry"}]), name="message" (a <textarea>, required). Include a submit <button type="submit"> labelled SUBMIT REQUEST or SEND MESSAGE. Do NOT add any action attribute, do NOT add any onsubmit handler, do NOT add any hidden inputs — the platform injects those automatically. Use only existing CSS classes for styling.`,
-      });
+      // NOTE: contact is now generated by the dedicated CONTACT PAGE block
+      // above (uses per-template contact.html files). Do not re-add here.
 
       // Intake custom pages
       const intakeCustomPages: any[] = Array.isArray(intake.custom_pages) ? intake.custom_pages : [];
@@ -1042,6 +1145,45 @@ function slugify(s: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .substring(0, 60);
+}
+
+// Returns up to 3 hours lines for the contact page hours block.
+// Returns empty array if no hours data — caller passes "" so empty <p> tags hide via :empty CSS.
+function buildContactHoursLines(input: any): string[] {
+  if (!input) return [];
+  if (typeof input === "string") {
+    return input.trim() ? [input.trim()] : [];
+  }
+  if (Array.isArray(input)) {
+    return input.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean).slice(0, 3);
+  }
+  if (typeof input === "object") {
+    const dayOrder = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+    const dayHours: Array<{ day: string; hours: string }> = [];
+    for (const day of dayOrder) {
+      const v = (input as any)[day] ?? (input as any)[day.charAt(0).toUpperCase() + day.slice(1)];
+      if (!v) continue;
+      let hours = "";
+      if (typeof v === "string") hours = v.trim();
+      else if (typeof v === "object") {
+        if (v.closed === true) hours = "Closed";
+        else if (v.open && v.close) hours = `${v.open} – ${v.close}`;
+      }
+      if (hours) dayHours.push({ day: day.charAt(0).toUpperCase() + day.slice(1), hours });
+    }
+    if (dayHours.length === 0) return [];
+    const lines: string[] = [];
+    let i = 0;
+    while (i < dayHours.length) {
+      let j = i;
+      while (j + 1 < dayHours.length && dayHours[j + 1].hours === dayHours[i].hours) j++;
+      const dayRange = i === j ? dayHours[i].day.slice(0, 3) : `${dayHours[i].day.slice(0, 3)}-${dayHours[j].day.slice(0, 3)}`;
+      lines.push(`${dayRange}: ${dayHours[i].hours}`);
+      i = j + 1;
+    }
+    return lines.slice(0, 3);
+  }
+  return [];
 }
 
 // Returns formatted hours lines ONLY when real values exist; returns "" otherwise.
