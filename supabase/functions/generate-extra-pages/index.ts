@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
 import { autoFillPlaceholders } from "../_shared/autofill.ts";
+import { applyBrandColorsToHTML, logColorApplication, type ColorPlacement, type SkippedBrandColor } from "../_shared/color-system.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
