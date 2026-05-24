@@ -503,6 +503,32 @@ File uploaded with this request: ${uploadedFileUrl ? "yes" : "no"}`;
       });
     }
 
+    if (toolName === "audit_and_fix") {
+      try {
+        const auditPlan = await executeAuditAndFix(params, {
+          clientId, supabase, deployedHtml, intake, anthropicKey,
+        });
+        const enabledDefault = auditPlan.sub_fixes.filter((f) => f.enabled_by_default).map((f) => f.id);
+        await supabase.from("quick_edit_jobs").update({
+          status: "awaiting_confirmation",
+          tool_used: "audit_and_fix",
+          tool_params: params,
+          plan: auditPlan,
+          confidence: auditPlan.sub_fixes.length > 0 ? "high" : "low",
+          enabled_sub_fix_ids: enabledDefault,
+          preview_at: new Date().toISOString(),
+          preview_ms: Date.now() - t0,
+        }).eq("id", job.id);
+        return json({ success: true, job_id: job.id, plan: auditPlan });
+      } catch (e: any) {
+        await supabase.from("quick_edit_jobs").update({
+          status: "failed", error_message: e.message ?? String(e),
+        }).eq("id", job.id);
+        return json({ error: e.message ?? "Audit failed" }, 500);
+      }
+    }
+
+
     // Build plan summary
     const sm = buildSummary(toolName, params, intake, deployedHtml);
     const confidence: "high" | "medium" | "low" =
