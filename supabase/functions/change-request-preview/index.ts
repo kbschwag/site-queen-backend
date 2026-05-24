@@ -727,13 +727,27 @@ File uploaded with this request: ${uploadedFileUrl ? "yes" : "no"}`;
     }
 
 
+    // For update_data_field, extract the current value (intake → deployed-HTML fallback)
+    // BEFORE building the summary so the plan can show "from → to".
+    let extractedCurrent: { value: string | null; source: string; notes?: string } | null = null;
+    if (toolName === "update_data_field" && params?.field) {
+      const { extractCurrentValue } = await import("../_shared/extract-current-value.ts");
+      const r = await extractCurrentValue({
+        field: params.field,
+        intake,
+        deployedHtml,
+        anthropicKey,
+      });
+      extractedCurrent = { value: r.value, source: r.source, notes: r.notes };
+    }
+
     // Build plan summary
-    const sm = buildSummary(toolName, params, intake, deployedHtml);
+    const sm = buildSummary(toolName, params, intake, deployedHtml, extractedCurrent?.value ?? null);
     const confidence: "high" | "medium" | "low" =
       sm.warnings.length === 0 && sm.estimatedChanges > 0 ? "high"
         : sm.warnings.length > 0 ? "low" : "medium";
 
-    const plan = {
+    const plan: any = {
       tool: toolName,
       summary: sm.summary,
       params,
@@ -743,6 +757,11 @@ File uploaded with this request: ${uploadedFileUrl ? "yes" : "no"}`;
       confidence,
       warnings: sm.warnings,
     };
+    if (extractedCurrent) {
+      plan.current_value = extractedCurrent.value;
+      plan.current_value_source = extractedCurrent.source;
+      if (extractedCurrent.notes) plan.current_value_notes = extractedCurrent.notes;
+    }
 
     await supabase.from("quick_edit_jobs").update({
       status: "awaiting_confirmation",
@@ -752,7 +771,9 @@ File uploaded with this request: ${uploadedFileUrl ? "yes" : "no"}`;
       confidence,
       preview_at: new Date().toISOString(),
       preview_ms: previewMs,
-    }).eq("id", job.id);
+      current_value: extractedCurrent?.value ?? null,
+      current_value_source: extractedCurrent?.source ?? null,
+    } as any).eq("id", job.id);
 
     return json({ success: true, job_id: job.id, plan });
   } catch (e: any) {
