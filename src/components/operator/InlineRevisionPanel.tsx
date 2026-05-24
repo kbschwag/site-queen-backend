@@ -266,12 +266,65 @@ export function InlineRevisionPanel({ clientId }: Props) {
           )}
           <div className="flex gap-2">
             <Button onClick={() => handleApply(false)} size="sm" className="gap-2" disabled={busy}>
-              {status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Apply
+              {busy && status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Apply
             </Button>
             <Button onClick={handleCancel} size="sm" variant="ghost" disabled={busy}>Cancel</Button>
           </div>
         </div>
       )}
+
+      {/* Audit plan: checklist of proposed fixes */}
+      {status === "awaiting" && auditPlan && (
+        <div className="space-y-3 rounded-md border border-primary/30 bg-background p-3">
+          <div className="text-sm font-semibold">{auditPlan.summary}</div>
+          {auditPlan.sub_fixes.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Nothing to fix automatically. Try describing the specific issue.</div>
+          ) : (
+            <ul className="space-y-2">
+              {auditPlan.sub_fixes.map((f) => {
+                const checked = enabledFixIds.has(f.id);
+                return (
+                  <li key={f.id} className="flex items-start gap-2 text-xs border border-border/60 rounded p-2">
+                    <input
+                      type="checkbox" checked={checked} disabled={busy}
+                      onChange={(e) => {
+                        setEnabledFixIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(f.id); else next.delete(f.id);
+                          return next;
+                        });
+                      }}
+                      className="mt-0.5 shrink-0 cursor-pointer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-foreground">{f.description}</div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <Badge variant="secondary" className="text-[10px]">{f.tool}</Badge>
+                        <Badge variant="outline" className={`text-[10px] ${
+                          f.confidence === "high"
+                            ? "text-emerald-700 border-emerald-300 bg-emerald-50"
+                            : "text-amber-700 border-amber-300 bg-amber-50"
+                        }`}>{f.confidence}</Badge>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <Button
+              onClick={() => handleApply(false)} size="sm" className="gap-2"
+              disabled={busy || enabledFixIds.size === 0}
+            >
+              {busy && status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Apply {enabledFixIds.size} {enabledFixIds.size === 1 ? "fix" : "fixes"}
+            </Button>
+            <Button onClick={handleCancel} size="sm" variant="ghost" disabled={busy}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
 
       {status === "awaiting" && clarify && (
         <div className="space-y-3 rounded-md border border-blue-300 bg-blue-50/50 p-3">
