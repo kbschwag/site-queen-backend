@@ -1325,42 +1325,24 @@ function injectNoindex(html: string): string {
   return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
 }
 
-// ── business-professional template: direct CSS variable injection ──────
-// This template defines --navy, --navy-mid, --gold, --gold-dark, and a
-// --font-serif token, plus a Google Fonts <link> for Cormorant Garamond.
-// We override these from intake.primary_color, intake.accent_color, and
-// intake.font_preference ('modern' | 'classic' | 'minimal').
-function applyBusinessProfessionalTokens(html: string, intake: any): string {
+// ── business-professional template: font-only swap ────────────────────
+// Colors are handled by the canonical color-system module. This helper only
+// swaps the --font-serif token + Google Fonts URL based on intake.font_preference.
+function applyBusinessProfessionalFonts(html: string, intake: any): string {
+  if (!intake?.font_preference) return html;
+  const fontMap: Record<string, { serif: string; url: string }> = {
+    modern: { serif: '"Playfair Display", Georgia, serif', url: "Playfair+Display:ital,wght@0,400;0,700;1,400" },
+    classic: { serif: '"Cormorant Garamond", Georgia, serif', url: "Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400" },
+    minimal: { serif: '"DM Serif Display", Georgia, serif', url: "DM+Serif+Display:ital@0;1" },
+  };
+  const font = fontMap[String(intake.font_preference).toLowerCase()];
+  if (!font) return html;
   let out = html;
-
-  if (intake?.primary_color && typeof intake.primary_color === "string") {
-    const c = intake.primary_color.trim();
-    if (/^#[0-9a-fA-F]{3,6}$/.test(c)) {
-      out = out.replace(/--navy:\s*#[0-9a-fA-F]{3,6}/g, `--navy: ${c}`);
-      out = out.replace(/--navy-mid:\s*#[0-9a-fA-F]{3,6}/g, `--navy-mid: ${c}`);
-    }
-  }
-  if (intake?.accent_color && typeof intake.accent_color === "string") {
-    const c = intake.accent_color.trim();
-    if (/^#[0-9a-fA-F]{3,6}$/.test(c)) {
-      out = out.replace(/--gold:\s*#[0-9a-fA-F]{3,6}/g, `--gold: ${c}`);
-      out = out.replace(/--gold-dark:\s*#[0-9a-fA-F]{3,6}/g, `--gold-dark: ${c}`);
-    }
-  }
-  if (intake?.font_preference) {
-    const fontMap: Record<string, { serif: string; url: string }> = {
-      modern: { serif: '"Playfair Display", Georgia, serif', url: "Playfair+Display:ital,wght@0,400;0,700;1,400" },
-      classic: { serif: '"Cormorant Garamond", Georgia, serif', url: "Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400" },
-      minimal: { serif: '"DM Serif Display", Georgia, serif', url: "DM+Serif+Display:ital@0;1" },
-    };
-    const font = fontMap[String(intake.font_preference).toLowerCase()];
-    if (font) {
-      out = out.replace(/--font-serif:\s*[^;]+;/, `--font-serif: ${font.serif};`);
-      out = out.replace(/Cormorant\+Garamond[^"']+/g, font.url);
-    }
-  }
+  out = out.replace(/--font-serif:\s*[^;]+;/, `--font-serif: ${font.serif};`);
+  out = out.replace(/Cormorant\+Garamond[^"']+/g, font.url);
   return out;
 }
+
 // Resolves a client-provided color to a clean #rrggbb / #rgb string,
 // or returns the provided fallback (template default) when missing/invalid.
 function resolveBrandColor(input: unknown, fallback: string): string {
@@ -1369,63 +1351,25 @@ function resolveBrandColor(input: unknown, fallback: string): string {
   if (!raw) return fallback;
   if (/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw)) return raw;
   if (/^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw)) return `#${raw}`;
-  // Allow hsl()/rgb() functional notation as-is (browsers accept it in CSS vars)
   if (/^(hsl|rgb)a?\s*\(/i.test(raw)) return raw;
   return fallback;
 }
 
-// Replaces brand-color and font CSS variables inside the FIRST :root { ... }
-// block of any template. Handles multiple naming conventions so it works
-// across templates:
-//   primary  → --red, --burgundy, --primary, --color-primary
-//   accent   → --gold,             --accent,  --color-accent
-//   fonts    → --font-heading, --font-body
-// Other tokens (--navy, --white, --gray, etc.) are preserved exactly as the
-// template defines them.
-const PRIMARY_VAR_NAMES = ["--burgundy", "--red", "--primary", "--color-primary"];
-const ACCENT_VAR_NAMES = ["--gold", "--accent", "--color-accent"];
-
-function replaceCssVarInRoot(rootBody: string, names: string[], value: string): string {
-  // First-match-wins: replace the first variable in `names` that already exists
-  // in the template's :root. If none match, return body UNCHANGED — the template
-  // default wins. NEVER append a new variable; doing so leaks colors through
-  // `var(--missing, var(--burgundy, ...))` fallback chains in downstream CSS.
-  let out = rootBody;
-  for (const n of names) {
-    const re = new RegExp(`(${n.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
-    if (re.test(out)) {
-      return out.replace(re, `$1${value}$3`);
-    }
-  }
-  return out;
-}
-
-interface BrandTokens {
-  primaryColor?: string;
-  accentColor?: string;
-  headingFont?: string;
-  bodyFont?: string;
-}
-
-function injectBrandTokensIntoRoot(html: string, tokens: BrandTokens): string {
-  return html.replace(/:root\s*\{([\s\S]*?)\}/, (_match, body: string) => {
+// Font-only :root mutator. Color mutations live exclusively in _shared/color-system.ts.
+function injectFontTokensIntoRoot(html: string, tokens: { headingFont?: string; bodyFont?: string }): string {
+  return html.replace(/:root\s*\{([\s\S]*?)\}/, (_m, body: string) => {
     let out = body;
-    if (tokens.primaryColor) out = replaceCssVarInRoot(out, PRIMARY_VAR_NAMES, tokens.primaryColor);
-    if (tokens.accentColor) out = replaceCssVarInRoot(out, ACCENT_VAR_NAMES, tokens.accentColor);
-    if (tokens.headingFont) {
-      out = replaceCssVarInRoot(out, ["--font-heading"], `'${tokens.headingFont}', serif`);
-    }
-    if (tokens.bodyFont) {
-      out = replaceCssVarInRoot(out, ["--font-body"], `'${tokens.bodyFont}', sans-serif`);
-    }
+    const replace = (name: string, value: string) => {
+      const re = new RegExp(`(${name.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
+      if (re.test(out)) out = out.replace(re, `$1${value}$3`);
+    };
+    if (tokens.headingFont) replace("--font-heading", `'${tokens.headingFont}', serif`);
+    if (tokens.bodyFont) replace("--font-body", `'${tokens.bodyFont}', sans-serif`);
     return `:root {${out}}`;
   });
 }
 
-// Backwards-compatible wrapper kept for callers using the old name.
-function injectBrandColorsIntoRoot(html: string, primaryColor: string, accentColor: string): string {
-  return injectBrandTokensIntoRoot(html, { primaryColor, accentColor });
-}
+
 
 // Inject a Google Fonts <link> for the chosen heading/body fonts.
 function injectGoogleFontsLink(html: string, headingFont: string, bodyFont: string): string {
