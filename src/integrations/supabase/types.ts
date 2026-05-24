@@ -1633,6 +1633,7 @@ export type Database = {
           confirmed_at: string | null
           created_at: string
           edited_files: string[]
+          enabled_sub_fix_ids: string[] | null
           error_message: string | null
           id: string
           instruction: string
@@ -1645,6 +1646,7 @@ export type Database = {
           skipped_files: string[]
           started_at: string | null
           status: string
+          sub_fix_results: Json | null
           tool_params: Json | null
           tool_used: string | null
           updated_at: string
@@ -1662,6 +1664,7 @@ export type Database = {
           confirmed_at?: string | null
           created_at?: string
           edited_files?: string[]
+          enabled_sub_fix_ids?: string[] | null
           error_message?: string | null
           id?: string
           instruction: string
@@ -1674,6 +1677,7 @@ export type Database = {
           skipped_files?: string[]
           started_at?: string | null
           status?: string
+          sub_fix_results?: Json | null
           tool_params?: Json | null
           tool_used?: string | null
           updated_at?: string
@@ -1691,6 +1695,7 @@ export type Database = {
           confirmed_at?: string | null
           created_at?: string
           edited_files?: string[]
+          enabled_sub_fix_ids?: string[] | null
           error_message?: string | null
           id?: string
           instruction?: string
@@ -1703,6 +1708,7 @@ export type Database = {
           skipped_files?: string[]
           started_at?: string | null
           status?: string
+          sub_fix_results?: Json | null
           tool_params?: Json | null
           tool_used?: string | null
           updated_at?: string

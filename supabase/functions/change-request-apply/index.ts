@@ -525,10 +525,8 @@ serve(async (req) => {
       created_by: caller.id,
     });
 
-    const tool = useFallback ? "fallback" : job.tool_used;
-    if (!tool || tool === "clarify") {
-      throw new Error("Cannot apply this job — no actionable tool was selected");
-    }
+    const plan = job.plan as any;
+    const isAuditPlan = !!(plan && plan.is_audit_plan);
 
     const ctx: ExecContext = {
       clientId, supabase, deployedHtml, intake,
@@ -536,11 +534,63 @@ serve(async (req) => {
       anthropicKey,
     };
 
-    const result = await executeTool(tool, job.tool_params, ctx, job.instruction);
+    let totalEditedFiles: string[] = [];
+    let totalChanges = 0;
+    let subFixResults: Array<{ id: string; description: string; status: "success" | "failed"; error?: string; edited_files?: string[]; changes?: number }> | null = null;
+    let toolForLog = "";
 
-    // Push every updated file
-    for (const [filename, html] of Object.entries(result.updatedFiles)) {
-      await uploadAndPushFile(supabase, clientId, filename, html);
+    if (isAuditPlan) {
+      toolForLog = "audit_and_fix";
+      const enabledIds: string[] = Array.isArray(body.enabled_sub_fix_ids) && body.enabled_sub_fix_ids.length
+        ? body.enabled_sub_fix_ids
+        : (job.enabled_sub_fix_ids || plan.sub_fixes.filter((f: any) => f.enabled_by_default).map((f: any) => f.id));
+      const enabled = (plan.sub_fixes || []).filter((f: any) => enabledIds.includes(f.id));
+
+      subFixResults = [];
+      const editedSet = new Set<string>();
+      const aggregateUpdates: Record<string, string> = {};
+
+      for (const fix of enabled) {
+        try {
+          // Refresh ctx.deployedHtml with prior accumulated updates so sequential fixes compose
+          const composedHtml: Record<string, string> = { ...deployedHtml, ...aggregateUpdates };
+          const subCtx: ExecContext = { ...ctx, deployedHtml: composedHtml };
+          const r = await executeTool(fix.tool, fix.params, subCtx, job.instruction);
+          for (const [f, h] of Object.entries(r.updatedFiles)) {
+            aggregateUpdates[f] = h;
+            editedSet.add(f);
+          }
+          totalChanges += r.changesCount || 0;
+          subFixResults.push({
+            id: fix.id, description: fix.description, status: "success",
+            edited_files: r.editedFiles, changes: r.changesCount,
+          });
+        } catch (e: any) {
+          subFixResults.push({
+            id: fix.id, description: fix.description, status: "failed",
+            error: e.message ?? String(e),
+          });
+          // continue with next fix
+        }
+      }
+
+      totalEditedFiles = Array.from(editedSet);
+      // Push every aggregated file once
+      for (const [filename, html] of Object.entries(aggregateUpdates)) {
+        await uploadAndPushFile(supabase, clientId, filename, html);
+      }
+    } else {
+      const tool = useFallback ? "fallback" : job.tool_used;
+      toolForLog = tool;
+      if (!tool || tool === "clarify") {
+        throw new Error("Cannot apply this job — no actionable tool was selected");
+      }
+      const result = await executeTool(tool, job.tool_params, ctx, job.instruction);
+      for (const [filename, html] of Object.entries(result.updatedFiles)) {
+        await uploadAndPushFile(supabase, clientId, filename, html);
+      }
+      totalEditedFiles = result.editedFiles;
+      totalChanges = result.changesCount;
     }
 
     // Update sites metadata
@@ -553,18 +603,28 @@ serve(async (req) => {
     await supabase.from("quick_edit_jobs").update({
       status: "completed",
       version_timestamp: versionTimestamp,
-      edited_files: result.editedFiles,
-      changes_count: result.changesCount,
+      edited_files: totalEditedFiles,
+      changes_count: totalChanges,
       used_fallback: useFallback,
+      sub_fix_results: subFixResults,
+      enabled_sub_fix_ids: isAuditPlan ? (body.enabled_sub_fix_ids || job.enabled_sub_fix_ids || null) : null,
       confirmed_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),
     }).eq("id", jobId);
 
     const operatorEmail = profileRow?.email ?? caller.email ?? null;
     await logEdit(supabase, clientId, caller.id, operatorEmail,
-      `[${tool}${useFallback ? "+fallback" : ""}] ${job.instruction}`, "completed", null);
+      `[${toolForLog}${useFallback ? "+fallback" : ""}] ${job.instruction}`, "completed", null);
 
-    return json({ success: true, edited_files: result.editedFiles, changes_made: result.changesCount, version_timestamp: versionTimestamp });
+    return json({
+      success: true,
+      edited_files: totalEditedFiles,
+      changes_made: totalChanges,
+      version_timestamp: versionTimestamp,
+      sub_fix_results: subFixResults,
+      is_audit_plan: isAuditPlan,
+    });
+
   } catch (e: any) {
     console.error("change-request-apply error:", e);
     try {

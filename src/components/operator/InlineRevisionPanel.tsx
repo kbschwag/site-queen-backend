@@ -24,6 +24,31 @@ interface Plan {
   warnings?: string[];
 }
 
+interface AuditSubFix {
+  id: string;
+  description: string;
+  tool: string;
+  params: any;
+  confidence: "high" | "medium";
+  enabled_by_default: boolean;
+}
+interface AuditPlan {
+  is_audit_plan: true;
+  tool: "audit_and_fix";
+  summary: string;
+  target_scope: string;
+  target_page: string;
+  sub_fixes: AuditSubFix[];
+}
+interface SubFixResult {
+  id: string;
+  description: string;
+  status: "success" | "failed";
+  error?: string;
+  edited_files?: string[];
+  changes?: number;
+}
+
 export function InlineRevisionPanel({ clientId }: Props) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,6 +65,9 @@ export function InlineRevisionPanel({ clientId }: Props) {
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [auditPlan, setAuditPlan] = useState<AuditPlan | null>(null);
+  const [enabledFixIds, setEnabledFixIds] = useState<Set<string>>(new Set());
+  const [subFixResults, setSubFixResults] = useState<SubFixResult[] | null>(null);
   const [clarify, setClarify] = useState<{ reason: string; suggestions: string[] } | null>(null);
   const [fallback, setFallback] = useState<{ reason: string; summary: string } | null>(null);
 
@@ -82,14 +110,17 @@ export function InlineRevisionPanel({ clientId }: Props) {
   const clearUpload = () => { setUploadedUrl(null); setUploadedName(null); };
 
   const resetAll = () => {
-    setInstruction(""); clearUpload(); setPlan(null); setClarify(null);
-    setFallback(null); setJobId(null);
+    setInstruction(""); clearUpload(); setPlan(null); setAuditPlan(null);
+    setEnabledFixIds(new Set()); setSubFixResults(null);
+    setClarify(null); setFallback(null); setJobId(null);
   };
 
   const handlePreview = async () => {
     const text = instruction.trim();
     if (!text && !uploadedUrl) return;
-    setStatus("previewing"); setStatusMsg(""); setPlan(null); setClarify(null); setFallback(null);
+    setStatus("previewing"); setStatusMsg("");
+    setPlan(null); setAuditPlan(null); setSubFixResults(null);
+    setClarify(null); setFallback(null);
     try {
       const { data, error } = await supabase.functions.invoke("change-request-preview", {
         body: { client_id: clientId, instruction: text || "Replace the uploaded image into the appropriate slot", uploaded_file_url: uploadedUrl },
@@ -98,7 +129,16 @@ export function InlineRevisionPanel({ clientId }: Props) {
       const d: any = data;
       if (d?.error) throw new Error(d.error);
       setJobId(d.job_id);
-      if (d.success && d.plan) { setPlan(d.plan); setStatus("awaiting"); return; }
+      if (d.success && d.plan) {
+        if (d.plan.is_audit_plan) {
+          const ap = d.plan as AuditPlan;
+          setAuditPlan(ap);
+          setEnabledFixIds(new Set(ap.sub_fixes.filter((f) => f.enabled_by_default).map((f) => f.id)));
+        } else {
+          setPlan(d.plan);
+        }
+        setStatus("awaiting"); return;
+      }
       if (d.needs_clarification) { setClarify({ reason: d.reason, suggestions: d.suggestions || [] }); setStatus("awaiting"); return; }
       if (d.fallback_available) { setFallback({ reason: d.reason, summary: d.fallback_summary }); setStatus("awaiting"); return; }
       throw new Error("Unexpected response from preview");
@@ -111,22 +151,31 @@ export function InlineRevisionPanel({ clientId }: Props) {
     if (!jobId) return;
     setStatus("applying"); setStatusMsg("");
     try {
-      const { data, error } = await supabase.functions.invoke("change-request-apply", {
-        body: { job_id: jobId, use_fallback: useFallback },
-      });
+      const body: any = { job_id: jobId, use_fallback: useFallback };
+      if (auditPlan) body.enabled_sub_fix_ids = Array.from(enabledFixIds);
+      const { data, error } = await supabase.functions.invoke("change-request-apply", { body });
       if (error) throw new Error(error.message || "Apply failed");
       const d: any = data;
       if (d?.error) throw new Error(d.error);
       setStatus("success");
       setStatusMsg(`✓ ${d.changes_made || 0} change(s) applied across ${(d.edited_files || []).length} page(s)`);
       setLastVersionTs(d.version_timestamp || null);
-      resetAll();
+      if (d.is_audit_plan && Array.isArray(d.sub_fix_results)) {
+        setSubFixResults(d.sub_fix_results);
+        // Preserve sub_fix_results display: don't fully reset audit context yet
+        setInstruction(""); clearUpload();
+        setPlan(null); setAuditPlan(null); setEnabledFixIds(new Set());
+        setClarify(null); setFallback(null); setJobId(null);
+      } else {
+        resetAll();
+      }
       queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
       refetchVersions();
     } catch (e: any) {
       setStatus("error"); setStatusMsg(e?.message || "Apply failed");
     }
   };
+
 
   const handleCancel = async () => {
     if (jobId) {
@@ -217,12 +266,65 @@ export function InlineRevisionPanel({ clientId }: Props) {
           )}
           <div className="flex gap-2">
             <Button onClick={() => handleApply(false)} size="sm" className="gap-2" disabled={busy}>
-              {status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Apply
+              {busy && status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Apply
             </Button>
             <Button onClick={handleCancel} size="sm" variant="ghost" disabled={busy}>Cancel</Button>
           </div>
         </div>
       )}
+
+      {/* Audit plan: checklist of proposed fixes */}
+      {status === "awaiting" && auditPlan && (
+        <div className="space-y-3 rounded-md border border-primary/30 bg-background p-3">
+          <div className="text-sm font-semibold">{auditPlan.summary}</div>
+          {auditPlan.sub_fixes.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Nothing to fix automatically. Try describing the specific issue.</div>
+          ) : (
+            <ul className="space-y-2">
+              {auditPlan.sub_fixes.map((f) => {
+                const checked = enabledFixIds.has(f.id);
+                return (
+                  <li key={f.id} className="flex items-start gap-2 text-xs border border-border/60 rounded p-2">
+                    <input
+                      type="checkbox" checked={checked} disabled={busy}
+                      onChange={(e) => {
+                        setEnabledFixIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(f.id); else next.delete(f.id);
+                          return next;
+                        });
+                      }}
+                      className="mt-0.5 shrink-0 cursor-pointer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-foreground">{f.description}</div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <Badge variant="secondary" className="text-[10px]">{f.tool}</Badge>
+                        <Badge variant="outline" className={`text-[10px] ${
+                          f.confidence === "high"
+                            ? "text-emerald-700 border-emerald-300 bg-emerald-50"
+                            : "text-amber-700 border-amber-300 bg-amber-50"
+                        }`}>{f.confidence}</Badge>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <Button
+              onClick={() => handleApply(false)} size="sm" className="gap-2"
+              disabled={busy || enabledFixIds.size === 0}
+            >
+              {busy && status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Apply {enabledFixIds.size} {enabledFixIds.size === 1 ? "fix" : "fixes"}
+            </Button>
+            <Button onClick={handleCancel} size="sm" variant="ghost" disabled={busy}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
 
       {status === "awaiting" && clarify && (
         <div className="space-y-3 rounded-md border border-blue-300 bg-blue-50/50 p-3">
@@ -253,7 +355,7 @@ export function InlineRevisionPanel({ clientId }: Props) {
           </div>
           <div className="flex gap-2">
             <Button onClick={() => handleApply(true)} size="sm" className="gap-2" disabled={busy}>
-              {status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Try AI edit
+              {busy && status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Try AI edit
             </Button>
             <Button onClick={handleCancel} size="sm" variant="ghost">Cancel</Button>
           </div>
@@ -262,12 +364,32 @@ export function InlineRevisionPanel({ clientId }: Props) {
 
       {status === "applying" && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying…</div>}
       {status === "success" && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="flex items-center gap-2 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {statusMsg}</span>
-          {lastVersionTs && (
-            <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => handleRestore(lastVersionTs)} disabled={!!restoringTs}>
-              {restoringTs === lastVersionTs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />} Undo
-            </Button>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-2 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {statusMsg}</span>
+            {lastVersionTs && (
+              <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => handleRestore(lastVersionTs)} disabled={!!restoringTs}>
+                {restoringTs === lastVersionTs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />} Undo
+              </Button>
+            )}
+          </div>
+          {subFixResults && subFixResults.length > 0 && (
+            <ul className="space-y-1 text-xs">
+              {subFixResults.map((r) => (
+                <li key={r.id} className="flex items-start gap-2">
+                  {r.status === "success"
+                    ? <CheckCircle2 className="h-3 w-3 text-emerald-600 mt-0.5 shrink-0" />
+                    : <AlertCircle className="h-3 w-3 text-destructive mt-0.5 shrink-0" />}
+                  <span className={r.status === "success" ? "text-emerald-800" : "text-destructive"}>
+                    {r.description}
+                    {r.status === "failed" && r.error ? ` — ${r.error}` : ""}
+                    {r.status === "success" && r.edited_files?.length
+                      ? ` (${r.changes ?? 0} change${(r.changes ?? 0) === 1 ? "" : "s"} across ${r.edited_files.length} page${r.edited_files.length === 1 ? "" : "s"})`
+                      : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}
