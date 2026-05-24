@@ -615,6 +615,117 @@ Return ONLY valid JSON. No markdown:
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // CONTACT PAGE — per-template contact.html, Claude fills copy only
+    // ════════════════════════════════════════════════════════════════════
+    try {
+      const { data: contactFile } = await supabase.storage
+        .from("templates")
+        .download(`${templateId}/contact.html`);
+      if (!contactFile) throw new Error(`Template not found: ${templateId}/contact.html`);
+      let contactHTML = await contactFile.text();
+
+      if (templateId === "business-professional") {
+        contactHTML = applyBusinessProfessionalFonts(contactHTML, intake);
+      }
+
+      const contactPrompt = `You are a professional copywriter for SiteQueen. Generate copy for the CONTACT page of ${businessName}, a ${businessType} in ${city}, ${state}.
+
+BUSINESS DATA:
+- Phone: ${phone || "not provided"}
+- Email: ${email || "not provided"}
+- Address: ${address || "not provided"}
+- Service area: ${intake.service_area || (city ? `${city} & Surrounding Areas` : "")}
+- Services offered: ${serviceNames.join(", ") || "not provided"}
+
+CALL NOTES (highest priority):
+${callNotes ? JSON.stringify({
+  tone_of_voice: (callNotes as any).tone_of_voice,
+  tone_custom: (callNotes as any).tone_custom,
+  exact_phrases: (callNotes as any).exact_phrases,
+}, null, 2) : "No call notes."}
+
+TONE: Match call notes tone. If not specified, default based on business type:
+- Restaurant/cafe/food: warm and inviting, "stop by", "come see us"
+- Spa/salon/wellness: calm and welcoming, "schedule", "visit"
+- Law firm/accounting/professional: formal and reassuring, "schedule consultation", "contact us"
+- Trades/contracting: confident and direct, "request quote", "call now"
+
+Return ONLY valid JSON. No markdown. No explanation:
+{
+  "CONTACT_META_DESC": "150-character meta description for contact page",
+  "CONTACT_PAGE_HEADLINE": "2-4 words for page hero h1",
+  "CONTACT_PAGE_SUBTITLE": "one sentence below the page title, ~15 words, inviting tone",
+  "CONTACT_EYEBROW": "2-4 words uppercase eyebrow (e.g., 'GET IN TOUCH')",
+  "CONTACT_INFO_HEADING": "3-6 words heading for left column",
+  "CONTACT_INFO_BODY": "2-3 sentences about how to reach the business, warm and specific to ${city}",
+  "CONTACT_FORM_HEADING": "3-5 words form heading",
+  "CONTACT_FORM_INTRO": "one sentence inviting them to fill out the form",
+  "CONTACT_SERVICE_LABEL": "uppercase label for the service dropdown matching the business type",
+  "CONTACT_MESSAGE_PLACEHOLDER": "placeholder text inside the message textarea, helpful prompt specific to this business",
+  "CONTACT_SUBMIT_LABEL": "2-3 word uppercase button text matching the business type"
+}`;
+
+      console.log(`[extra-pages] Generating contact copy...`);
+      const contactCopyResult = await callAI(ANTHROPIC_API_KEY, contactPrompt, "contact-copy");
+      let contactCopy: any = {};
+      try {
+        contactCopy = JSON.parse(stripMarkdown(contactCopyResult.text));
+      } catch (e) {
+        console.error("[extra-pages] Contact copy JSON parse failed:", e);
+      }
+
+      // Apply brand colors via the canonical color system
+      const __contactColor = applyBrandColorsToHTML(contactHTML, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId);
+      contactHTML = __contactColor.html;
+      console.log("[color-system] contact", JSON.stringify({ templateId, applied: __contactColor.result.appliedPlacements, skipped: __contactColor.result.skippedBrandColors }));
+
+      const hoursLines = buildContactHoursLines(intake.business_hours);
+      const zip = intake.business_zip || intake.zip || intake.postal_code || intake.zip_code || "";
+
+      const contactFill: Record<string, string> = {
+        ...sharedFill,
+        "{{BUSINESS_ZIP}}": zip,
+        "{{CONTACT_META_DESC}}": contactCopy.CONTACT_META_DESC || `Contact ${businessName} in ${city}, ${state}.`,
+        "{{CONTACT_PAGE_HEADLINE}}": contactCopy.CONTACT_PAGE_HEADLINE || "Get in Touch",
+        "{{CONTACT_PAGE_SUBTITLE}}": contactCopy.CONTACT_PAGE_SUBTITLE || `We'd love to hear from you. Reach out anytime.`,
+        "{{CONTACT_EYEBROW}}": contactCopy.CONTACT_EYEBROW || "GET IN TOUCH",
+        "{{CONTACT_INFO_HEADING}}": contactCopy.CONTACT_INFO_HEADING || "Contact Information",
+        "{{CONTACT_INFO_BODY}}": contactCopy.CONTACT_INFO_BODY || `We're here to help. Reach out by phone, email, or send us a message using the form.`,
+        "{{CONTACT_FORM_HEADING}}": contactCopy.CONTACT_FORM_HEADING || "Send Us a Message",
+        "{{CONTACT_FORM_INTRO}}": contactCopy.CONTACT_FORM_INTRO || "Fill out the form below and we'll get back to you within one business day.",
+        "{{CONTACT_SERVICE_LABEL}}": contactCopy.CONTACT_SERVICE_LABEL || "SERVICE NEEDED",
+        "{{CONTACT_MESSAGE_PLACEHOLDER}}": contactCopy.CONTACT_MESSAGE_PLACEHOLDER || "Tell us how we can help...",
+        "{{CONTACT_SUBMIT_LABEL}}": contactCopy.CONTACT_SUBMIT_LABEL || "SEND MESSAGE",
+        "{{BUSINESS_HOURS_LINE_1}}": hoursLines[0] || "",
+        "{{BUSINESS_HOURS_LINE_2}}": hoursLines[1] || "",
+        "{{BUSINESS_HOURS_LINE_3}}": hoursLines[2] || "",
+      };
+
+      for (const [key, value] of Object.entries(contactFill)) {
+        contactHTML = contactHTML.split(key).join(value);
+      }
+      await logUnfilledPlaceholders(supabase, clientId, templateId, "contact", contactHTML);
+      contactHTML = contactHTML.replace(/\{\{[^}]+\}\}/g, "");
+      contactHTML = addAnalyticsTags(contactHTML, "contact");
+      contactHTML = contactHTML.replace("</body>", analyticsScript + "\n</body>");
+      contactHTML = wireContactForms(contactHTML, clientId, supabaseUrl);
+      contactHTML = injectFavicon(contactHTML, faviconTag);
+
+      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/contact.html`, injectNoindex(contactHTML));
+      await supabase.storage.from("generated-sites").upload(
+        `${clientId}/deploy/contact.html`,
+        new Blob([contactHTML], { type: "text/html" }),
+        { upsert: true, contentType: "text/html; charset=utf-8" }
+      );
+
+      generated.push("contact");
+      console.log(`[extra-pages] ✓ contact.html (${contactCopyResult.outputTokens} tokens)`);
+    } catch (e: any) {
+      console.error("[extra-pages] ✗ contact failed:", e.message);
+      failed.push(`contact: ${e.message}`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // UNIVERSAL CUSTOM PAGE GENERATOR
     // CSS comes from the ABOUT page (correct simple page-hero style).
     // Header + footer come from the HOMEPAGE (always correct).
