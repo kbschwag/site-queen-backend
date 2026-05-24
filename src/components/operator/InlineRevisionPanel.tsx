@@ -110,14 +110,17 @@ export function InlineRevisionPanel({ clientId }: Props) {
   const clearUpload = () => { setUploadedUrl(null); setUploadedName(null); };
 
   const resetAll = () => {
-    setInstruction(""); clearUpload(); setPlan(null); setClarify(null);
-    setFallback(null); setJobId(null);
+    setInstruction(""); clearUpload(); setPlan(null); setAuditPlan(null);
+    setEnabledFixIds(new Set()); setSubFixResults(null);
+    setClarify(null); setFallback(null); setJobId(null);
   };
 
   const handlePreview = async () => {
     const text = instruction.trim();
     if (!text && !uploadedUrl) return;
-    setStatus("previewing"); setStatusMsg(""); setPlan(null); setClarify(null); setFallback(null);
+    setStatus("previewing"); setStatusMsg("");
+    setPlan(null); setAuditPlan(null); setSubFixResults(null);
+    setClarify(null); setFallback(null);
     try {
       const { data, error } = await supabase.functions.invoke("change-request-preview", {
         body: { client_id: clientId, instruction: text || "Replace the uploaded image into the appropriate slot", uploaded_file_url: uploadedUrl },
@@ -126,7 +129,16 @@ export function InlineRevisionPanel({ clientId }: Props) {
       const d: any = data;
       if (d?.error) throw new Error(d.error);
       setJobId(d.job_id);
-      if (d.success && d.plan) { setPlan(d.plan); setStatus("awaiting"); return; }
+      if (d.success && d.plan) {
+        if (d.plan.is_audit_plan) {
+          const ap = d.plan as AuditPlan;
+          setAuditPlan(ap);
+          setEnabledFixIds(new Set(ap.sub_fixes.filter((f) => f.enabled_by_default).map((f) => f.id)));
+        } else {
+          setPlan(d.plan);
+        }
+        setStatus("awaiting"); return;
+      }
       if (d.needs_clarification) { setClarify({ reason: d.reason, suggestions: d.suggestions || [] }); setStatus("awaiting"); return; }
       if (d.fallback_available) { setFallback({ reason: d.reason, summary: d.fallback_summary }); setStatus("awaiting"); return; }
       throw new Error("Unexpected response from preview");
@@ -139,22 +151,31 @@ export function InlineRevisionPanel({ clientId }: Props) {
     if (!jobId) return;
     setStatus("applying"); setStatusMsg("");
     try {
-      const { data, error } = await supabase.functions.invoke("change-request-apply", {
-        body: { job_id: jobId, use_fallback: useFallback },
-      });
+      const body: any = { job_id: jobId, use_fallback: useFallback };
+      if (auditPlan) body.enabled_sub_fix_ids = Array.from(enabledFixIds);
+      const { data, error } = await supabase.functions.invoke("change-request-apply", { body });
       if (error) throw new Error(error.message || "Apply failed");
       const d: any = data;
       if (d?.error) throw new Error(d.error);
       setStatus("success");
       setStatusMsg(`✓ ${d.changes_made || 0} change(s) applied across ${(d.edited_files || []).length} page(s)`);
       setLastVersionTs(d.version_timestamp || null);
-      resetAll();
+      if (d.is_audit_plan && Array.isArray(d.sub_fix_results)) {
+        setSubFixResults(d.sub_fix_results);
+        // Preserve sub_fix_results display: don't fully reset audit context yet
+        setInstruction(""); clearUpload();
+        setPlan(null); setAuditPlan(null); setEnabledFixIds(new Set());
+        setClarify(null); setFallback(null); setJobId(null);
+      } else {
+        resetAll();
+      }
       queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
       refetchVersions();
     } catch (e: any) {
       setStatus("error"); setStatusMsg(e?.message || "Apply failed");
     }
   };
+
 
   const handleCancel = async () => {
     if (jobId) {
