@@ -261,6 +261,8 @@ RULES:
 - For data field updates the change propagates to every place that data appears — mention this in your reason.
 - If the request mentions multiple changes, pick the most important one and note the rest belong in separate requests.
 - If a file was uploaded but the instruction doesn't say what to do with it, clarify which slot.
+- If the operator says something is "wrong", "broken", "off", "weird", "needs fixing", "doesn't look right", or asks to "format X correctly" without specifying exactly what's wrong — call \`audit_and_fix\` (not clarify). This tool examines the deployed HTML for issues and proposes fixes.
+- Only use \`clarify\` when the request is vague in a way that audit_and_fix can't solve (e.g., "make it better", "change the color to something nicer" — these don't describe broken state, they describe taste preferences that require operator input).
 - If the instruction is entirely unactionable ("make our website better"), clarify with specific rephrasings.`;
 
 function pickPages(toolName: string, params: any): string[] {
