@@ -12,6 +12,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "./hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "./diagnostics.ts";
 import { autoFillPlaceholders } from "./autofill.ts";
+import { applyBrandColorsToHTML } from "./color-system.ts";
 
 export const RESTAURANT_TEMPLATE_ID = "local-favorite";
 export const RESTAURANT_PAGES = ["index", "menu", "about"] as const;
