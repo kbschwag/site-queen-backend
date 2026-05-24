@@ -314,8 +314,10 @@ Return ONLY valid JSON. No markdown. No explanation:
         console.error("[extra-pages] About copy JSON parse failed:", e);
       }
 
-      // Inject CSS variables
-      aboutHTML = injectCSSVars(aboutHTML, primaryColor, accentColor, fonts, templateId);
+      // Apply brand colors via the canonical color system
+      const __aboutColor = applyBrandColorsToHTML(aboutHTML, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId);
+      aboutHTML = __aboutColor.html;
+      console.log("[color-system] about", JSON.stringify({ templateId, applied: __aboutColor.result.appliedPlacements, skipped: __aboutColor.result.skippedBrandColors }));
 
       // Fill all placeholders
       const aboutFill: Record<string, string> = {
