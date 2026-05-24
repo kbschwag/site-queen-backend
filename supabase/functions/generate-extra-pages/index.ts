@@ -1147,6 +1147,45 @@ function slugify(s: string): string {
     .substring(0, 60);
 }
 
+// Returns up to 3 hours lines for the contact page hours block.
+// Returns empty array if no hours data — caller passes "" so empty <p> tags hide via :empty CSS.
+function buildContactHoursLines(input: any): string[] {
+  if (!input) return [];
+  if (typeof input === "string") {
+    return input.trim() ? [input.trim()] : [];
+  }
+  if (Array.isArray(input)) {
+    return input.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean).slice(0, 3);
+  }
+  if (typeof input === "object") {
+    const dayOrder = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+    const dayHours: Array<{ day: string; hours: string }> = [];
+    for (const day of dayOrder) {
+      const v = (input as any)[day] ?? (input as any)[day.charAt(0).toUpperCase() + day.slice(1)];
+      if (!v) continue;
+      let hours = "";
+      if (typeof v === "string") hours = v.trim();
+      else if (typeof v === "object") {
+        if (v.closed === true) hours = "Closed";
+        else if (v.open && v.close) hours = `${v.open} – ${v.close}`;
+      }
+      if (hours) dayHours.push({ day: day.charAt(0).toUpperCase() + day.slice(1), hours });
+    }
+    if (dayHours.length === 0) return [];
+    const lines: string[] = [];
+    let i = 0;
+    while (i < dayHours.length) {
+      let j = i;
+      while (j + 1 < dayHours.length && dayHours[j + 1].hours === dayHours[i].hours) j++;
+      const dayRange = i === j ? dayHours[i].day.slice(0, 3) : `${dayHours[i].day.slice(0, 3)}-${dayHours[j].day.slice(0, 3)}`;
+      lines.push(`${dayRange}: ${dayHours[i].hours}`);
+      i = j + 1;
+    }
+    return lines.slice(0, 3);
+  }
+  return [];
+}
+
 // Returns formatted hours lines ONLY when real values exist; returns "" otherwise.
 // Accepts either a string ("Mon-Fri 9-5"), an array, or a per-day object map.
 function formatBusinessHours(input: any): string {
