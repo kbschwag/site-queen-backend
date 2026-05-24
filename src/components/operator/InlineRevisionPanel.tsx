@@ -22,6 +22,8 @@ interface Plan {
   estimated_changes: number;
   confidence: "high" | "medium" | "low";
   warnings?: string[];
+  current_value?: string | null;
+  current_value_source?: "intake" | "extracted" | "not_found";
 }
 
 interface AuditSubFix {
