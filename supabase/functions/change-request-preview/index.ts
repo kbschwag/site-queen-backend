@@ -199,8 +199,34 @@ const TOOLS = [
     },
   },
   {
+    name: "audit_and_fix",
+    description: "Use this when the operator reports that something is 'wrong', 'broken', 'off', 'looks weird', or 'needs fixing' but doesn't specify exactly what. Also use when they ask to 'format X correctly' or 'fix the X' without saying what specifically is wrong. When this tool fires, the system loads the deployed HTML for the affected page(s) and asks Claude to examine it for obvious data quality issues: duplicated values, truncated text, placeholder leakage, malformed addresses (e.g., zip appearing twice), missing labels, broken formatting, business names rendered partially. Each issue Claude finds becomes a sub-fix using one of the other tools. The operator confirms all the fixes at once.",
+    input_schema: {
+      type: "object",
+      required: ["target_scope", "target_page", "operator_complaint"],
+      properties: {
+        target_scope: {
+          type: "string",
+          enum: [
+            "footer", "header", "nav", "hero", "about_section",
+            "services_section", "testimonials_section", "contact_section",
+            "values_section", "announcement_bar", "whole_page", "whole_site",
+          ],
+          description: "Smallest scope that matches the complaint. 'Fix the footer' = 'footer'. 'About page looks weird' = 'whole_page'. 'Something's off' = 'whole_site'.",
+        },
+        target_page: {
+          type: "string",
+          enum: ["index", "about", "services", "contact", "all"],
+          description: "Page the issue is on. Use 'all' for site-wide elements like nav and footer.",
+        },
+        operator_complaint: { type: "string", description: "Operator's exact words, verbatim." },
+        reason: { type: "string" },
+      },
+    },
+  },
+  {
     name: "clarify",
-    description: "Use this when the operator's request is too vague to act on. Returns clarifying questions and example better-phrased requests.",
+    description: "Use this when the operator's request is too vague to act on AND audit_and_fix can't help (i.e., they're asking for taste/preference changes like 'make it nicer' rather than reporting broken state). Returns clarifying questions and example better-phrased requests.",
     input_schema: {
       type: "object",
       required: ["reason", "suggestions"],
