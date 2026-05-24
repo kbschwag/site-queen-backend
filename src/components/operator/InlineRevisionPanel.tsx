@@ -3,75 +3,45 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  Loader2,
-  Send,
-  CheckCircle2,
-  AlertCircle,
-  History,
-  Undo2,
-  RotateCcw,
-  ImagePlus,
-  X,
+  Loader2, Send, CheckCircle2, AlertCircle, History, Undo2, RotateCcw,
+  ImagePlus, X, Sparkles, HelpCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-interface Props {
-  clientId: string;
+interface Props { clientId: string; }
+type Status = "idle" | "previewing" | "awaiting" | "applying" | "success" | "error";
+
+interface Plan {
+  tool: string;
+  summary: string;
+  params: any;
+  affected_pages: string[];
+  affected_fields: string[];
+  estimated_changes: number;
+  confidence: "high" | "medium" | "low";
+  warnings?: string[];
 }
-
-type Status = "idle" | "running" | "success" | "error";
-
-const PAGE_OPTIONS = [
-  { value: "homepage", label: "Homepage" },
-  { value: "about", label: "About" },
-  { value: "services", label: "Services" },
-  { value: "contact", label: "Contact" },
-  { value: "all", label: "All Pages" },
-];
-
-const IMAGE_SLOT_OPTIONS = [
-  { value: "favicon", label: "Favicon" },
-  { value: "hero", label: "Hero Image" },
-  { value: "about", label: "About / Owner Photo" },
-  { value: "why-us", label: "Why Us Photo" },
-  { value: "service-1", label: "Service Photo 1" },
-  { value: "service-2", label: "Service Photo 2" },
-  { value: "service-3", label: "Service Photo 3" },
-  { value: "service-4", label: "Service Photo 4" },
-  { value: "service-5", label: "Service Photo 5" },
-  { value: "service-6", label: "Service Photo 6" },
-  { value: "logo", label: "Logo" },
-  { value: "other", label: "Other (see instructions)" },
-];
-
-const slotLabel = (val: string) =>
-  IMAGE_SLOT_OPTIONS.find((o) => o.value === val)?.label || val;
 
 export function InlineRevisionPanel({ clientId }: Props) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [instruction, setInstruction] = useState("");
-  const [pages, setPages] = useState<string>("homepage");
   const [status, setStatus] = useState<Status>("idle");
-  const [statusMsg, setStatusMsg] = useState<string>("");
+  const [statusMsg, setStatusMsg] = useState("");
   const [lastVersionTs, setLastVersionTs] = useState<string | null>(null);
   const [restoringTs, setRestoringTs] = useState<string | null>(null);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   const [uploading, setUploading] = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
-  const [imageSlot, setImageSlot] = useState<string>("hero");
+
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [clarify, setClarify] = useState<{ reason: string; suggestions: string[] } | null>(null);
+  const [fallback, setFallback] = useState<{ reason: string; summary: string } | null>(null);
 
   const { data: versions = [], refetch: refetchVersions } = useQuery({
     queryKey: ["site-versions", clientId],
@@ -79,369 +49,247 @@ export function InlineRevisionPanel({ clientId }: Props) {
       const { data, error } = await supabase
         .from("site_versions" as any)
         .select("id, timestamp, instruction, files_saved, restored, created_at")
-        .eq("client_id", clientId)
-        .order("created_at", { ascending: false })
-        .limit(5);
+        .eq("client_id", clientId).order("created_at", { ascending: false }).limit(5);
       if (error) throw error;
       return (data as any[]) || [];
     },
   });
-
-  const { data: activeJob } = useQuery({
-    queryKey: ["quick-edit-job", activeJobId],
-    enabled: !!activeJobId && status === "running",
-    refetchInterval: !!activeJobId && status === "running" ? 3000 : false,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("quick_edit_jobs" as any)
-        .select("id, status, version_timestamp, error_message")
-        .eq("id", activeJobId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as any;
-    },
-  });
-
-  useEffect(() => {
-    if (!activeJob) return;
-    if (activeJob.status === "completed") {
-      setStatus("success");
-      setStatusMsg("✓ Changes applied");
-      setLastVersionTs(activeJob.version_timestamp || null);
-      setInstruction("");
-      setUploadedUrl(null);
-      setUploadedName(null);
-      setActiveJobId(null);
-      queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
-      refetchVersions();
-    } else if (activeJob.status === "failed") {
-      setStatus("error");
-      setStatusMsg(activeJob.error_message || "Edit failed");
-      setActiveJobId(null);
-    }
-  }, [activeJob, clientId, queryClient, refetchVersions]);
 
   const handleFilePick = () => fileInputRef.current?.click();
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const allowed = ["image/jpeg", "image/png", "image/webp"];
-    if (!allowed.includes(file.type)) {
-      setStatus("error");
-      setStatusMsg("Only JPG, PNG or WebP images are allowed");
-      return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setStatus("error"); setStatusMsg("Only JPG, PNG or WebP allowed"); return;
     }
-    setUploading(true);
-    setStatus("idle");
-    setStatusMsg("");
+    setUploading(true); setStatus("idle"); setStatusMsg("");
     try {
       const ext = file.name.split(".").pop() || "jpg";
-      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const path = `${clientId}/revisions/${fileName}`;
-
-      const { error: upErr } = await supabase.storage
-        .from("client-uploads")
-        .upload(path, file, { upsert: true, contentType: file.type });
+      const path = `${clientId}/revisions/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("client-uploads").upload(path, file, { upsert: true, contentType: file.type });
       if (upErr) throw upErr;
-
-      const { data: urlData } = supabase.storage
-        .from("client-uploads")
-        .getPublicUrl(path);
-
-      setUploadedUrl(urlData.publicUrl);
-      setUploadedName(file.name);
+      const { data: urlData } = supabase.storage.from("client-uploads").getPublicUrl(path);
+      setUploadedUrl(urlData.publicUrl); setUploadedName(file.name);
     } catch (err: any) {
-      setStatus("error");
-      setStatusMsg(err?.message || "Upload failed");
+      setStatus("error"); setStatusMsg(err?.message || "Upload failed");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const clearUpload = () => {
-    setUploadedUrl(null);
-    setUploadedName(null);
+  const clearUpload = () => { setUploadedUrl(null); setUploadedName(null); };
+
+  const resetAll = () => {
+    setInstruction(""); clearUpload(); setPlan(null); setClarify(null);
+    setFallback(null); setJobId(null);
   };
 
-  const handleApply = async () => {
+  const handlePreview = async () => {
     const text = instruction.trim();
     if (!text && !uploadedUrl) return;
-
-    // Build final instruction. Photo replacement instruction takes precedence/prepends.
-    let finalInstruction = text;
-    if (uploadedUrl) {
-      let photoInstruction = "";
-      if (imageSlot === "favicon") {
-        photoInstruction = `Replace the favicon in the <head> with this new image URL: ${uploadedUrl} — find the <link rel='icon'> tag and update its href attribute to the new URL.`;
-      } else if (imageSlot === "other") {
-        photoInstruction = "";
-      } else {
-        photoInstruction = `Replace the ${slotLabel(imageSlot)} with this new image URL: ${uploadedUrl}`;
-      }
-      if (photoInstruction) {
-        finalInstruction = text ? `${photoInstruction}\n\n${text}` : photoInstruction;
-      } else {
-        finalInstruction = text
-          ? `${text}\n\nUploaded image URL: ${uploadedUrl}`
-          : `Uploaded image URL: ${uploadedUrl}`;
-      }
-    }
-
-    setStatus("running");
-    setStatusMsg("");
+    setStatus("previewing"); setStatusMsg(""); setPlan(null); setClarify(null); setFallback(null);
     try {
-      const { data, error } = await supabase.functions.invoke("quick-edit-html", {
-        body: { client_id: clientId, instruction: finalInstruction, pages },
+      const { data, error } = await supabase.functions.invoke("change-request-preview", {
+        body: { client_id: clientId, instruction: text || "Replace the uploaded image into the appropriate slot", uploaded_file_url: uploadedUrl },
       });
-      if (error) throw new Error(error.message || "Edit failed");
-      if ((data as any)?.error) throw new Error((data as any).error);
-      if ((data as any)?.queued && (data as any)?.job_id) {
-        setActiveJobId((data as any).job_id);
-        setStatusMsg("Applying changes in the background…");
-        return;
-      }
+      if (error) throw new Error(error.message || "Preview failed");
+      const d: any = data;
+      if (d?.error) throw new Error(d.error);
+      setJobId(d.job_id);
+      if (d.success && d.plan) { setPlan(d.plan); setStatus("awaiting"); return; }
+      if (d.needs_clarification) { setClarify({ reason: d.reason, suggestions: d.suggestions || [] }); setStatus("awaiting"); return; }
+      if (d.fallback_available) { setFallback({ reason: d.reason, summary: d.fallback_summary }); setStatus("awaiting"); return; }
+      throw new Error("Unexpected response from preview");
+    } catch (e: any) {
+      setStatus("error"); setStatusMsg(e?.message || "Preview failed");
+    }
+  };
+
+  const handleApply = async (useFallback = false) => {
+    if (!jobId) return;
+    setStatus("applying"); setStatusMsg("");
+    try {
+      const { data, error } = await supabase.functions.invoke("change-request-apply", {
+        body: { job_id: jobId, use_fallback: useFallback },
+      });
+      if (error) throw new Error(error.message || "Apply failed");
+      const d: any = data;
+      if (d?.error) throw new Error(d.error);
       setStatus("success");
-      setStatusMsg("✓ Changes applied");
-      setLastVersionTs((data as any)?.version_timestamp || null);
-      setInstruction("");
-      clearUpload();
+      setStatusMsg(`✓ ${d.changes_made || 0} change(s) applied across ${(d.edited_files || []).length} page(s)`);
+      setLastVersionTs(d.version_timestamp || null);
+      resetAll();
       queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
       refetchVersions();
     } catch (e: any) {
-      setStatus("error");
-      setStatusMsg(e?.message || "Edit failed");
+      setStatus("error"); setStatusMsg(e?.message || "Apply failed");
     }
+  };
+
+  const handleCancel = async () => {
+    if (jobId) {
+      await supabase.functions.invoke("change-request-cancel", { body: { job_id: jobId } }).catch(() => {});
+    }
+    resetAll(); setStatus("idle"); setStatusMsg("");
   };
 
   const handleRestore = async (timestamp: string) => {
     setRestoringTs(timestamp);
     try {
-      const { data, error } = await supabase.functions.invoke("restore-version", {
-        body: { client_id: clientId, timestamp },
-      });
+      const { data, error } = await supabase.functions.invoke("restore-version", { body: { client_id: clientId, timestamp } });
       if (error) throw new Error(error.message || "Restore failed");
       if ((data as any)?.error) throw new Error((data as any).error);
-      setStatus("success");
-      setStatusMsg(`✓ Restored version from ${timestamp}`);
-      setLastVersionTs(null);
+      setStatus("success"); setStatusMsg(`✓ Restored version from ${timestamp}`); setLastVersionTs(null);
       queryClient.invalidateQueries({ queryKey: ["operator-site-build", clientId] });
       refetchVersions();
     } catch (e: any) {
-      setStatus("error");
-      setStatusMsg(e?.message || "Restore failed");
-    } finally {
-      setRestoringTs(null);
-    }
+      setStatus("error"); setStatusMsg(e?.message || "Restore failed");
+    } finally { setRestoringTs(null); }
   };
 
-  const canSubmit = (!!instruction.trim() || !!uploadedUrl) && status !== "running";
+  const canPreview = (!!instruction.trim() || !!uploadedUrl) && (status === "idle" || status === "error" || status === "success");
+  const busy = status === "previewing" || status === "applying";
 
   return (
     <div className="rounded-lg border border-primary/20 bg-muted/20 p-3 space-y-3">
       <div className="text-sm font-medium flex items-center gap-2">
-        <Send className="h-4 w-4 text-primary" />
-        Revise Site ♛
+        <Send className="h-4 w-4 text-primary" /> Revise Site ♛
       </div>
 
-      <div className="flex gap-2 flex-col sm:flex-row">
-        <div className="flex-1 space-y-2">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              What would you like to change?
-            </label>
-            <Textarea
-              placeholder="Describe the change — e.g. 'Change the hero headline to Phoenix's Most Trusted Plumber' or 'Make the navy color #001a4d'. You can leave this blank if you only want to replace a photo."
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              rows={4}
-              className="text-sm resize-none"
-              disabled={status === "running"}
-            />
-          </div>
-
-          {/* Photo upload row */}
-          <div className="rounded-md border border-dashed border-border/60 bg-background/40 p-2 space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleFilePick}
-                disabled={uploading || status === "running"}
-                className="gap-1.5 h-8"
-              >
-                {uploading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <ImagePlus className="h-3.5 w-3.5" />
-                )}
-                {uploadedUrl ? "Replace photo" : "Upload new photo"}
-              </Button>
-              <span className="text-[11px] text-muted-foreground">
-                jpg, png, webp
-              </span>
-              {uploadedUrl && (
-                <div className="flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-2 py-1 max-w-full">
-                  <CheckCircle2 className="h-3 w-3 shrink-0" />
-                  <span className="truncate max-w-[180px]" title={uploadedName || ""}>
-                    {uploadedName}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={clearUpload}
-                    className="hover:text-emerald-900"
-                    aria-label="Remove uploaded photo"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              )}
-            </div>
+      {/* Input area — hidden while a plan is awaiting */}
+      {status !== "awaiting" && (
+        <div className="space-y-2">
+          <Textarea
+            placeholder="Describe the change — e.g. 'Change our phone to 480-555-0001' or 'Remove the testimonials section'. Upload a photo to swap a site image."
+            value={instruction} onChange={(e) => setInstruction(e.target.value)}
+            rows={4} className="text-sm resize-none" disabled={busy}
+          />
+          <div className="rounded-md border border-dashed border-border/60 bg-background/40 p-2 flex items-center gap-2 flex-wrap">
+            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
+            <Button type="button" size="sm" variant="outline" onClick={handleFilePick} disabled={uploading || busy} className="gap-1.5 h-8">
+              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+              {uploadedUrl ? "Replace photo" : "Upload photo"}
+            </Button>
+            <span className="text-[11px] text-muted-foreground">jpg, png, webp</span>
             {uploadedUrl && (
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Replace which image?
-                </label>
-                <Select value={imageSlot} onValueChange={setImageSlot} disabled={status === "running"}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {IMAGE_SLOT_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-2 py-1">
+                <CheckCircle2 className="h-3 w-3 shrink-0" />
+                <span className="truncate max-w-[180px]" title={uploadedName || ""}>{uploadedName}</span>
+                <button type="button" onClick={clearUpload} className="hover:text-emerald-900"><X className="h-3 w-3" /></button>
               </div>
             )}
           </div>
-        </div>
-
-        <div className="sm:w-44 flex flex-col gap-2">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Which page?</label>
-            <Select value={pages} onValueChange={setPages} disabled={status === "running"}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAGE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button
-            onClick={handleApply}
-            disabled={!canSubmit}
-            className="gap-2 w-full"
-            size="sm"
-          >
-            {status === "running" ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Applying...
-              </>
-            ) : (
-              <>
-                <Send className="h-4 w-4" /> Apply Revision
-              </>
-            )}
+          <Button onClick={handlePreview} disabled={!canPreview} className="gap-2 w-full" size="sm">
+            {status === "previewing" ? <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing your request…</> : <><Sparkles className="h-4 w-4" /> Preview Change</>}
           </Button>
-        </div>
-      </div>
-
-      {status === "running" && statusMsg && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span>{statusMsg}</span>
         </div>
       )}
 
+      {/* Awaiting confirmation: plan / clarify / fallback */}
+      {status === "awaiting" && plan && (
+        <div className="space-y-3 rounded-md border border-primary/30 bg-background p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-sm font-semibold">Plan preview</div>
+            <Badge variant="outline" className={
+              plan.confidence === "high" ? "text-emerald-700 border-emerald-300 bg-emerald-50"
+              : plan.confidence === "low" ? "text-amber-700 border-amber-300 bg-amber-50"
+              : "text-blue-700 border-blue-300 bg-blue-50"
+            }>{plan.confidence} confidence</Badge>
+          </div>
+          <p className="text-sm">{plan.summary}</p>
+          <div className="flex flex-wrap gap-1.5 text-xs">
+            <span className="text-muted-foreground">Tool:</span>
+            <Badge variant="secondary" className="text-[10px]">{plan.tool}</Badge>
+            {plan.affected_pages.length > 0 && <>
+              <span className="text-muted-foreground ml-2">Pages:</span>
+              {plan.affected_pages.map((p) => <Badge key={p} variant="outline" className="text-[10px]">{p}</Badge>)}
+            </>}
+            {plan.estimated_changes > 0 && (
+              <span className="text-muted-foreground ml-2">{plan.estimated_changes} change(s)</span>
+            )}
+          </div>
+          {plan.warnings && plan.warnings.length > 0 && (
+            <div className="rounded bg-amber-50 border border-amber-200 p-2 text-xs text-amber-900 space-y-1">
+              {plan.warnings.map((w, i) => <div key={i} className="flex items-start gap-1.5"><AlertCircle className="h-3 w-3 mt-0.5 shrink-0" /><span>{w}</span></div>)}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button onClick={() => handleApply(false)} size="sm" className="gap-2" disabled={busy}>
+              {status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Apply
+            </Button>
+            <Button onClick={handleCancel} size="sm" variant="ghost" disabled={busy}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {status === "awaiting" && clarify && (
+        <div className="space-y-3 rounded-md border border-blue-300 bg-blue-50/50 p-3">
+          <div className="flex items-start gap-2 text-sm">
+            <HelpCircle className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+            <div><div className="font-semibold text-blue-900">Need a bit more detail</div><div className="text-blue-900/80 mt-1">{clarify.reason}</div></div>
+          </div>
+          {clarify.suggestions.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-xs text-blue-900/70">Try one of these:</div>
+              {clarify.suggestions.map((s, i) => (
+                <button key={i} onClick={() => { setInstruction(s); setStatus("idle"); setClarify(null); }}
+                  className="block w-full text-left text-xs bg-white hover:bg-blue-50 border border-blue-200 rounded px-2 py-1.5 transition-colors">
+                  "{s}"
+                </button>
+              ))}
+            </div>
+          )}
+          <Button onClick={handleCancel} size="sm" variant="ghost">Start over</Button>
+        </div>
+      )}
+
+      {status === "awaiting" && fallback && (
+        <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50/50 p-3">
+          <div className="flex items-start gap-2 text-sm">
+            <Sparkles className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <div><div className="font-semibold text-amber-900">No exact match</div><div className="text-amber-900/80 mt-1">{fallback.reason}</div><div className="text-xs text-amber-900/70 mt-2">{fallback.summary}</div></div>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => handleApply(true)} size="sm" className="gap-2" disabled={busy}>
+              {status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Try AI edit
+            </Button>
+            <Button onClick={handleCancel} size="sm" variant="ghost">Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {status === "applying" && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying…</div>}
       {status === "success" && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="flex items-center gap-2 text-xs text-emerald-700">
-            <CheckCircle2 className="h-3.5 w-3.5" /> {statusMsg}
-          </span>
+          <span className="flex items-center gap-2 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {statusMsg}</span>
           {lastVersionTs && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 h-7 text-xs"
-              onClick={() => handleRestore(lastVersionTs)}
-              disabled={!!restoringTs}
-            >
-              {restoringTs === lastVersionTs ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Undo2 className="h-3 w-3" />
-              )}
-              Undo last change
+            <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => handleRestore(lastVersionTs)} disabled={!!restoringTs}>
+              {restoringTs === lastVersionTs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />} Undo
             </Button>
           )}
         </div>
       )}
       {status === "error" && (
-        <div className="flex items-start gap-2 text-xs text-destructive">
-          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-          <span>{statusMsg}</span>
-        </div>
+        <div className="flex items-start gap-2 text-xs text-destructive"><AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" /><span>{statusMsg}</span></div>
       )}
 
       {versions.length > 0 && (
         <div className="pt-2 border-t border-border/50 space-y-2">
-          <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <History className="h-3 w-3" /> Version history (last 5)
-          </div>
+          <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5"><History className="h-3 w-3" /> Version history (last 5)</div>
           <ul className="space-y-1.5">
             {versions.map((v: any) => (
-              <li
-                key={v.id}
-                className="flex items-start gap-2 text-xs bg-background/60 rounded p-2"
-              >
+              <li key={v.id} className="flex items-start gap-2 text-xs bg-background/60 rounded p-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {v.restored && (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-200"
-                      >
-                        restored
-                      </Badge>
-                    )}
-                    <span className="text-muted-foreground">
-                      {formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}
-                    </span>
+                    {v.restored && <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-200">restored</Badge>}
+                    <span className="text-muted-foreground">{formatDistanceToNow(new Date(v.created_at), { addSuffix: true })}</span>
                   </div>
-                  <p className="truncate mt-0.5" title={v.instruction || ""}>
-                    {v.instruction || "(no instruction)"}
-                  </p>
+                  <p className="truncate mt-0.5" title={v.instruction || ""}>{v.instruction || "(no instruction)"}</p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1 h-7 text-[11px] shrink-0"
-                  onClick={() => handleRestore(v.timestamp)}
-                  disabled={!!restoringTs}
-                >
-                  {restoringTs === v.timestamp ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <RotateCcw className="h-3 w-3" />
-                  )}
-                  Restore
+                <Button size="sm" variant="ghost" className="gap-1 h-7 text-[11px] shrink-0" onClick={() => handleRestore(v.timestamp)} disabled={!!restoringTs}>
+                  {restoringTs === v.timestamp ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />} Restore
                 </Button>
               </li>
             ))}
