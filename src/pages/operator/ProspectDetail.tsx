@@ -27,6 +27,7 @@ export default function ProspectDetail() {
   const [showLog, setShowLog] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [showCodeEditor, setShowCodeEditor] = useState(false);
   const [edits, setEdits] = useState<Record<string, any>>({});
 
   const { data: client, isLoading } = useQuery({
