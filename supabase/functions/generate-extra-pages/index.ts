@@ -891,43 +891,9 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-function injectCSSVars(
-  html: string,
-  primaryColor: string,
-  accentColor: string,
-  _fonts: any,
-  templateId: string,
-): string {
-  // Per-template variable mapping. Each entry lists the candidate CSS variable
-  // names the brand primary/accent should replace, in priority order. First
-  // match wins. If no name matches an existing variable in the template's
-  // :root, the template default is preserved — we NEVER append a new variable.
-  const varMap: Record<string, { primary: string[]; accent: string[] }> = {
-    "feminine-bold": { primary: ["--burgundy"], accent: ["--gold"] },
-    "business-professional": { primary: ["--navy", "--navy-mid"], accent: ["--gold", "--gold-dark"] },
-    "warm-welcome": { primary: ["--dark"], accent: ["--muted"] },
-    "local-favorite": { primary: ["--red"], accent: ["--gold"] },
-    "trades-hero": { primary: ["--navy"], accent: ["--red", "--gold"] },
-  };
+// `injectCSSVars` (per-template color varMap) was removed. All :root color
+// mutations now go through `applyBrandColorsToHTML` from _shared/color-system.ts.
 
-  const mapping = varMap[templateId];
-  if (!mapping) return html;
-
-  const replaceFirst = (body: string, names: string[], value: string): string => {
-    for (const n of names) {
-      const re = new RegExp(`(${n.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
-      if (re.test(body)) return body.replace(re, `$1${value}$3`);
-    }
-    return body;
-  };
-
-  return html.replace(/:root\s*\{([\s\S]*?)\}/, (_match, body) => {
-    let out = body;
-    if (primaryColor) out = replaceFirst(out, mapping.primary, primaryColor);
-    if (accentColor) out = replaceFirst(out, mapping.accent, accentColor);
-    return `:root {${out}}`;
-  });
-}
 
 function injectNoindex(html: string): string {
   if (/name=["']robots["']/i.test(html)) return html;
