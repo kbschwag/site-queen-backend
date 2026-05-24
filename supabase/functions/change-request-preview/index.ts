@@ -365,6 +365,195 @@ function buildSummary(tool: string, params: any, intake: any, deployedHtml: Reco
 
 function truncate(s: string, n: number): string { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
 
+// ─── audit_and_fix executor (returns multi-fix plan) ────────────────────────
+interface AuditPlan {
+  is_audit_plan: true;
+  tool: "audit_and_fix";
+  summary: string;
+  target_scope: string;
+  target_page: string;
+  sub_fixes: Array<{
+    id: string;
+    description: string;
+    tool: string;
+    params: any;
+    confidence: "high" | "medium";
+    enabled_by_default: boolean;
+  }>;
+}
+
+const ALLOWED_AUDIT_FIX_TOOLS = new Set([
+  "update_data_field", "update_text_content", "remove_section", "toggle_section_visibility",
+]);
+
+function extractScopedHtml(
+  deployedHtml: Record<string, string>,
+  targetFiles: string[],
+  scope: string,
+): string {
+  if (scope === "whole_site") {
+    return Object.entries(deployedHtml)
+      .map(([name, html]) => `<!-- FILE: ${name} -->\n${html.slice(0, 8000)}`)
+      .join("\n\n");
+  }
+  if (scope === "whole_page") {
+    return targetFiles.map((f) => {
+      const h = deployedHtml[f];
+      return h ? `<!-- FILE: ${f} -->\n${h.slice(0, 12000)}` : "";
+    }).filter(Boolean).join("\n\n");
+  }
+  const sectionTagMap: Record<string, RegExp[]> = {
+    footer: [/<footer[\s\S]*?<\/footer>/i],
+    header: [/<header[\s\S]*?<\/header>/i],
+    nav: [/<nav[\s\S]*?<\/nav>/i],
+    hero: [/<section[^>]*class="[^"]*hero[^"]*"[\s\S]*?<\/section>/i],
+    about_section: [/<section[^>]*class="[^"]*about[^"]*"[\s\S]*?<\/section>/i],
+    services_section: [/<section[^>]*class="[^"]*service[^"]*"[\s\S]*?<\/section>/i],
+    testimonials_section: [/<section[^>]*class="[^"]*testimonial[^"]*"[\s\S]*?<\/section>/i],
+    contact_section: [/<section[^>]*class="[^"]*contact[^"]*"[\s\S]*?<\/section>/i],
+    values_section: [/<section[^>]*class="[^"]*values[^"]*"[\s\S]*?<\/section>/i],
+    announcement_bar: [/<div[^>]*class="[^"]*announc[^"]*"[\s\S]*?<\/div>/i],
+  };
+  const patterns = sectionTagMap[scope] || [];
+  const chunks: string[] = [];
+  for (const filename of targetFiles) {
+    const html = deployedHtml[filename];
+    if (!html) continue;
+    for (const re of patterns) {
+      const match = html.match(re);
+      if (match) chunks.push(`<!-- FROM ${filename} -->\n${match[0]}`);
+    }
+  }
+  return chunks.join("\n\n");
+}
+
+async function executeAuditAndFix(
+  params: { target_scope: string; target_page: string; operator_complaint: string },
+  ctx: {
+    clientId: string; supabase: any; deployedHtml: Record<string, string>;
+    intake: any; anthropicKey: string;
+  },
+): Promise<AuditPlan> {
+  const pageFile = (t: string): string => ({
+    index: "index.html", about: "about.html", services: "services.html", contact: "contact.html",
+  }[t] || "");
+
+  const targetFiles = params.target_page === "all"
+    ? Object.keys(ctx.deployedHtml)
+    : [pageFile(params.target_page)].filter(Boolean);
+
+  const extractedHtml = extractScopedHtml(ctx.deployedHtml, targetFiles, params.target_scope);
+  if (!extractedHtml || extractedHtml.length < 50) {
+    throw new Error(`Could not extract ${params.target_scope} from ${params.target_page} — section may not exist`);
+  }
+
+  const businessData = {
+    business_name: ctx.intake.business_name,
+    business_phone: ctx.intake.business_phone || ctx.intake.primary_phone,
+    business_email: ctx.intake.business_email,
+    business_address: ctx.intake.business_address || ctx.intake.address,
+    business_city: ctx.intake.business_city || ctx.intake.city,
+    business_state: ctx.intake.business_state || ctx.intake.state,
+    business_zip: ctx.intake.business_zip || ctx.intake.zip,
+    business_hours: ctx.intake.business_hours,
+    service_area: ctx.intake.service_area,
+    owner_name: ctx.intake.owner_name,
+    owner_title: ctx.intake.owner_title,
+  };
+
+  const auditSystemPrompt = `You audit small business websites for data quality issues. You receive a section of deployed HTML, the operator's complaint, and the business's intake data. You return a structured list of issues found.
+
+You DO NOT make taste or design judgments. You only flag objectively broken or malformed data:
+- Truncated values (deployed shows partial value; intake has full value)
+- Duplicated values (same data appearing twice in one field)
+- Placeholder leakage (literal {{...}} or fallback strings like "By Appointment Only" that look like defaults)
+- Missing labels (data shown without context that would help a visitor understand it)
+- Malformed structure (extra commas, repeated zip, inconsistent formatting)
+- Empty fields that should have content
+- Generic fallback strings where intake has real data
+
+Do NOT flag:
+- Copywriting choices
+- Design or color decisions
+- Section ordering
+- Anything that's a preference rather than a defect
+
+Return ONLY a JSON object. No markdown, no explanation.`;
+
+  const auditUserPrompt = `OPERATOR'S COMPLAINT: ${params.operator_complaint}
+SCOPE: ${params.target_scope}
+PAGE: ${params.target_page}
+
+HTML BEING AUDITED:
+\`\`\`
+${extractedHtml.slice(0, 24000)}
+\`\`\`
+
+BUSINESS INTAKE DATA (the source of truth — compare deployed values to these):
+${JSON.stringify(businessData, null, 2)}
+
+Return this JSON shape:
+{
+  "issues_found": <number>,
+  "issues": [
+    {
+      "issue_type": "truncated_value" | "duplicated_value" | "placeholder_leak" | "missing_label" | "malformed_data" | "empty_field" | "default_fallback" | "wrong_industry_terms" | "formatting_inconsistent",
+      "description": "Operator-friendly human description. Example: 'Business name shows as Carol but the full name is Carol Lynn de Szendeffy'",
+      "proposed_fix_tool": "update_data_field" | "update_text_content" | "remove_section" | "toggle_section_visibility",
+      "proposed_fix_params": { /* params for that tool */ },
+      "confidence": "high" | "medium"
+    }
+  ]
+}
+
+Only include issues you are confident about. If you find nothing wrong, return {"issues_found": 0, "issues": []}.`;
+
+  const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": ctx.anthropicKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 3000,
+      system: auditSystemPrompt,
+      messages: [{ role: "user", content: auditUserPrompt }],
+    }),
+  });
+  if (!aiRes.ok) {
+    const errText = await aiRes.text();
+    throw new Error(`Audit Claude call failed: ${aiRes.status} — ${errText.slice(0, 300)}`);
+  }
+  const aiJson = await aiRes.json();
+  const rawText: string = aiJson?.content?.[0]?.text ?? "";
+  const cleaned = rawText.trim()
+    .replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+  let parsed: { issues_found: number; issues: any[] };
+  try { parsed = JSON.parse(cleaned); }
+  catch (e: any) { throw new Error(`Audit Claude returned malformed JSON: ${e.message}`); }
+
+  const issues = Array.isArray(parsed.issues) ? parsed.issues : [];
+  const validIssues = issues.filter((i) => ALLOWED_AUDIT_FIX_TOOLS.has(i.proposed_fix_tool));
+
+  return {
+    is_audit_plan: true,
+    tool: "audit_and_fix",
+    target_scope: params.target_scope,
+    target_page: params.target_page,
+    summary: validIssues.length === 0
+      ? `I examined the ${params.target_scope} and didn't find any obvious data quality issues. If something specific is wrong, please describe what you're seeing.`
+      : `Audited ${params.target_scope}. Found ${validIssues.length} issue${validIssues.length === 1 ? "" : "s"}:`,
+    sub_fixes: validIssues.map((issue, idx) => ({
+      id: `fix_${idx}`,
+      description: issue.description || "(no description)",
+      tool: issue.proposed_fix_tool,
+      params: issue.proposed_fix_params || {},
+      confidence: issue.confidence === "high" ? "high" : "medium",
+      enabled_by_default: issue.confidence === "high",
+    })),
+  };
+}
+
+
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
