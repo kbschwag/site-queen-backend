@@ -19,6 +19,17 @@ const TIMEOUT_MS = 600_000; // 10 minutes per Claude call
 const STAGING_BASE_URL = "https://staging.sitequeen.ai";
 const STAGING_FOLDER_ROOT = "/public_html";
 
+// Per-template canonical CTA defaults. Used whenever Claude does not supply
+// an explicit NAV_CTA / HERO_CTA / ABOUT_CTA / FINAL_CTA value. NEVER assume
+// coaching language ("BOOK A CALL", "WORK WITH ME", "BOOK YOUR DISCOVERY CALL").
+const TEMPLATE_DEFAULT_CTAS: Record<string, string> = {
+  "trades-hero": "GET A QUOTE",
+  "business-professional": "SCHEDULE CONSULTATION",
+  "feminine-bold": "SCHEDULE CONSULTATION",
+  "warm-welcome": "BOOK APPOINTMENT",
+  "local-favorite": "RESERVE A TABLE",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
