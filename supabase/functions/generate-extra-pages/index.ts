@@ -253,7 +253,7 @@ serve(async (req) => {
       if (!aboutFile) throw new Error(`Template not found: ${templateId}/about.html`);
       let aboutHTML = await aboutFile.text();
       if (templateId === "business-professional") {
-        aboutHTML = applyBusinessProfessionalTokens(aboutHTML, intake);
+        aboutHTML = applyBusinessProfessionalFonts(aboutHTML, intake);
       }
 
       // Generate about-specific copy
