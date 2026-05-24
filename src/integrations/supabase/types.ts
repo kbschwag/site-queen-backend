@@ -1624,9 +1624,13 @@ export type Database = {
       }
       quick_edit_jobs: {
         Row: {
+          cancelled_at: string | null
           change_type: string | null
+          changes_count: number | null
           client_id: string
           completed_at: string | null
+          confidence: string | null
+          confirmed_at: string | null
           created_at: string
           edited_files: string[]
           error_message: string | null
@@ -1635,16 +1639,27 @@ export type Database = {
           operator_email: string | null
           operator_id: string
           pages: string
+          plan: Json | null
+          preview_at: string | null
+          preview_ms: number | null
           skipped_files: string[]
           started_at: string | null
           status: string
+          tool_params: Json | null
+          tool_used: string | null
           updated_at: string
+          uploaded_file_url: string | null
+          used_fallback: boolean
           version_timestamp: string | null
         }
         Insert: {
+          cancelled_at?: string | null
           change_type?: string | null
+          changes_count?: number | null
           client_id: string
           completed_at?: string | null
+          confidence?: string | null
+          confirmed_at?: string | null
           created_at?: string
           edited_files?: string[]
           error_message?: string | null
@@ -1653,16 +1668,27 @@ export type Database = {
           operator_email?: string | null
           operator_id: string
           pages?: string
+          plan?: Json | null
+          preview_at?: string | null
+          preview_ms?: number | null
           skipped_files?: string[]
           started_at?: string | null
           status?: string
+          tool_params?: Json | null
+          tool_used?: string | null
           updated_at?: string
+          uploaded_file_url?: string | null
+          used_fallback?: boolean
           version_timestamp?: string | null
         }
         Update: {
+          cancelled_at?: string | null
           change_type?: string | null
+          changes_count?: number | null
           client_id?: string
           completed_at?: string | null
+          confidence?: string | null
+          confirmed_at?: string | null
           created_at?: string
           edited_files?: string[]
           error_message?: string | null
@@ -1671,10 +1697,17 @@ export type Database = {
           operator_email?: string | null
           operator_id?: string
           pages?: string
+          plan?: Json | null
+          preview_at?: string | null
+          preview_ms?: number | null
           skipped_files?: string[]
           started_at?: string | null
           status?: string
+          tool_params?: Json | null
+          tool_used?: string | null
           updated_at?: string
+          uploaded_file_url?: string | null
+          used_fallback?: boolean
           version_timestamp?: string | null
         }
         Relationships: []
