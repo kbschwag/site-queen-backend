@@ -813,14 +813,14 @@ Return this exact JSON structure (every field required, no empty strings unless 
         // Preference order: explicit full headline from Claude → legacy
         // dropcap+rest combined → safe generic default (NEVER coaching-specific).
         const owner = splitDrop(copy.OWNER_TITLE || intake.owner_title || ownerTitle || "");
-        const transformation = splitDrop(copy.TRANSFORMATION_HEADLINE || (copy.TRANSFORMATION_HEADLINE_REST ? `F${copy.TRANSFORMATION_HEADLINE_REST}` : ""));
-        const philosophy = splitDrop(copy.PHILOSOPHY_HEADLINE || (copy.PHILOSOPHY_HEADLINE_REST ? `M${copy.PHILOSOPHY_HEADLINE_REST}` : "Our Approach."));
-        const servicesH = splitDrop(copy.SERVICES_HEADLINE_FB || copy.SERVICES_HEADLINE || (copy.SERVICES_HEADLINE_REST ? `C${copy.SERVICES_HEADLINE_REST}` : "How We Help."));
-        const testimonialsH = splitDrop(copy.TESTIMONIALS_HEADLINE_FB || copy.TESTIMONIALS_HEADLINE || (copy.TESTIMONIALS_HEADLINE_REST ? `Q${copy.TESTIMONIALS_HEADLINE_REST}` : "Words From Clients."));
-        const methodology = splitDrop(copy.METHODOLOGY_HEADLINE || (copy.METHODOLOGY_HEADLINE_REST ? `F${copy.METHODOLOGY_HEADLINE_REST}` : "Our Process."));
-        const leadMagnet = splitDrop(copy.LEAD_MAGNET_TITLE || (copy.LEAD_MAGNET_TITLE_REST ? `T${copy.LEAD_MAGNET_TITLE_REST}` : `The ${businessName} Guide.`));
+        const transformation = splitDrop(copy.TRANSFORMATION_HEADLINE || "");
+        const philosophy = splitDrop(copy.PHILOSOPHY_HEADLINE || "");
+        const servicesH = splitDrop(copy.SERVICES_HEADLINE_FB || copy.SERVICES_HEADLINE || "");
+        const testimonialsH = splitDrop(copy.TESTIMONIALS_HEADLINE_FB || copy.TESTIMONIALS_HEADLINE || "");
+        const methodology = splitDrop(copy.METHODOLOGY_HEADLINE || "");
+        const leadMagnet = splitDrop(copy.LEAD_MAGNET_TITLE || "");
         const faq = splitDrop("Frequently Asked Questions");
-        const finalCta = splitDrop(copy.FINAL_CTA_HEADLINE_FB || copy.FINAL_CTA_HEADLINE || (copy.FINAL_CTA_HEADLINE_REST ? `S${copy.FINAL_CTA_HEADLINE_REST}` : "Start a Conversation."));
+        const finalCta = splitDrop(copy.FINAL_CTA_HEADLINE_FB || copy.FINAL_CTA_HEADLINE || "");
         const heroName = splitDrop(ownerName || businessName || "");
         return {
           "{{HERO_NAME_FIRST_LETTER}}": heroName.drop,
@@ -849,15 +849,16 @@ Return this exact JSON structure (every field required, no empty strings unless 
       // Business basics
       "{{BUSINESS_NAME_SHORT}}": businessName.split(" ")[0],
       "{{ANNOUNCE_TEXT}}": copy.ANNOUNCE_TEXT || `Now booking new clients — ${city || "local area"}`,
-      "{{NAV_CTA}}": "BOOK A CALL",
+      "{{NAV_CTA}}": copy.NAV_CTA || TEMPLATE_DEFAULT_CTAS[templateId] || "",
 
       // Hero CTAs (hero name dropcap handled above)
-      "{{HERO_CTA_PRIMARY}}": copy.HERO_CTA_PRIMARY || "BOOK A CALL",
+      "{{HERO_CTA_PRIMARY}}": copy.HERO_CTA_PRIMARY || TEMPLATE_DEFAULT_CTAS[templateId] || "",
       "{{HERO_CTA_SECONDARY}}": copy.HERO_CTA_SECONDARY || "EXPLORE SERVICES",
 
-      // About strip
-      "{{ABOUT_STRIP_DROPCAP}}": (copy.ABOUT_STRIP_DROPCAP || copy.ABOUT_STRIP_LINE1 || "").charAt(0).toUpperCase() || "H",
-      "{{ABOUT_STRIP_LINE1}}": copy.ABOUT_STRIP_LINE1 || "ELPING",
+      // About strip — NO hardcoded "H"/"ELPING" coaching fallback. If Claude
+      // returns nothing, the slot renders empty rather than leaking defaults.
+      "{{ABOUT_STRIP_DROPCAP}}": (copy.ABOUT_STRIP_DROPCAP || copy.ABOUT_STRIP_LINE1 || "").charAt(0).toUpperCase() || "",
+      "{{ABOUT_STRIP_LINE1}}": copy.ABOUT_STRIP_LINE1 || "",
       "{{ABOUT_STRIP_LINE2}}": copy.ABOUT_STRIP_LINE2 || (businessType || "").toUpperCase(),
       "{{ABOUT_STRIP_LINE3}}": copy.ABOUT_STRIP_LINE3 || "",
       "{{ABOUT_STRIP_LINE4}}": copy.ABOUT_STRIP_LINE4 || "",
@@ -865,7 +866,7 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{ABOUT_EYEBROW}}": copy.ABOUT_EYEBROW || "ABOUT",
       "{{ABOUT_INTRO_HEADLINE}}": copy.ABOUT_INTRO_HEADLINE || (ownerName ? `Hi, I'm ${ownerName}` : `About ${businessName}`),
       "{{ABOUT_INTRO_BODY}}": copy.ABOUT_INTRO_BODY || copy.ABOUT_STORY || "",
-      "{{ABOUT_CTA}}": "WORK WITH ME",
+      "{{ABOUT_CTA}}": copy.ABOUT_CTA || TEMPLATE_DEFAULT_CTAS[templateId] || "",
 
       // Transformation (before/after) — headline handled above
       "{{TRANSFORMATION_EYEBROW}}": copy.TRANSFORMATION_EYEBROW || "✦ THE TRANSFORMATION",
@@ -941,14 +942,14 @@ Return this exact JSON structure (every field required, no empty strings unless 
       // Lead magnet — title handled above
       "{{LEAD_MAGNET_EYEBROW}}": copy.LEAD_MAGNET_EYEBROW || "✦ A FREE GUIDE",
       "{{LEAD_MAGNET_BODY}}": copy.LEAD_MAGNET_BODY || copy.FOOTER_NEWSLETTER_TEXT || "",
-      "{{LEAD_MAGNET_BTN}}": "SEND IT",
+      "{{LEAD_MAGNET_BTN}}": copy.LEAD_MAGNET_BTN || "GET ACCESS",
       "{{LEAD_MAGNET_NOTE}}": "No spam, ever. Unsubscribe anytime.",
 
       // FAQ + Final CTA eyebrows (headlines handled above)
       "{{FAQ_EYEBROW}}": "✦ COMMON QUESTIONS",
       "{{FINAL_CTA_EYEBROW}}": copy.FINAL_CTA_EYEBROW || "✦ YOUR NEXT STEP",
       "{{FINAL_CTA_BODY}}": copy.FINAL_CTA_SUBTEXT || "",
-      "{{FINAL_CTA_BTN}}": copy.FINAL_CTA_BTN || "BOOK YOUR DISCOVERY CALL",
+      "{{FINAL_CTA_BTN}}": copy.FINAL_CTA_BTN || TEMPLATE_DEFAULT_CTAS[templateId] || "",
 
       // Social links
       "{{SOCIAL_INSTAGRAM_URL}}": (intake.social_links as any)?.instagram
