@@ -952,12 +952,19 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{FINAL_CTA_BTN}}": copy.FINAL_CTA_BTN || TEMPLATE_DEFAULT_CTAS[templateId] || "",
 
       // Social links
+      // Social links — empty string when missing (NOT "#"). Footer template
+      // / runtime hides empty links rather than rendering broken hrefs.
       "{{SOCIAL_INSTAGRAM_URL}}": (intake.social_links as any)?.instagram
         ? `https://instagram.com/${String((intake.social_links as any).instagram).replace("@", "")}`
-        : "#",
-      "{{SOCIAL_SUBSTACK_URL}}": (intake.social_links as any)?.substack || "#",
-      "{{SOCIAL_PODCAST_URL}}": (intake.social_links as any)?.podcast || "#",
-      "{{SOCIAL_BLOG_URL}}": (intake.social_links as any)?.blog || "#",
+        : "",
+      "{{SOCIAL_FACEBOOK_URL}}": (intake.social_links as any)?.facebook || "",
+      "{{SOCIAL_LINKEDIN_URL}}": (intake.social_links as any)?.linkedin || "",
+      "{{SOCIAL_TIKTOK_URL}}": (intake.social_links as any)?.tiktok || "",
+      "{{SOCIAL_PINTEREST_URL}}": (intake.social_links as any)?.pinterest || "",
+      "{{SOCIAL_GOOGLE_URL}}": (intake.social_links as any)?.google_business || (intake.social_links as any)?.google || "",
+      "{{SOCIAL_SUBSTACK_URL}}": (intake.social_links as any)?.substack || "",
+      "{{SOCIAL_PODCAST_URL}}": (intake.social_links as any)?.podcast || "",
+      "{{SOCIAL_BLOG_URL}}": (intake.social_links as any)?.blog || "",
     };
 
     // Pre-fill header logo block: logo XOR business name (never both).
