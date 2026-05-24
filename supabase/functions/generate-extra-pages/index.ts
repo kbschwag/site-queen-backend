@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
 import { autoFillPlaceholders } from "../_shared/autofill.ts";
+import { applyBrandColorsToHTML, logColorApplication, type ColorPlacement, type SkippedBrandColor } from "../_shared/color-system.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -252,7 +253,7 @@ serve(async (req) => {
       if (!aboutFile) throw new Error(`Template not found: ${templateId}/about.html`);
       let aboutHTML = await aboutFile.text();
       if (templateId === "business-professional") {
-        aboutHTML = applyBusinessProfessionalTokens(aboutHTML, intake);
+        aboutHTML = applyBusinessProfessionalFonts(aboutHTML, intake);
       }
 
       // Generate about-specific copy
@@ -313,8 +314,10 @@ Return ONLY valid JSON. No markdown. No explanation:
         console.error("[extra-pages] About copy JSON parse failed:", e);
       }
 
-      // Inject CSS variables
-      aboutHTML = injectCSSVars(aboutHTML, primaryColor, accentColor, fonts, templateId);
+      // Apply brand colors via the canonical color system
+      const __aboutColor = applyBrandColorsToHTML(aboutHTML, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId);
+      aboutHTML = __aboutColor.html;
+      console.log("[color-system] about", JSON.stringify({ templateId, applied: __aboutColor.result.appliedPlacements, skipped: __aboutColor.result.skippedBrandColors }));
 
       // Fill all placeholders
       const aboutFill: Record<string, string> = {
@@ -378,7 +381,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       if (!servicesFile) throw new Error(`Template not found: ${templateId}/services.html`);
       let servicesHTML = await servicesFile.text();
       if (templateId === "business-professional") {
-        servicesHTML = applyBusinessProfessionalTokens(servicesHTML, intake);
+        servicesHTML = applyBusinessProfessionalFonts(servicesHTML, intake);
       }
 
       // Generate services-specific copy
@@ -483,8 +486,10 @@ Return ONLY valid JSON. No markdown:
         console.error("[extra-pages] Services copy JSON parse failed:", e);
       }
 
-      // Inject CSS variables
-      servicesHTML = injectCSSVars(servicesHTML, primaryColor, accentColor, fonts, templateId);
+      // Apply brand colors via the canonical color system
+      const __servicesColor = applyBrandColorsToHTML(servicesHTML, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId);
+      servicesHTML = __servicesColor.html;
+      console.log("[color-system] services", JSON.stringify({ templateId, applied: __servicesColor.result.appliedPlacements, skipped: __servicesColor.result.skippedBrandColors }));
 
       // Fill all placeholders
       const servicesFill: Record<string, string> = {
@@ -886,43 +891,9 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-function injectCSSVars(
-  html: string,
-  primaryColor: string,
-  accentColor: string,
-  _fonts: any,
-  templateId: string,
-): string {
-  // Per-template variable mapping. Each entry lists the candidate CSS variable
-  // names the brand primary/accent should replace, in priority order. First
-  // match wins. If no name matches an existing variable in the template's
-  // :root, the template default is preserved — we NEVER append a new variable.
-  const varMap: Record<string, { primary: string[]; accent: string[] }> = {
-    "feminine-bold": { primary: ["--burgundy"], accent: ["--gold"] },
-    "business-professional": { primary: ["--navy", "--navy-mid"], accent: ["--gold", "--gold-dark"] },
-    "warm-welcome": { primary: ["--dark"], accent: ["--muted"] },
-    "local-favorite": { primary: ["--red"], accent: ["--gold"] },
-    "trades-hero": { primary: ["--navy"], accent: ["--red", "--gold"] },
-  };
+// `injectCSSVars` (per-template color varMap) was removed. All :root color
+// mutations now go through `applyBrandColorsToHTML` from _shared/color-system.ts.
 
-  const mapping = varMap[templateId];
-  if (!mapping) return html;
-
-  const replaceFirst = (body: string, names: string[], value: string): string => {
-    for (const n of names) {
-      const re = new RegExp(`(${n.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
-      if (re.test(body)) return body.replace(re, `$1${value}$3`);
-    }
-    return body;
-  };
-
-  return html.replace(/:root\s*\{([\s\S]*?)\}/, (_match, body) => {
-    let out = body;
-    if (primaryColor) out = replaceFirst(out, mapping.primary, primaryColor);
-    if (accentColor) out = replaceFirst(out, mapping.accent, accentColor);
-    return `:root {${out}}`;
-  });
-}
 
 function injectNoindex(html: string): string {
   if (/name=["']robots["']/i.test(html)) return html;
@@ -1431,34 +1402,19 @@ function wireContactForms(html: string, clientId: string, supabaseUrl: string): 
 }
 
 // ── business-professional template: direct CSS variable injection ──────
-function applyBusinessProfessionalTokens(html: string, intake: any): string {
+// business-professional fonts-only swap. Colors handled by color-system.
+function applyBusinessProfessionalFonts(html: string, intake: any): string {
+  if (!intake?.font_preference) return html;
+  const fontMap: Record<string, { serif: string; url: string }> = {
+    modern: { serif: '"Playfair Display", Georgia, serif', url: "Playfair+Display:ital,wght@0,400;0,700;1,400" },
+    classic: { serif: '"Cormorant Garamond", Georgia, serif', url: "Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400" },
+    minimal: { serif: '"DM Serif Display", Georgia, serif', url: "DM+Serif+Display:ital@0;1" },
+  };
+  const font = fontMap[String(intake.font_preference).toLowerCase()];
+  if (!font) return html;
   let out = html;
-  if (intake?.primary_color && typeof intake.primary_color === "string") {
-    const c = intake.primary_color.trim();
-    if (/^#[0-9a-fA-F]{3,6}$/.test(c)) {
-      out = out.replace(/--navy:\s*#[0-9a-fA-F]{3,6}/g, `--navy: ${c}`);
-      out = out.replace(/--navy-mid:\s*#[0-9a-fA-F]{3,6}/g, `--navy-mid: ${c}`);
-    }
-  }
-  if (intake?.accent_color && typeof intake.accent_color === "string") {
-    const c = intake.accent_color.trim();
-    if (/^#[0-9a-fA-F]{3,6}$/.test(c)) {
-      out = out.replace(/--gold:\s*#[0-9a-fA-F]{3,6}/g, `--gold: ${c}`);
-      out = out.replace(/--gold-dark:\s*#[0-9a-fA-F]{3,6}/g, `--gold-dark: ${c}`);
-    }
-  }
-  if (intake?.font_preference) {
-    const fontMap: Record<string, { serif: string; url: string }> = {
-      modern: { serif: '"Playfair Display", Georgia, serif', url: "Playfair+Display:ital,wght@0,400;0,700;1,400" },
-      classic: { serif: '"Cormorant Garamond", Georgia, serif', url: "Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400" },
-      minimal: { serif: '"DM Serif Display", Georgia, serif', url: "DM+Serif+Display:ital@0;1" },
-    };
-    const font = fontMap[String(intake.font_preference).toLowerCase()];
-    if (font) {
-      out = out.replace(/--font-serif:\s*[^;]+;/, `--font-serif: ${font.serif};`);
-      out = out.replace(/Cormorant\+Garamond[^"']+/g, font.url);
-    }
-  }
+  out = out.replace(/--font-serif:\s*[^;]+;/, `--font-serif: ${font.serif};`);
+  out = out.replace(/Cormorant\+Garamond[^"']+/g, font.url);
   return out;
 }
 

@@ -12,6 +12,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "./hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "./diagnostics.ts";
 import { autoFillPlaceholders } from "./autofill.ts";
+import { applyBrandColorsToHTML } from "./color-system.ts";
 
 export const RESTAURANT_TEMPLATE_ID = "local-favorite";
 export const RESTAURANT_PAGES = ["index", "menu", "about"] as const;
@@ -219,7 +220,7 @@ export async function generateRestaurantSite(opts: {
     let pageHtml = await file.text();
 
     // Inject brand tokens into :root (works on --red / --gold for restaurant)
-    pageHtml = injectBrandTokensIntoRoot(pageHtml, { primaryColor, accentColor });
+    pageHtml = applyBrandColorsToHTML(pageHtml, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, "local-favorite").html;
 
     // Apply fill map
     for (const [key, value] of Object.entries(fill)) {
@@ -871,31 +872,9 @@ function resolveBrandColor(input: unknown, fallback: string): string {
   return fallback;
 }
 
-const PRIMARY_VAR_NAMES = ["--red", "--burgundy", "--primary", "--color-primary"];
-const ACCENT_VAR_NAMES = ["--gold", "--accent", "--color-accent"];
+// Duplicate `injectBrandTokensIntoRoot` + `replaceCssVar` removed.
+// All :root color mutations go through `applyBrandColorsToHTML` (color-system.ts).
 
-function injectBrandTokensIntoRoot(html: string, tokens: { primaryColor?: string; accentColor?: string }): string {
-  return html.replace(/:root\s*\{([\s\S]*?)\}/, (_m, body: string) => {
-    let out = body;
-    if (tokens.primaryColor) out = replaceCssVar(out, PRIMARY_VAR_NAMES, tokens.primaryColor);
-    if (tokens.accentColor) out = replaceCssVar(out, ACCENT_VAR_NAMES, tokens.accentColor);
-    return `:root {${out}}`;
-  });
-}
-
-function replaceCssVar(body: string, names: string[], value: string): string {
-  let out = body;
-  let replaced = false;
-  for (const n of names) {
-    const re = new RegExp(`(${n.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
-    if (re.test(out)) {
-      out = out.replace(re, `$1${value}$3`);
-      replaced = true;
-    }
-  }
-  if (!replaced) out = `${out.replace(/\s*$/, "")}\n  ${names[0]}: ${value};\n`;
-  return out;
-}
 
 function buildMapHTML(input: {
   locationType?: string; streetAddress?: string; city?: string; state?: string; zip?: string; serviceArea?: string;
