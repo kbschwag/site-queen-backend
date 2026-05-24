@@ -197,6 +197,9 @@ export default function ProspectDetail() {
               <div className="flex items-center gap-2"><Eye className="h-4 w-4 text-muted-foreground" /><b>{c.demo_view_count || 0}</b> total views</div>
               {c.demo_last_viewed_at && <div className="text-xs text-muted-foreground">Last viewed {format(new Date(c.demo_last_viewed_at), "MMM d, h:mm a")}</div>}
             </div>
+            <Button size="sm" variant="outline" className="w-full" onClick={() => setShowCodeEditor(true)} disabled={!demoUrl}>
+              <Code2 className="h-4 w-4 mr-1" /> Edit Code ♛
+            </Button>
             <Button size="sm" variant="outline" className="w-full" onClick={regenerate} disabled={regenerating}>
               {regenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
               Regenerate Site
