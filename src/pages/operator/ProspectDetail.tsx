@@ -17,6 +17,7 @@ import { LogContactModal } from "@/components/operator/LogContactModal";
 import { ConvertToClientModal } from "@/components/operator/ConvertToClientModal";
 import { ALL_PROSPECT_STAGES, STAGE_LABELS, STAGE_COLORS, CHANNEL_LABELS } from "@/lib/prospect-utils";
 import { InlineRevisionPanel } from "@/components/operator/InlineRevisionPanel";
+import { MyTickets } from "@/components/client/MyTickets";
 
 export default function ProspectDetail() {
   const { id } = useParams();
@@ -49,6 +50,20 @@ export default function ProspectDetail() {
         .select("*")
         .eq("client_id", id!)
         .order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
+  const { data: changeRequests = [] } = useQuery({
+    queryKey: ["prospect-change-requests", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("change_requests")
+        .select("*")
+        .eq("client_id", id!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!id,
@@ -210,12 +225,16 @@ export default function ProspectDetail() {
               Refine this prospect's demo site — same revision flow used for active clients. Changes deploy to staging immediately.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             {demoUrl ? (
               <InlineRevisionPanel clientId={c.id} />
             ) : (
               <p className="text-sm text-muted-foreground">Generate the demo site first before requesting changes.</p>
             )}
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-semibold mb-3">Request History ({changeRequests.length})</h3>
+              <MyTickets changeRequests={changeRequests} clientId={c.id} />
+            </div>
           </CardContent>
         </Card>
 
