@@ -770,7 +770,7 @@ HARD RULES — VIOLATING ANY OF THESE MEANS THE PAGE WILL BE REJECTED:
 
 6. INTERNAL LINKS — Link to other pages with relative URLs: index.html, about.html, services.html, contact.html.
 
-7. NO HEADER / FOOTER / DOCTYPE in your output. Return ONLY the inner content (typically a <main> wrapper or a sequence of <section> blocks). Mobile-responsive via existing classes only.
+7. NO HEADER / FOOTER / DOCTYPE / NAV in your output. The site's canonical <nav> and <footer> are pulled from the homepage and injected around your content automatically — so DO NOT include any <nav>, <header>, <footer>, or top-bar/announcement-bar markup. Return ONLY the inner content (typically a <main> wrapper or a sequence of <section> blocks). Mobile-responsive via existing classes only.
 
 8. SPECIFICITY — Every line must be specific to ${businessName} in ${city}. No generic filler.
 
