@@ -178,40 +178,36 @@ serve(async (req) => {
     let templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
 
-    // ── business-professional: inject CSS variables for --navy/--gold/--font-serif ─
+    // ── business-professional: font/serif swap only (color half deleted — handled by color-system) ─
     if (templateId === "business-professional") {
-      templateHTML = applyBusinessProfessionalTokens(templateHTML, intake);
+      templateHTML = applyBusinessProfessionalFonts(templateHTML, intake);
     }
 
-    // ── Resolve client brand tokens (colors + fonts) and inject into :root ─
-    // Mirrors the logic used by generate-extra-pages so every page matches.
-    // Falls back to the template's existing values when the client did not
-    // provide overrides. Works across templates regardless of whether they
-    // use --red/--gold (trades-hero) or --burgundy/--gold (feminine-bold).
-    const templateRedMatch = templateHTML.match(/--(?:red|burgundy|primary|color-primary)\s*:\s*([^;]+);/i);
-    const templateGoldMatch = templateHTML.match(/--(?:gold|accent|color-accent)\s*:\s*([^;]+);/i);
-    const templateRed = templateRedMatch ? templateRedMatch[1].trim() : "#cb2020";
-    const templateGold = templateGoldMatch ? templateGoldMatch[1].trim() : "#f6a823";
-    const primaryColorResolved = resolveBrandColor(intake.primary_color, templateRed);
-    const accentColorResolved = resolveBrandColor(intake.accent_color, templateGold);
+    // ── Apply brand colors via the canonical color system ─────────────
+    // Single source of truth. Same code path on every page.
+    const __brand = { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null };
+    const __colorRes = applyBrandColorsToHTML(templateHTML, __brand, templateId);
+    templateHTML = __colorRes.html;
+    const primaryColorResolved = (intake.primary_color || "").trim() || "";
+    const accentColorResolved = (intake.accent_color || "").trim() || "";
 
+    // ── Fonts (independent of colors) ─────────────────────────────────
     const headingFontResolved = resolveFontName(
       (intake as any).heading_font || (intake as any).preferred_font || (intake as any).font_preference
     );
     const bodyFontResolved = resolveFontName(
       (intake as any).body_font || (intake as any).preferred_font || (intake as any).font_preference
     );
-
-    templateHTML = injectBrandTokensIntoRoot(templateHTML, {
-      primaryColor: primaryColorResolved,
-      accentColor: accentColorResolved,
-      headingFont: headingFontResolved || undefined,
-      bodyFont: bodyFontResolved || undefined,
-    });
     if (headingFontResolved || bodyFontResolved) {
+      templateHTML = injectFontTokensIntoRoot(templateHTML, {
+        headingFont: headingFontResolved || undefined,
+        bodyFont: bodyFontResolved || undefined,
+      });
       templateHTML = injectGoogleFontsLink(templateHTML, headingFontResolved, bodyFontResolved);
     }
-    console.log(`[generate] Brand tokens — primary=${primaryColorResolved}, accent=${accentColorResolved}, heading="${headingFontResolved}", body="${bodyFontResolved}"`);
+    console.log(`[generate] Brand tokens — primary=${primaryColorResolved || "(none)"}, accent=${accentColorResolved || "(none)"}, heading="${headingFontResolved}", body="${bodyFontResolved}"`);
+    console.log("[color-system] homepage", JSON.stringify({ templateId, applied: __colorRes.result.appliedPlacements, skipped: __colorRes.result.skippedBrandColors }));
+
 
 
 
