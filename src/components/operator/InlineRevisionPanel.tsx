@@ -22,6 +22,8 @@ interface Plan {
   estimated_changes: number;
   confidence: "high" | "medium" | "low";
   warnings?: string[];
+  current_value?: string | null;
+  current_value_source?: "intake" | "extracted" | "not_found";
 }
 
 interface AuditSubFix {
@@ -248,6 +250,20 @@ export function InlineRevisionPanel({ clientId }: Props) {
             }>{plan.confidence} confidence</Badge>
           </div>
           <p className="text-sm">{plan.summary}</p>
+          {plan.tool === "update_data_field" && plan.current_value && (
+            <div className="rounded border bg-muted/40 p-2 text-xs space-y-1">
+              <div><span className="text-muted-foreground">FROM:</span> <span className="font-mono">{plan.current_value}</span></div>
+              <div><span className="text-muted-foreground">TO:</span> <span className="font-mono">{plan.params?.new_value}</span></div>
+              {plan.current_value_source === "extracted" && (
+                <div className="text-emerald-700 flex items-center gap-1 pt-0.5">
+                  <CheckCircle2 className="h-3 w-3" /> Current value extracted from deployed HTML
+                </div>
+              )}
+              {plan.current_value_source === "intake" && (
+                <div className="text-muted-foreground pt-0.5">Current value from intake data</div>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap gap-1.5 text-xs">
             <span className="text-muted-foreground">Tool:</span>
             <Badge variant="secondary" className="text-[10px]">{plan.tool}</Badge>

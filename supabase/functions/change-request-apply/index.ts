@@ -24,13 +24,29 @@ interface ExecContext {
   intake: any;
   uploadedFileUrl: string | null;
   anthropicKey: string;
+  cachedCurrentValue?: string | null;
 }
 interface ExecResult { editedFiles: string[]; changesCount: number; updatedFiles: Record<string, string>; }
 
 // ─── update_data_field ──────────────────────────────────────────────────────
 async function execUpdateDataField(params: any, ctx: ExecContext): Promise<ExecResult> {
-  const cur = getCurrentFieldValue(ctx.intake, params.field);
-  if (!cur) throw new Error(`Current value for ${params.field} not found in intake data`);
+  let cur: string | null = ctx.cachedCurrentValue && ctx.cachedCurrentValue.trim()
+    ? ctx.cachedCurrentValue
+    : getCurrentFieldValue(ctx.intake, params.field) || null;
+
+  // Fallback: run extraction now if neither cache nor intake had it.
+  if (!cur) {
+    const { extractCurrentValue } = await import("../_shared/extract-current-value.ts");
+    const r = await extractCurrentValue({
+      field: params.field,
+      intake: ctx.intake,
+      deployedHtml: ctx.deployedHtml,
+      anthropicKey: ctx.anthropicKey,
+    });
+    cur = r.value;
+  }
+
+  if (!cur) throw new Error(`Could not determine current value for ${params.field}. Not in intake or deployed HTML.`);
   if (cur === params.new_value) throw new Error(`Field already equals "${params.new_value}"`);
 
   const updatedFiles: Record<string, string> = {};
@@ -532,6 +548,7 @@ serve(async (req) => {
       clientId, supabase, deployedHtml, intake,
       uploadedFileUrl: job.uploaded_file_url || null,
       anthropicKey,
+      cachedCurrentValue: (job as any).current_value || null,
     };
 
     let totalEditedFiles: string[] = [];

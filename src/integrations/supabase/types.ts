@@ -1632,6 +1632,8 @@ export type Database = {
           confidence: string | null
           confirmed_at: string | null
           created_at: string
+          current_value: string | null
+          current_value_source: string | null
           edited_files: string[]
           enabled_sub_fix_ids: string[] | null
           error_message: string | null
@@ -1663,6 +1665,8 @@ export type Database = {
           confidence?: string | null
           confirmed_at?: string | null
           created_at?: string
+          current_value?: string | null
+          current_value_source?: string | null
           edited_files?: string[]
           enabled_sub_fix_ids?: string[] | null
           error_message?: string | null
@@ -1694,6 +1698,8 @@ export type Database = {
           confidence?: string | null
           confirmed_at?: string | null
           created_at?: string
+          current_value?: string | null
+          current_value_source?: string | null
           edited_files?: string[]
           enabled_sub_fix_ids?: string[] | null
           error_message?: string | null

@@ -278,7 +278,7 @@ function PAGE_FILE(t: string): string {
   return m[t] || "";
 }
 
-function buildSummary(tool: string, params: any, intake: any, deployedHtml: Record<string, string>): {
+function buildSummary(tool: string, params: any, intake: any, deployedHtml: Record<string, string>, currentValueOverride: string | null = null): {
   summary: string;
   affectedPages: string[];
   affectedFields: string[];
@@ -292,18 +292,24 @@ function buildSummary(tool: string, params: any, intake: any, deployedHtml: Reco
 
   switch (tool) {
     case "update_data_field": {
-      const cur = getCurrentFieldValue(intake, params.field);
+      const cur = currentValueOverride ?? getCurrentFieldValue(intake, params.field);
       affectedFields = [params.field];
       if (!cur) {
-        warnings.push(`Current value for ${params.field} not found in intake — text-level replacement may be skipped.`);
+        warnings.push(`Could not find current ${params.field} in intake or on the deployed site.`);
       } else {
         for (const [f, h] of Object.entries(deployedHtml)) {
           const n = h.split(cur).length - 1;
           if (n > 0) { pages.push(f); estimated += n; }
         }
+        if (estimated === 0) {
+          warnings.push(`Current value "${cur.slice(0, 60)}" not found verbatim in deployed HTML — replacement may be skipped.`);
+        }
       }
+      const fromTo = cur
+        ? `from "${cur.length > 80 ? cur.slice(0, 80) + "…" : cur}" to "${params.new_value}"`
+        : `to "${params.new_value}"`;
       return {
-        summary: `Update ${params.field.replace(/_/g, " ")} to "${params.new_value}" — ${estimated} occurrence(s) across ${pages.length} page(s).`,
+        summary: `Update ${params.field.replace(/_/g, " ")} ${fromTo} — ${estimated} occurrence(s) across ${pages.length} page(s).`,
         affectedPages: pages, affectedFields, estimatedChanges: estimated, warnings,
       };
     }
@@ -727,13 +733,27 @@ File uploaded with this request: ${uploadedFileUrl ? "yes" : "no"}`;
     }
 
 
+    // For update_data_field, extract the current value (intake → deployed-HTML fallback)
+    // BEFORE building the summary so the plan can show "from → to".
+    let extractedCurrent: { value: string | null; source: string; notes?: string } | null = null;
+    if (toolName === "update_data_field" && params?.field) {
+      const { extractCurrentValue } = await import("../_shared/extract-current-value.ts");
+      const r = await extractCurrentValue({
+        field: params.field,
+        intake,
+        deployedHtml,
+        anthropicKey,
+      });
+      extractedCurrent = { value: r.value, source: r.source, notes: r.notes };
+    }
+
     // Build plan summary
-    const sm = buildSummary(toolName, params, intake, deployedHtml);
+    const sm = buildSummary(toolName, params, intake, deployedHtml, extractedCurrent?.value ?? null);
     const confidence: "high" | "medium" | "low" =
       sm.warnings.length === 0 && sm.estimatedChanges > 0 ? "high"
         : sm.warnings.length > 0 ? "low" : "medium";
 
-    const plan = {
+    const plan: any = {
       tool: toolName,
       summary: sm.summary,
       params,
@@ -743,6 +763,11 @@ File uploaded with this request: ${uploadedFileUrl ? "yes" : "no"}`;
       confidence,
       warnings: sm.warnings,
     };
+    if (extractedCurrent) {
+      plan.current_value = extractedCurrent.value;
+      plan.current_value_source = extractedCurrent.source;
+      if (extractedCurrent.notes) plan.current_value_notes = extractedCurrent.notes;
+    }
 
     await supabase.from("quick_edit_jobs").update({
       status: "awaiting_confirmation",
@@ -752,7 +777,9 @@ File uploaded with this request: ${uploadedFileUrl ? "yes" : "no"}`;
       confidence,
       preview_at: new Date().toISOString(),
       preview_ms: previewMs,
-    }).eq("id", job.id);
+      current_value: extractedCurrent?.value ?? null,
+      current_value_source: extractedCurrent?.source ?? null,
+    } as any).eq("id", job.id);
 
     return json({ success: true, job_id: job.id, plan });
   } catch (e: any) {
