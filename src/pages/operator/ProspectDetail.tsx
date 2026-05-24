@@ -225,12 +225,16 @@ export default function ProspectDetail() {
               Refine this prospect's demo site — same revision flow used for active clients. Changes deploy to staging immediately.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             {demoUrl ? (
               <InlineRevisionPanel clientId={c.id} />
             ) : (
               <p className="text-sm text-muted-foreground">Generate the demo site first before requesting changes.</p>
             )}
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-semibold mb-3">Request History ({changeRequests.length})</h3>
+              <MyTickets changeRequests={changeRequests} clientId={c.id} />
+            </div>
           </CardContent>
         </Card>
 
