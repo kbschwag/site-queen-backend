@@ -1402,34 +1402,19 @@ function wireContactForms(html: string, clientId: string, supabaseUrl: string): 
 }
 
 // ── business-professional template: direct CSS variable injection ──────
-function applyBusinessProfessionalTokens(html: string, intake: any): string {
+// business-professional fonts-only swap. Colors handled by color-system.
+function applyBusinessProfessionalFonts(html: string, intake: any): string {
+  if (!intake?.font_preference) return html;
+  const fontMap: Record<string, { serif: string; url: string }> = {
+    modern: { serif: '"Playfair Display", Georgia, serif', url: "Playfair+Display:ital,wght@0,400;0,700;1,400" },
+    classic: { serif: '"Cormorant Garamond", Georgia, serif', url: "Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400" },
+    minimal: { serif: '"DM Serif Display", Georgia, serif', url: "DM+Serif+Display:ital@0;1" },
+  };
+  const font = fontMap[String(intake.font_preference).toLowerCase()];
+  if (!font) return html;
   let out = html;
-  if (intake?.primary_color && typeof intake.primary_color === "string") {
-    const c = intake.primary_color.trim();
-    if (/^#[0-9a-fA-F]{3,6}$/.test(c)) {
-      out = out.replace(/--navy:\s*#[0-9a-fA-F]{3,6}/g, `--navy: ${c}`);
-      out = out.replace(/--navy-mid:\s*#[0-9a-fA-F]{3,6}/g, `--navy-mid: ${c}`);
-    }
-  }
-  if (intake?.accent_color && typeof intake.accent_color === "string") {
-    const c = intake.accent_color.trim();
-    if (/^#[0-9a-fA-F]{3,6}$/.test(c)) {
-      out = out.replace(/--gold:\s*#[0-9a-fA-F]{3,6}/g, `--gold: ${c}`);
-      out = out.replace(/--gold-dark:\s*#[0-9a-fA-F]{3,6}/g, `--gold-dark: ${c}`);
-    }
-  }
-  if (intake?.font_preference) {
-    const fontMap: Record<string, { serif: string; url: string }> = {
-      modern: { serif: '"Playfair Display", Georgia, serif', url: "Playfair+Display:ital,wght@0,400;0,700;1,400" },
-      classic: { serif: '"Cormorant Garamond", Georgia, serif', url: "Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400" },
-      minimal: { serif: '"DM Serif Display", Georgia, serif', url: "DM+Serif+Display:ital@0;1" },
-    };
-    const font = fontMap[String(intake.font_preference).toLowerCase()];
-    if (font) {
-      out = out.replace(/--font-serif:\s*[^;]+;/, `--font-serif: ${font.serif};`);
-      out = out.replace(/Cormorant\+Garamond[^"']+/g, font.url);
-    }
-  }
+  out = out.replace(/--font-serif:\s*[^;]+;/, `--font-serif: ${font.serif};`);
+  out = out.replace(/Cormorant\+Garamond[^"']+/g, font.url);
   return out;
 }
 
