@@ -548,6 +548,7 @@ serve(async (req) => {
       clientId, supabase, deployedHtml, intake,
       uploadedFileUrl: job.uploaded_file_url || null,
       anthropicKey,
+      cachedCurrentValue: (job as any).current_value || null,
     };
 
     let totalEditedFiles: string[] = [];
