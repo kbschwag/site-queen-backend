@@ -527,13 +527,48 @@ serve(async (req) => {
 
   const systemPrompt = await buildSystemPrompt(supabase, client, site);
   const history = await loadChatMessages(supabase, chatId);
-  const messages = history.map((m: any) => {
+  const messages: any[] = history.map((m: any) => {
     if (Array.isArray(m.content)) {
       const safe = m.content.filter((b: any) => b && typeof b === "object" && (b.type === "text" || b.type === "tool_use" || b.type === "tool_result"));
       return { role: m.role, content: safe.length ? safe : [{ type: "text", text: "" }] };
     }
     return m;
   });
+
+  // Repair orphan tool_use blocks. If a prior turn was interrupted after we
+  // persisted the assistant tool_use but before the tool_result row, Claude
+  // will 400 on the next call. Inject a synthetic error tool_result so the
+  // conversation can continue.
+  const repaired: any[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    repaired.push(m);
+    if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
+    const toolUseIds: string[] = m.content.filter((b: any) => b?.type === "tool_use").map((b: any) => b.id);
+    if (toolUseIds.length === 0) continue;
+    const next = messages[i + 1];
+    const nextResultIds = new Set<string>();
+    if (next?.role === "user" && Array.isArray(next.content)) {
+      for (const b of next.content) {
+        if (b?.type === "tool_result" && b.tool_use_id) nextResultIds.add(b.tool_use_id);
+      }
+    }
+    const missing = toolUseIds.filter((id) => !nextResultIds.has(id));
+    if (missing.length === 0) continue;
+    const synthetic = missing.map((id) => ({
+      type: "tool_result",
+      tool_use_id: id,
+      content: JSON.stringify({ success: false, error: "Previous turn was interrupted before this tool completed." }),
+      is_error: true,
+    }));
+    if (next?.role === "user" && Array.isArray(next.content)) {
+      next.content = [...synthetic, ...next.content];
+    } else {
+      repaired.push({ role: "user", content: synthetic });
+    }
+  }
+  messages.length = 0;
+  messages.push(...repaired);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
