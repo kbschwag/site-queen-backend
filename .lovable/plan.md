@@ -1,165 +1,76 @@
-# Option C — Hosted Tracker Migration
+# Operator Chat — Build Plan
 
-## Recommendation: proceed
+## Goal
+Replace the structured change-request system as the primary operator workflow with a streaming Claude chat panel on each client/prospect detail page. Claude uses low-level tools (read/write files, intake, push to staging, snapshots) to fulfill operator requests. Existing change-request code is renamed to `_deprecated_*` but kept.
 
-No reason on this stack to prefer inline. Lovable Cloud's public Storage buckets serve static JS perfectly well, support `Cache-Control` via the `cacheControl` upload option, and are already CORS-open (`Access-Control-Allow-Origin: *`) by default. The `generated-sites` bucket is already public. One file, one URL, version-pinned — this is the right shape.
+## Database (1 migration)
+New tables:
+- `operator_chats` — one row per (target, operator). XOR constraint between `client_id` and `prospect_id`. Note: there is no `prospects` table in this project — prospects ARE rows in `clients` (with `lifecycle_stage != 'active_client'`). I will use a single `client_id` column (no prospect_id) and drop the XOR. Confirmed by inspecting the schema.
+- `operator_chat_messages` — JSONB content blocks (text / tool_use / tool_result), `tool_name`, `tool_input`, `tool_result`, `requires_confirmation`, `confirmed_at`, `cancelled_at`.
 
-The only nuance worth knowing up front: Supabase Storage sets `Cache-Control: max-age=<n>` based on the `cacheControl` option at upload time. To change cache duration later you re-upload. That's fine — versioned filenames (`tracker-v2.js`) mean we never need to bust cache on an existing version anyway.
+RLS: operators only (admin role OR profiles.role='partner').
 
----
+## Edge functions
 
-## Architecture
+### `operator-chat` (new, streaming SSE)
+- Auth: operator only.
+- Loads/creates chat for `(client_id, operator_id)`.
+- Persists user message.
+- Builds system prompt with auto-loaded context (business name, template, staging URL, compact intake summary, deployed filenames, recent edits).
+- Streams Claude (`claude-sonnet-4-5-20250929` via Anthropic API, key already in secrets as `ANTHROPIC_API_KEY`).
+- Tool loop (max 10 iterations): execute non-destructive tools immediately; for destructive tools, persist a `requires_confirmation` row, emit `tool_use_requires_confirmation`, and poll DB until `confirmed_at`/`cancelled_at` is set (timeout ~5 min).
+- Emits SSE events: `chat_created`, `text_delta`, `tool_use_started`, `tool_use_requires_confirmation`, `tool_result`, `done`, `error`.
 
-```text
-Client site (Hostinger)              Lovable Cloud
-┌────────────────────────┐           ┌────────────────────────────┐
-│ <script async          │  ── GET ─▶│ Storage bucket: tracker     │
-│   src=".../tracker-v2  │           │   /tracker-v2.js (public)   │
-│   .js"                 │           │   Cache-Control: max-age=3600│
-│   data-client-id="…"   │           └────────────────────────────┘
-│   data-endpoint="…">   │
-│ </script>              │  ── POST ─▶ track-event edge function
-└────────────────────────┘
-```
+### `operator-chat-confirm` (new)
+- Sets `confirmed_at` or `cancelled_at` on a pending tool-call message.
 
----
+### Tools (13)
+Read-only: `read_deployed_file`, `read_template_file`, `read_intake_field`, `read_full_intake`, `list_uploaded_media`, `view_image`, `list_snapshots`, `take_screenshot`.
+Destructive (require confirm): `write_deployed_file`, `update_intake_field`, `push_to_staging`, `snapshot_current_state`, `restore_from_snapshot`.
 
-## 1. Loader snippet (baked into every new site)
+Handlers reuse existing infra:
+- File storage: `generated-sites` bucket at `{client_id}/deploy/{filename}` (current convention) and `{client_id}/versions/{snapshot}/` for snapshots.
+- Staging push: existing `uploadFileToHostingerFtp` from `_shared/hostinger-ftp.ts` with `injectNoindex` (lifted from `push-to-staging`).
+- Intake: `clients` table fields + `intake_data` jsonb if present.
+- Screenshots: reuse `capture-page-screenshots` function.
+- `view_image`: returns base64; Claude can view in next turn via image content block.
 
-Replaces lines 1054–1068 in `generate-website/index.ts` and lines 470–484 in `generate-website-part1/index.ts`:
+System prompt is intentionally short (per spec) — orient Claude, don't boss it.
 
-```html
-<script async
-  src="https://onrvqbygwzhmhgkctcrm.supabase.co/storage/v1/object/public/tracker/tracker-v2.js"
-  data-client-id="${clientId}"
-  data-endpoint="${supabaseUrl}/functions/v1/track-event"></script>
-```
+## Frontend
 
-Four lines. No logic. Never needs to change again — version bumps happen by uploading `tracker-v3.js` and updating these two template strings (which only affects new generations; existing sites keep loading v2 forever and stay stable).
+### New component: `src/components/operator/OperatorChatPanel.tsx`
+- Loads existing messages on mount via supabase.
+- Streaming via `fetch` with ReadableStream reader (SSE parsing); EventSource doesn't support auth headers.
+- Renders text deltas, tool status rows ("Reading index.html…" → ✓), and confirmation cards (Approve / Show details / Cancel).
+- Confirmation calls `operator-chat-confirm`; the in-flight stream resumes on next poll tick.
+- File attachments → upload to `client-uploads/{client_id}/chat/` → include URL in next request.
+- Input: textarea + send button + paperclip.
 
----
+### Wire into pages
+- `src/pages/operator/ProspectDetail.tsx` — replace the "Request Changes" card body (`InlineRevisionPanel`) with `<OperatorChatPanel clientId={c.id} />`. Keep `MyTickets` history below.
+- `src/pages/operator/OperatorClients.tsx` flow / client detail — add the same panel where `InlineRevisionPanel` currently lives.
 
-## 2. Hosted `tracker-v2.js`
+## Deprecation
+Rename (only directory rename / no logic changes):
+- `supabase/functions/change-request-preview` → `_deprecated_change-request-preview`
+- `supabase/functions/change-request-apply` → `_deprecated_change-request-apply`
+- `supabase/functions/change-request-cancel` → `_deprecated_change-request-cancel`
+- `_shared/change-request-shared.ts` and `_shared/extract-current-value.ts` left in place (still imported by deprecated functions).
+- `InlineRevisionPanel.tsx` left in repo, no longer imported.
 
-Includes the Phase 3 UTM upgrade (`metadata.url`) from day one:
+Update `supabase/config.toml`: remove old `change-request-*` blocks, add `[functions.operator-chat]` and `[functions.operator-chat-confirm]` (both `verify_jwt = true`).
 
-```js
-(function () {
-  var s = document.currentScript;
-  if (!s) return;
-  var CLIENT_ID = s.getAttribute('data-client-id');
-  var ENDPOINT  = s.getAttribute('data-endpoint');
-  if (!CLIENT_ID || !ENDPOINT) return;
+## Verification
+After deploy: smoke-test C1 (initial greeting), C2 (address update with confirmation), C8 (cancel). Other scenarios (C3–C10) documented for the operator to walk through.
 
-  function getDevice() {
-    return /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
-  }
-  function getSid() {
-    var v = sessionStorage.getItem('sq_sid');
-    if (!v) { v = Math.random().toString(36).substr(2, 9); sessionStorage.setItem('sq_sid', v); }
-    return v;
-  }
-  function track(type, meta) {
-    var body = {
-      client_id: CLIENT_ID,
-      event_type: type,
-      page_path: location.pathname,
-      page_title: document.title,
-      referrer: document.referrer,
-      device_type: getDevice(),
-      session_id: getSid(),
-      metadata: Object.assign({ url: location.href }, meta || {})
-    };
-    try {
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(ENDPOINT, new Blob([JSON.stringify(body)], { type: 'application/json' }));
-      } else {
-        fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(function () {});
-      }
-    } catch (e) {}
-  }
+## Out of scope (explicit)
+- Realtime/LISTEN-NOTIFY for confirmation — using DB polling per spec ("Either works").
+- Cost monitor / soft alerts (mentioned as future).
+- Prompt caching headers (can add later).
+- Migrating existing change_requests history.
 
-  track('page_view');
-  document.addEventListener('click', function (e) {
-    var a = e.target && e.target.closest && e.target.closest('a');
-    if (!a || !a.href) return;
-    if (a.href.indexOf('tel:')    === 0) track('phone_click');
-    if (a.href.indexOf('mailto:') === 0) track('email_click');
-  });
-  document.addEventListener('submit', function () { track('form_submission'); });
-})();
-```
-
-Extras vs. current inline:
-- `metadata.url = location.href` (UTM capture — server already parses this)
-- `navigator.sendBeacon` fallback so events survive page unload
-- `data-*` attribute config instead of template injection (no per-site regeneration)
-
----
-
-## 3. Hosting
-
-- **Bucket:** new public bucket `tracker` (separate from `generated-sites` so cache rules and retention are independent and a future tracker change can never collide with a site asset).
-- **Path:** `tracker-v2.js` at bucket root.
-- **Public URL:** `https://onrvqbygwzhmhgkctcrm.supabase.co/storage/v1/object/public/tracker/tracker-v2.js`
-- **CORS:** Supabase Storage already returns `Access-Control-Allow-Origin: *` on public objects. No config needed.
-- **Cache:** upload with `cacheControl: '3600'` → `Cache-Control: max-age=3600`. Updates within a version propagate in ≤1 hour. New versions are instant (different URL).
-- **Versioning rule:** `tracker-v2.js` is **immutable** once 18 sites point at it. Bug fixes that change behavior get a new filename. Only safe in-place edits are no-behavior-change patches.
-
----
-
-## 4. Migration script for the 18 existing sites
-
-Same shape as Option B but the regex swaps the *entire inline `<script>` block* for the loader. One edge function, run once per site, serialized:
-
-```text
-For each client with site_status in ('staging','live'):
-  1. List `<clientId>/*.html` in `generated-sites` bucket (source of truth for what's on Hostinger)
-  2. For each HTML file:
-     a. Download from generated-sites bucket
-     b. Backup current copy → generated-sites/<clientId>/_pre-tracker-v2/<file>
-     c. Regex-replace the inline analytics block (anchored on "var CLIENT_ID = '" + clientId + "'")
-        with the new loader snippet (client_id + endpoint interpolated)
-     d. If the regex matched exactly once → upload to Hostinger via existing FTP helper + re-upload to bucket
-        If 0 or >1 matches → SKIP, log to `tracker_migration_log` table, continue
-  3. Record per-file result (matched / skipped / failed) in `tracker_migration_log`
-```
-
-Why anchor on `CLIENT_ID = '<uuid>'`: guarantees we don't touch any other `<script>` block, and a hand-edited tracker won't match → safe skip.
-
-Run as a one-shot edge function `migrate-to-hosted-tracker` (owner-only, no schedule). Dry-run mode first (logs matches without uploading), then live.
-
----
-
-## 5. Rollback
-
-Three independent layers:
-
-| Failure | Rollback |
-|---|---|
-| `tracker-v2.js` has a bug in the wild | Upload fixed `tracker-v2.js` over itself (1-hour cache window) **or** publish `tracker-v3.js` + revert the two generator template strings to v2 (instant for future builds) |
-| Migration corrupts a site's HTML | Per-file backup at `generated-sites/<clientId>/_pre-tracker-v2/<file>` → re-upload to Hostinger via existing FTP helper. Script also supports `--restore <clientId>` flag |
-| Storage outage takes tracker offline | Sites still render — `<script async>` failure is silent. Only analytics stop. No customer-visible breakage. (This is an improvement over inline: bad inline JS could break a page; missing external JS cannot.) |
-
----
-
-## 6. Phasing
-
-1. Create `tracker` bucket (migration) + public-read policy
-2. Upload `tracker-v2.js` with `cacheControl: 3600`
-3. Verify cross-origin load from one staging site manually (curl + browser test)
-4. Update both generator files to emit the loader snippet
-5. Build `migrate-to-hosted-tracker` edge function; dry-run against all 18
-6. Review dry-run log → run live, serialized
-7. Spot-check 3 sites: network tab shows `tracker-v2.js` 200 + `track-event` POST with `metadata.url`
-8. Verify Phase 2 dashboards still increment correctly
-
-Nothing in this plan touches `track-event`, `analytics_*` tables, or the legacy 681 events.
-
----
-
-## What I need from you
-
-- Approve the plan, or flag changes
-- Confirm cache duration (proposed: 1 hour) and bucket name (proposed: `tracker`)
-- Confirm migration runs serialized (safer, ~2–3 min total) vs. parallelized (faster, FTP rate-limit risk on Hostinger)
+## Files touched (summary)
+**New:** migration, `operator-chat/index.ts`, `operator-chat-confirm/index.ts`, `OperatorChatPanel.tsx`.
+**Edited:** `ProspectDetail.tsx`, client detail page, `config.toml`.
+**Renamed:** 3 edge-function directories.
