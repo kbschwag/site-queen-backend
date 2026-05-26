@@ -402,16 +402,20 @@ async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
 
 // ─── Build message history & system prompt ──────────────────────────────────
 async function loadChatMessages(supabase: any, chatId: string): Promise<any[]> {
+  // Load the MOST RECENT N messages (desc + reverse), not the oldest N.
+  // Loading oldest first chops tool_result rows off the tail of long chats.
   const { data } = await supabase
     .from("operator_chat_messages")
-    .select("role, content")
+    .select("role, content, created_at")
     .eq("chat_id", chatId)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(MAX_HISTORY_MESSAGES);
-  return (data || [])
+  const rows = (data || [])
     .filter((m: any) => m.role === "user" || m.role === "assistant" || m.role === "tool_result")
-    .map((m: any) => ({ role: m.role === "tool_result" ? "user" : m.role, content: m.content }));
+    .reverse();
+  return rows.map((m: any) => ({ role: m.role === "tool_result" ? "user" : m.role, content: m.content }));
 }
+
 
 function formatIntakeSummary(intake: any): string {
   if (!intake) return "(no intake data yet)";
