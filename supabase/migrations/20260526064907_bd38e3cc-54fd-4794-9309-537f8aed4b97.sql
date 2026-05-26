@@ -1,0 +1,2 @@
+ALTER TABLE public.site_versions ADD COLUMN IF NOT EXISTS chat_message_id UUID REFERENCES public.operator_chat_messages(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_site_versions_chat_message ON public.site_versions(chat_message_id);
