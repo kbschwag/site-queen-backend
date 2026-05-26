@@ -3,32 +3,47 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Send, Paperclip, Check, X, ChevronDown, ChevronRight, AlertTriangle, Wrench } from "lucide-react";
+import { Loader2, Send, Paperclip, Check, X, ChevronDown, ChevronRight, Wrench, Undo2, AlertTriangle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 interface Props {
   clientId: string;
 }
-
-type Pending = {
-  message_id: string;
-  tool_name: string;
-  tool_input: any;
-  summary: string;
-};
 
 type ToolRun = {
   message_id: string;
   tool_name: string;
   tool_input: any;
   result?: any;
+  success?: boolean;
   status: "running" | "done";
+};
+
+type WriteRecord = {
+  type: "file_edit" | "intake_update" | "staging_push";
+  filename?: string;
+  field?: string;
+  status: "success" | "partial" | "failed";
+  message: string;
+  staging_url?: string;
+  staging_verified?: boolean;
+  staging_error?: string;
+};
+
+type TurnSummary = {
+  message_id: string;
+  writes: WriteRecord[];
+  any_failures: boolean;
+  staging_url: string;
+  undo_available: boolean;
+  undo_token: string;
+  undone?: boolean;
 };
 
 type RenderedMsg =
   | { kind: "user"; text: string }
-  | { kind: "assistant"; text: string; toolRuns: ToolRun[]; pendings: Pending[] };
+  | { kind: "assistant"; text: string; toolRuns: ToolRun[]; summary?: TurnSummary }
+  | { kind: "system"; note: string };
 
 export function OperatorChatPanel({ clientId }: Props) {
   const [chatId, setChatId] = useState<string | null>(null);
@@ -39,7 +54,6 @@ export function OperatorChatPanel({ clientId }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load existing history
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -82,11 +96,22 @@ export function OperatorChatPanel({ clientId }: Props) {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const confirmAction = async (message_id: string, action: "approve" | "cancel") => {
-    const { error } = await supabase.functions.invoke("operator-chat-confirm", { body: { message_id, action } });
-    if (error) toast.error(error.message);
-    // Optimistically remove the pending card
-    setMessages((prev) => prev.map((m) => m.kind === "assistant" ? { ...m, pendings: m.pendings.filter(p => p.message_id !== message_id) } : m));
+  const handleUndo = async (messageId: string) => {
+    if (!chatId) return;
+    const { data, error } = await supabase.functions.invoke("operator-chat-undo", {
+      body: { chat_id: chatId, message_id: messageId },
+    });
+    if (error) { toast.error(error.message); return; }
+    const restored = (data?.results || []).filter((r: any) => r.status === "restored" || r.status === "restored_storage_only").length;
+    toast.success(`Reverted ${restored} file(s) to previous version.`);
+    setMessages((prev) => {
+      const next = [...prev];
+      for (const m of next) {
+        if (m.kind === "assistant" && m.summary?.message_id === messageId) m.summary.undone = true;
+      }
+      next.push({ kind: "system", note: `↶ Undone — reverted ${restored} file(s) to their state before that change.` });
+      return next;
+    });
   };
 
   const send = async () => {
@@ -96,7 +121,7 @@ export function OperatorChatPanel({ clientId }: Props) {
     setInput("");
     setAttachments([]);
     setSending(true);
-    setMessages((prev) => [...prev, { kind: "user", text: userText }, { kind: "assistant", text: "", toolRuns: [], pendings: [] }]);
+    setMessages((prev) => [...prev, { kind: "user", text: userText }, { kind: "assistant", text: "", toolRuns: [] }]);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -170,23 +195,30 @@ export function OperatorChatPanel({ clientId }: Props) {
         }
         return next;
       });
-    } else if (ev.type === "tool_use_requires_confirmation") {
-      setMessages((prev) => {
-        const next = [...prev];
-        const last = next[next.length - 1];
-        if (last?.kind === "assistant") {
-          last.pendings = [...last.pendings, { message_id: ev.message_id, tool_name: ev.tool_name, tool_input: ev.tool_input, summary: ev.summary }];
-        }
-        return next;
-      });
     } else if (ev.type === "tool_result") {
       setMessages((prev) => {
         const next = [...prev];
         const last = next[next.length - 1];
         if (last?.kind === "assistant") {
           const run = last.toolRuns.find((r) => r.message_id === ev.message_id);
-          if (run) { run.status = "done"; run.result = ev.result; }
-          else last.toolRuns = [...last.toolRuns, { message_id: ev.message_id, tool_name: "(tool)", tool_input: {}, status: "done", result: ev.result }];
+          if (run) { run.status = "done"; run.result = ev.result; run.success = ev.success; }
+          else last.toolRuns = [...last.toolRuns, { message_id: ev.message_id, tool_name: "(tool)", tool_input: {}, status: "done", result: ev.result, success: ev.success }];
+        }
+        return next;
+      });
+    } else if (ev.type === "turn_summary") {
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.kind === "assistant") {
+          last.summary = {
+            message_id: ev.message_id,
+            writes: ev.writes || [],
+            any_failures: !!ev.any_failures,
+            staging_url: ev.staging_url,
+            undo_available: !!ev.undo_available,
+            undo_token: ev.undo_token,
+          };
         }
         return next;
       });
@@ -201,23 +233,29 @@ export function OperatorChatPanel({ clientId }: Props) {
         <div className="space-y-4">
           {messages.length === 0 && (
             <div className="text-sm text-muted-foreground text-center py-12">
-              Talk to Claude about this site. Ask for edits, new pages, fixes, or audits — Claude will read the deployed files and propose changes.
+              Talk to Claude about this site. Ask for edits, new pages, fixes, or audits — changes deploy immediately, and you can undo any change in one click.
             </div>
           )}
-          {messages.map((m, i) => m.kind === "user" ? (
-            <div key={i} className="flex justify-end">
-              <div className="bg-primary text-primary-foreground rounded-lg px-3 py-2 max-w-[80%] whitespace-pre-wrap text-sm">{m.text}</div>
-            </div>
-          ) : (
-            <div key={i} className="space-y-2">
-              {m.text && <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.text}</div>}
-              {m.toolRuns.map((r) => <ToolRunRow key={r.message_id} run={r} />)}
-              {m.pendings.map((p) => (
-                <ConfirmationCard key={p.message_id} pending={p} onApprove={() => confirmAction(p.message_id, "approve")} onCancel={() => confirmAction(p.message_id, "cancel")} />
-              ))}
-            </div>
-          ))}
-          {sending && messages[messages.length - 1]?.kind === "assistant" && !messages[messages.length - 1]?.text && (
+          {messages.map((m, i) => {
+            if (m.kind === "user") {
+              return (
+                <div key={i} className="flex justify-end">
+                  <div className="bg-primary text-primary-foreground rounded-lg px-3 py-2 max-w-[80%] whitespace-pre-wrap text-sm">{m.text}</div>
+                </div>
+              );
+            }
+            if (m.kind === "system") {
+              return <div key={i} className="text-xs text-muted-foreground italic px-2">{m.note}</div>;
+            }
+            return (
+              <div key={i} className="space-y-2">
+                {m.text && <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.text}</div>}
+                {m.toolRuns.map((r) => <ToolRunRow key={r.message_id} run={r} />)}
+                {m.summary && <TurnSummaryCard summary={m.summary} onUndo={handleUndo} />}
+              </div>
+            );
+          })}
+          {sending && messages[messages.length - 1]?.kind === "assistant" && !(messages[messages.length - 1] as any)?.text && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Thinking…</div>
           )}
         </div>
@@ -258,6 +296,7 @@ export function OperatorChatPanel({ clientId }: Props) {
 
 function ToolRunRow({ run }: { run: ToolRun }) {
   const [open, setOpen] = useState(false);
+  const failed = run.status === "done" && run.success === false;
   return (
     <div className="text-xs border rounded bg-muted/40">
       <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-2 px-2 py-1.5 text-left">
@@ -265,7 +304,11 @@ function ToolRunRow({ run }: { run: ToolRun }) {
         <Wrench className="h-3 w-3" />
         <span className="font-mono">{run.tool_name}</span>
         <span className="text-muted-foreground flex-1 truncate">{summarizeInput(run.tool_input)}</span>
-        {run.status === "running" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 text-green-600" />}
+        {run.status === "running"
+          ? <Loader2 className="h-3 w-3 animate-spin" />
+          : failed
+            ? <X className="h-3 w-3 text-destructive" />
+            : <Check className="h-3 w-3 text-green-600" />}
       </button>
       {open && (
         <div className="px-2 pb-2 space-y-1">
@@ -279,24 +322,75 @@ function ToolRunRow({ run }: { run: ToolRun }) {
   );
 }
 
-function ConfirmationCard({ pending, onApprove, onCancel }: { pending: Pending; onApprove: () => void; onCancel: () => void }) {
-  const [showDetails, setShowDetails] = useState(false);
+function TurnSummaryCard({ summary, onUndo }: { summary: TurnSummary; onUndo: (id: string) => void }) {
+  const [undoing, setUndoing] = useState(false);
+  const fileEdits = summary.writes.filter((w) => w.type === "file_edit");
+  const intakeUpdates = summary.writes.filter((w) => w.type === "intake_update");
+  const stagingPushes = summary.writes.filter((w) => w.type === "staging_push");
+
+  const borderColor = summary.any_failures ? "border-amber-500/60" : "border-green-500/60";
+  const bgColor = summary.any_failures ? "bg-amber-50 dark:bg-amber-950/30" : "bg-green-50 dark:bg-green-950/20";
+  const Icon = summary.any_failures ? AlertTriangle : Check;
+  const iconColor = summary.any_failures ? "text-amber-600" : "text-green-600";
+  const title = summary.undone
+    ? "↶ Changes undone"
+    : summary.any_failures ? "Partial success" : "Changes applied";
+
   return (
-    <div className="border-2 border-amber-500/60 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 space-y-2">
+    <div className={`border-2 ${borderColor} ${bgColor} rounded-lg p-3 space-y-2`}>
       <div className="flex items-start gap-2">
-        <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-        <div className="flex-1">
-          <div className="text-sm font-medium">Claude wants to: <span className="font-mono text-xs bg-background px-1 rounded">{pending.tool_name}</span></div>
-          <div className="text-sm mt-1">{pending.summary}</div>
-        </div>
+        <Icon className={`h-4 w-4 ${iconColor} mt-0.5 shrink-0`} />
+        <div className="text-sm font-medium">{title}</div>
       </div>
-      {showDetails && (
-        <pre className="text-[10px] bg-background p-2 rounded overflow-auto max-h-60">{JSON.stringify(pending.tool_input, null, 2)}</pre>
-      )}
-      <div className="flex gap-2">
-        <Button size="sm" onClick={onApprove}><Check className="h-3 w-3 mr-1" />Approve</Button>
-        <Button size="sm" variant="outline" onClick={() => setShowDetails((s) => !s)}>{showDetails ? "Hide" : "Show"} details</Button>
-        <Button size="sm" variant="ghost" onClick={onCancel}><X className="h-3 w-3 mr-1" />Cancel</Button>
+      <div className="text-xs space-y-1 pl-6">
+        {fileEdits.length > 0 && (
+          <div>
+            <div className="font-medium">Updated {fileEdits.length} file{fileEdits.length === 1 ? "" : "s"}:</div>
+            <ul className="ml-2">
+              {fileEdits.map((w, i) => (
+                <li key={i} className="flex items-start gap-1">
+                  <span className={w.status === "success" ? "text-green-600" : w.status === "partial" ? "text-amber-600" : "text-destructive"}>
+                    {w.status === "success" ? "✓" : w.status === "partial" ? "⚠" : "✗"}
+                  </span>
+                  <span className="font-mono">{w.filename}</span>
+                  <span className="text-muted-foreground">— {w.message}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {intakeUpdates.length > 0 && (
+          <div>Updated intake: {intakeUpdates.map((w) => w.field).join(", ")}</div>
+        )}
+        {stagingPushes.length > 0 && (
+          <div>
+            Staging pushes: {stagingPushes.filter((w) => w.status === "success").length} ok, {stagingPushes.filter((w) => w.status !== "success").length} failed
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2 pt-1">
+        {summary.staging_url && (
+          <a href={summary.staging_url} target="_blank" rel="noreferrer">
+            <Button size="sm" variant="outline" className="text-xs">
+              <ExternalLink className="h-3 w-3 mr-1" />View on staging
+            </Button>
+          </a>
+        )}
+        {summary.undo_available && !summary.undone && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            disabled={undoing}
+            onClick={async () => {
+              setUndoing(true);
+              try { await onUndo(summary.undo_token); } finally { setUndoing(false); }
+            }}
+          >
+            {undoing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Undo2 className="h-3 w-3 mr-1" />}
+            Undo these changes
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -323,14 +417,24 @@ function reduceHistory(rows: any[]): RenderedMsg[] {
       const toolRuns: ToolRun[] = blocks.filter((b: any) => b.type === "tool_use").map((b: any) => ({
         message_id: b.id, tool_name: b.name, tool_input: b.input, status: "done", result: undefined,
       }));
-      out.push({ kind: "assistant", text, toolRuns, pendings: [] });
+      out.push({ kind: "assistant", text, toolRuns });
     } else if (row.role === "tool_result" && Array.isArray(row.content)) {
-      // Attach results to the previous assistant message's tool runs
       const last = out[out.length - 1];
       if (last?.kind === "assistant") {
         for (const tr of row.content) {
           const run = last.toolRuns.find((r) => r.message_id === tr.tool_use_id);
           if (run) try { run.result = JSON.parse(tr.content); } catch { run.result = tr.content; }
+        }
+      }
+    } else if (row.role === "system_note" && row.content?.type === "undo") {
+      const restored = (row.content.results || []).filter((r: any) => r.status === "restored" || r.status === "restored_storage_only").length;
+      out.push({ kind: "system", note: `↶ Undone — reverted ${restored} file(s) to their state before that change.` });
+      // Mark the prior assistant summary as undone
+      for (let i = out.length - 2; i >= 0; i--) {
+        const m = out[i];
+        if (m.kind === "assistant" && m.summary?.message_id === row.content.undone_message_id) {
+          m.summary.undone = true;
+          break;
         }
       }
     }

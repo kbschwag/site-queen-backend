@@ -1882,6 +1882,7 @@ export type Database = {
       }
       site_versions: {
         Row: {
+          chat_message_id: string | null
           client_id: string
           created_at: string
           created_by: string | null
@@ -1892,6 +1893,7 @@ export type Database = {
           timestamp: string
         }
         Insert: {
+          chat_message_id?: string | null
           client_id: string
           created_at?: string
           created_by?: string | null
@@ -1902,6 +1904,7 @@ export type Database = {
           timestamp: string
         }
         Update: {
+          chat_message_id?: string | null
           client_id?: string
           created_at?: string
           created_by?: string | null
@@ -1911,7 +1914,15 @@ export type Database = {
           restored?: boolean | null
           timestamp?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "site_versions_chat_message_id_fkey"
+            columns: ["chat_message_id"]
+            isOneToOne: false
+            referencedRelation: "operator_chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sites: {
         Row: {

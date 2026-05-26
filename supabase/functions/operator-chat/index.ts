@@ -5,8 +5,8 @@
 //   { type: "chat_created", chat_id }
 //   { type: "text_delta", text }
 //   { type: "tool_use_started", tool_name, tool_input, message_id }
-//   { type: "tool_use_requires_confirmation", tool_name, tool_input, summary, message_id }
-//   { type: "tool_result", message_id, result }
+//   { type: "tool_result", message_id, result, success }
+//   { type: "turn_summary", message_id, writes, any_failures, staging_url, undo_available, undo_token }
 //   { type: "done", stop_reason }
 //   { type: "error", error }
 
@@ -22,21 +22,27 @@ const corsHeaders = {
 const MODEL = "claude-sonnet-4-20250514";
 const MAX_ITERATIONS = 10;
 const MAX_HISTORY_MESSAGES = 60;
-const CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000;
-
-const DESTRUCTIVE_TOOLS = new Set([
-  "write_deployed_file",
-  "update_intake_field",
-  "push_to_staging",
-  "snapshot_current_state",
-  "restore_from_snapshot",
-]);
 
 function injectNoindex(html: string): string {
   if (/name=["']robots["']/i.test(html)) return html;
   const tag = `\n  <meta name="robots" content="noindex, nofollow" />`;
   if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
   return html;
+}
+
+function pickDistinctiveSubstring(html: string): string | null {
+  const stripped = html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (stripped.length < 30) return null;
+  const words = stripped.split(" ").filter((w) => w.length > 3);
+  if (words.length < 8) return null;
+  const startIdx = Math.floor(words.length / 3);
+  const chunk = words.slice(startIdx, startIdx + 8).join(" ");
+  return chunk.length >= 20 ? chunk : null;
 }
 
 // ─── Tool definitions for Claude ────────────────────────────────────────────
@@ -53,25 +59,25 @@ const TOOLS = [
   },
   {
     name: "write_deployed_file",
-    description: "Write new contents to a deployed HTML file. A snapshot of the current file is taken automatically before the write. Does NOT push to staging — call push_to_staging afterwards.",
+    description: "Write new contents to a deployed HTML file. Automatically takes a snapshot first, writes to storage, AND pushes to Hostinger staging. Verifies both succeeded and reports honestly. You do NOT need to call push_to_staging separately after this.",
     input_schema: {
       type: "object",
       required: ["filename", "contents", "change_summary"],
       properties: {
         filename: { type: "string" },
         contents: { type: "string", description: "Full new HTML contents" },
-        change_summary: { type: "string", description: "Brief description for the operator and history" },
+        change_summary: { type: "string", description: "Brief description of what changed and why" },
       },
     },
   },
   {
     name: "read_template_file",
-    description: "Read a file from the template this client was generated from, for reference when extending the design.",
+    description: "Read a file from the template this client was generated from.",
     input_schema: { type: "object", required: ["filename"], properties: { filename: { type: "string" } } },
   },
   {
     name: "read_intake_field",
-    description: "Read a single field from the client intake data (e.g. 'business_address', 'business_hours').",
+    description: "Read a single field from the client intake data.",
     input_schema: { type: "object", required: ["field_name"], properties: { field_name: { type: "string" } } },
   },
   {
@@ -81,7 +87,7 @@ const TOOLS = [
   },
   {
     name: "update_intake_field",
-    description: "Update a field in the client intake so future regenerations include the change.",
+    description: "Update a field in the client intake. Verifies the write succeeded.",
     input_schema: {
       type: "object",
       required: ["field_name", "new_value"],
@@ -90,12 +96,12 @@ const TOOLS = [
   },
   {
     name: "list_uploaded_media",
-    description: "List uploaded media (photos, etc.) for this client. Returns filenames and public URLs.",
+    description: "List uploaded media (photos) for this client. Returns filenames and public URLs.",
     input_schema: { type: "object", properties: {} },
   },
   {
     name: "push_to_staging",
-    description: "Push specified deployed files to Hostinger staging so the operator can see changes live.",
+    description: "Re-push deployed files to Hostinger staging. Normally you don't need this — write_deployed_file already pushes. Use this only to retry a failed push.",
     input_schema: {
       type: "object",
       required: ["files"],
@@ -103,32 +109,11 @@ const TOOLS = [
     },
   },
   {
-    name: "snapshot_current_state",
-    description: "Create an explicit named snapshot of all currently deployed files.",
-    input_schema: { type: "object", properties: { label: { type: "string" } } },
-  },
-  {
     name: "list_snapshots",
     description: "List available snapshots for this client, most recent first.",
     input_schema: { type: "object", properties: {} },
   },
-  {
-    name: "restore_from_snapshot",
-    description: "Restore deployed files from a previous snapshot.",
-    input_schema: { type: "object", required: ["snapshot_id"], properties: { snapshot_id: { type: "string" } } },
-  },
 ];
-
-function describeAction(name: string, input: any): string {
-  switch (name) {
-    case "write_deployed_file": return `Write ${input.filename}: ${input.change_summary || ""}`;
-    case "update_intake_field": return `Update intake.${input.field_name} = ${JSON.stringify(input.new_value)}`;
-    case "push_to_staging": return `Push to staging: ${(input.files || []).join(", ")}`;
-    case "snapshot_current_state": return `Snapshot current files${input.label ? ` (${input.label})` : ""}`;
-    case "restore_from_snapshot": return `Restore snapshot ${input.snapshot_id}`;
-    default: return name;
-  }
-}
 
 // ─── Tool execution ─────────────────────────────────────────────────────────
 
@@ -136,17 +121,67 @@ interface ToolCtx {
   supabase: any;
   clientId: string;
   site: any;
+  assistantMessageId: string; // tags snapshots taken during this assistant turn
+  writeLog: WriteRecord[]; // collected for the turn_summary
 }
 
-async function snapshotFile(supabase: any, clientId: string, filename: string, snapshotId: string) {
-  const { data } = await supabase.storage.from("generated-sites").download(`${clientId}/deploy/${filename}`);
-  if (!data) return;
+interface WriteRecord {
+  type: "file_edit" | "intake_update" | "staging_push";
+  filename?: string;
+  field?: string;
+  status: "success" | "partial" | "failed";
+  message: string;
+  staging_url?: string;
+  staging_verified?: boolean;
+  staging_error?: string;
+}
+
+async function snapshotFileToChatMessage(
+  supabase: any,
+  clientId: string,
+  filename: string,
+  messageId: string,
+): Promise<string | null> {
+  const currentPath = `${clientId}/deploy/${filename}`;
+  const { data } = await supabase.storage.from("generated-sites").download(currentPath);
+  if (!data) return null; // file doesn't exist yet — nothing to snapshot
   const bytes = new Uint8Array(await data.arrayBuffer());
-  await supabase.storage.from("generated-sites").upload(
-    `${clientId}/versions/${snapshotId}/${filename}`,
-    new Blob([bytes], { type: "text/html" }),
-    { upsert: true, contentType: "text/html" },
-  );
+  const snapshotPath = `${clientId}/versions/chat_${messageId}/${filename}`;
+  await supabase.storage
+    .from("generated-sites")
+    .upload(snapshotPath, new Blob([bytes], { type: "text/html" }), {
+      upsert: true,
+      contentType: "text/html",
+    });
+  return snapshotPath;
+}
+
+async function recordSnapshotRow(
+  supabase: any,
+  clientId: string,
+  messageId: string,
+  filename: string,
+  instruction: string,
+) {
+  // Upsert behavior: append filename to existing row for this message, or create one.
+  const { data: existing } = await supabase
+    .from("site_versions")
+    .select("id, files_saved")
+    .eq("client_id", clientId)
+    .eq("chat_message_id", messageId)
+    .maybeSingle();
+  if (existing) {
+    const files = Array.from(new Set([...(existing.files_saved || []), filename]));
+    await supabase.from("site_versions").update({ files_saved: files }).eq("id", existing.id);
+  } else {
+    await supabase.from("site_versions").insert({
+      client_id: clientId,
+      chat_message_id: messageId,
+      timestamp: new Date().toISOString(),
+      instruction,
+      files_saved: [filename],
+    });
+  }
 }
 
 async function listDeployedFilenames(supabase: any, clientId: string): Promise<string[]> {
@@ -154,137 +189,215 @@ async function listDeployedFilenames(supabase: any, clientId: string): Promise<s
   return (data || []).map((f: any) => f.name).filter((n: string) => n && !n.startsWith("."));
 }
 
+function stagingUrlFor(clientId: string, filename: string): string {
+  return `https://staging.sitequeen.ai/${clientId}/${filename}`;
+}
+
+async function pushOneToStaging(
+  supabase: any,
+  clientId: string,
+  filename: string,
+): Promise<{ ok: boolean; verified: boolean; error?: string; url: string }> {
+  const url = stagingUrlFor(clientId, filename);
+  const { data } = await supabase.storage
+    .from("generated-sites")
+    .download(`${clientId}/deploy/${filename}`);
+  if (!data) return { ok: false, verified: false, error: "file not in storage", url };
+  const original = await data.text();
+  const html = injectNoindex(original);
+  try {
+    await uploadFileToHostingerFtp(`/public_html/${clientId}/${filename}`, html);
+  } catch (e: any) {
+    return { ok: false, verified: false, error: e.message || String(e), url };
+  }
+  // Verify
+  let verified = false;
+  try {
+    await new Promise((r) => setTimeout(r, 1500));
+    const res = await fetch(url, { cache: "no-store", headers: { "cache-control": "no-cache" } });
+    if (res.ok) {
+      const live = await res.text();
+      const distinctive = pickDistinctiveSubstring(original);
+      verified = distinctive ? live.includes(distinctive) : true;
+    }
+  } catch { verified = false; }
+  return { ok: true, verified, url };
+}
+
 async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
   const { supabase, clientId } = ctx;
 
   switch (name) {
     case "read_deployed_file": {
-      const { data, error } = await supabase.storage.from("generated-sites").download(`${clientId}/deploy/${input.filename}`);
-      if (error || !data) return { error: `File ${input.filename} not found` };
-      return { contents: await data.text() };
+      const { data, error } = await supabase.storage
+        .from("generated-sites")
+        .download(`${clientId}/deploy/${input.filename}`);
+      if (error || !data) return { success: false, error: `File ${input.filename} not found` };
+      return { success: true, contents: await data.text() };
     }
 
     case "list_deployed_files": {
-      return { files: await listDeployedFilenames(supabase, clientId) };
+      return { success: true, files: await listDeployedFilenames(supabase, clientId) };
     }
 
     case "write_deployed_file": {
-      const snapId = new Date().toISOString().replace(/[:.]/g, "-");
-      await snapshotFile(supabase, clientId, input.filename, snapId);
-      const { error } = await supabase.storage.from("generated-sites").upload(
-        `${clientId}/deploy/${input.filename}`,
-        new Blob([input.contents], { type: "text/html" }),
-        { upsert: true, contentType: "text/html" },
-      );
-      if (error) return { error: error.message };
-      return { success: true, bytes_written: input.contents.length, snapshot_id: snapId, change_summary: input.change_summary };
+      const { filename, contents, change_summary } = input;
+      if (!filename || typeof contents !== "string") {
+        return { success: false, error: "write_deployed_file requires filename and contents (string)" };
+      }
+
+      // 1. Snapshot
+      let snapshotPath: string | null = null;
+      try {
+        snapshotPath = await snapshotFileToChatMessage(supabase, clientId, filename, ctx.assistantMessageId);
+        if (snapshotPath) {
+          await recordSnapshotRow(supabase, clientId, ctx.assistantMessageId, filename, change_summary || `chat edit: ${filename}`);
+        }
+      } catch (e: any) {
+        return { success: false, error: `Snapshot failed: ${e.message}`, stage: "snapshot" };
+      }
+
+      // 2. Write storage
+      const storagePath = `${clientId}/deploy/${filename}`;
+      const { error: writeError } = await supabase.storage
+        .from("generated-sites")
+        .upload(storagePath, new Blob([contents], { type: "text/html" }), {
+          upsert: true, contentType: "text/html",
+        });
+      if (writeError) {
+        return { success: false, error: `Storage write failed: ${writeError.message}`, stage: "storage_write" };
+      }
+
+      // 3. Verify storage
+      const { data: verifyBlob } = await supabase.storage.from("generated-sites").download(storagePath);
+      if (!verifyBlob) {
+        return { success: false, error: "Storage write completed but file could not be re-fetched", stage: "storage_verify" };
+      }
+      const verifyText = await verifyBlob.text();
+      if (verifyText !== contents) {
+        return {
+          success: false,
+          error: "Storage write completed but contents do not match",
+          stage: "storage_verify",
+          details: { wrote_bytes: contents.length, read_bytes: verifyText.length },
+        };
+      }
+
+      // 4. Push to staging + verify
+      const push = await pushOneToStaging(supabase, clientId, filename);
+      const url = push.url;
+
+      const success = push.ok && push.verified;
+      const message = success
+        ? `Updated ${filename} and verified live at staging.`
+        : push.ok
+          ? `Wrote ${filename} to staging but could not verify the change is live. Check ${url} manually.`
+          : `Wrote ${filename} to storage but staging push failed: ${push.error}.`;
+
+      ctx.writeLog.push({
+        type: "file_edit",
+        filename,
+        status: success ? "success" : (push.ok ? "partial" : "failed"),
+        message: change_summary || `Updated ${filename}`,
+        staging_url: url,
+        staging_verified: push.verified,
+        staging_error: push.error,
+      });
+
+      return {
+        success,
+        filename,
+        bytes_written: contents.length,
+        snapshot_path: snapshotPath,
+        storage_write: "success",
+        staging_push: push.ok ? (push.verified ? "success" : "pushed_but_unverified") : "failed",
+        staging_error: push.error,
+        staging_url: url,
+        message,
+      };
     }
 
     case "read_template_file": {
       const tmpl = ctx.site?.template_used;
-      if (!tmpl) return { error: "No template recorded for this client" };
+      if (!tmpl) return { success: false, error: "No template recorded for this client" };
       const { data, error } = await supabase.storage.from("templates").download(`${tmpl}/${input.filename}`);
-      if (error || !data) return { error: `Template file ${tmpl}/${input.filename} not found` };
-      return { contents: await data.text() };
+      if (error || !data) return { success: false, error: `Template file ${tmpl}/${input.filename} not found` };
+      return { success: true, contents: await data.text() };
     }
 
     case "read_intake_field": {
       const intake = ctx.site?.intake_data || {};
-      return { value: intake[input.field_name] ?? null };
+      return { success: true, value: intake[input.field_name] ?? null };
     }
 
     case "read_full_intake": {
-      return { intake: ctx.site?.intake_data || {} };
+      return { success: true, intake: ctx.site?.intake_data || {} };
     }
 
     case "update_intake_field": {
-      const next = { ...(ctx.site?.intake_data || {}), [input.field_name]: input.new_value };
+      const { field_name, new_value } = input;
+      const next = { ...(ctx.site?.intake_data || {}), [field_name]: new_value };
       const { error } = await supabase.from("sites").update({ intake_data: next }).eq("client_id", clientId);
-      if (error) return { error: error.message };
+      if (error) return { success: false, error: error.message };
+      // Verify
+      const { data: check } = await supabase.from("sites").select("intake_data").eq("client_id", clientId).maybeSingle();
+      const stored = check?.intake_data?.[field_name];
+      const matches = JSON.stringify(stored) === JSON.stringify(new_value);
+      if (!matches) {
+        return { success: false, error: "Intake update completed but readback did not match", stored, expected: new_value };
+      }
       ctx.site.intake_data = next;
-      return { success: true };
+      ctx.writeLog.push({
+        type: "intake_update",
+        field: field_name,
+        status: "success",
+        message: `Updated intake field ${field_name}`,
+      });
+      return { success: true, field: field_name, value: new_value, message: `Updated intake.${field_name}` };
     }
 
     case "list_uploaded_media": {
       const { data } = await supabase.storage.from("client-uploads").list(clientId);
       const base = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/client-uploads/${clientId}`;
       return {
+        success: true,
         media: (data || []).filter((f: any) => f.name && !f.name.startsWith(".")).map((f: any) => ({
-          name: f.name,
-          url: `${base}/${f.name}`,
-          uploaded_at: f.created_at,
+          name: f.name, url: `${base}/${f.name}`, uploaded_at: f.created_at,
         })),
       };
     }
 
     case "push_to_staging": {
-      const pushed: string[] = [];
-      const failed: { file: string; error: string }[] = [];
+      const pushed: any[] = [];
+      const failed: any[] = [];
       for (const filename of input.files || []) {
-        try {
-          const { data } = await supabase.storage.from("generated-sites").download(`${clientId}/deploy/${filename}`);
-          if (!data) { failed.push({ file: filename, error: "not found in storage" }); continue; }
-          const html = injectNoindex(await data.text());
-          await uploadFileToHostingerFtp(`/public_html/${clientId}/${filename}`, html);
-          pushed.push(filename);
-        } catch (e: any) {
-          failed.push({ file: filename, error: e.message || String(e) });
-        }
+        const r = await pushOneToStaging(supabase, clientId, filename);
+        if (r.ok && r.verified) pushed.push({ filename, url: r.url, verified: true });
+        else if (r.ok) pushed.push({ filename, url: r.url, verified: false });
+        else failed.push({ filename, error: r.error });
+        ctx.writeLog.push({
+          type: "staging_push",
+          filename,
+          status: r.ok && r.verified ? "success" : r.ok ? "partial" : "failed",
+          message: r.ok ? (r.verified ? `Pushed ${filename}` : `Pushed ${filename} (unverified)`) : `Push failed for ${filename}: ${r.error}`,
+          staging_url: r.url,
+          staging_verified: r.verified,
+          staging_error: r.error,
+        });
       }
-      return { success: failed.length === 0, pushed, failed };
-    }
-
-    case "snapshot_current_state": {
-      const snapId = (input.label ? `${input.label}-` : "") + new Date().toISOString().replace(/[:.]/g, "-");
-      const files = await listDeployedFilenames(supabase, clientId);
-      for (const f of files) await snapshotFile(supabase, clientId, f, snapId);
-      return { success: true, snapshot_id: snapId, files_saved: files.length };
+      return { success: failed.length === 0, pushed, failed, message: failed.length === 0 ? "All pushes succeeded" : `${failed.length} push(es) failed` };
     }
 
     case "list_snapshots": {
       const { data } = await supabase.storage.from("generated-sites").list(`${clientId}/versions`);
       const snaps = (data || []).map((s: any) => ({ id: s.name, created_at: s.created_at }));
       snaps.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-      return { snapshots: snaps };
-    }
-
-    case "restore_from_snapshot": {
-      const { data } = await supabase.storage.from("generated-sites").list(`${clientId}/versions/${input.snapshot_id}`);
-      if (!data || data.length === 0) return { error: "Snapshot not found or empty" };
-      const restored: string[] = [];
-      for (const f of data) {
-        if (!f.name || f.name.startsWith(".")) continue;
-        const { data: blob } = await supabase.storage.from("generated-sites").download(`${clientId}/versions/${input.snapshot_id}/${f.name}`);
-        if (!blob) continue;
-        await supabase.storage.from("generated-sites").upload(
-          `${clientId}/deploy/${f.name}`,
-          new Blob([new Uint8Array(await blob.arrayBuffer())], { type: "text/html" }),
-          { upsert: true, contentType: "text/html" },
-        );
-        restored.push(f.name);
-      }
-      return { success: true, restored };
+      return { success: true, snapshots: snaps };
     }
 
     default:
-      return { error: `Unknown tool: ${name}` };
+      return { success: false, error: `Unknown tool: ${name}` };
   }
-}
-
-// ─── Confirmation polling ────────────────────────────────────────────────────
-async function waitForConfirmation(supabase: any, messageId: string): Promise<"approved" | "cancelled" | "timeout"> {
-  const start = Date.now();
-  while (Date.now() - start < CONFIRMATION_TIMEOUT_MS) {
-    const { data } = await supabase
-      .from("operator_chat_messages")
-      .select("confirmed_at, cancelled_at")
-      .eq("id", messageId)
-      .maybeSingle();
-    if (data?.confirmed_at) return "approved";
-    if (data?.cancelled_at) return "cancelled";
-    await new Promise((r) => setTimeout(r, 1500));
-  }
-  return "timeout";
 }
 
 // ─── Build message history & system prompt ──────────────────────────────────
@@ -295,7 +408,9 @@ async function loadChatMessages(supabase: any, chatId: string): Promise<any[]> {
     .eq("chat_id", chatId)
     .order("created_at", { ascending: true })
     .limit(MAX_HISTORY_MESSAGES);
-  return (data || []).map((m: any) => ({ role: m.role === "tool_result" ? "user" : m.role, content: m.content }));
+  return (data || [])
+    .filter((m: any) => m.role === "user" || m.role === "assistant" || m.role === "tool_result")
+    .map((m: any) => ({ role: m.role === "tool_result" ? "user" : m.role, content: m.content }));
 }
 
 function formatIntakeSummary(intake: any): string {
@@ -308,7 +423,7 @@ function formatIntakeSummary(intake: any): string {
   const addr = [intake.business_address || intake.address, intake.business_city || intake.city, intake.business_state || intake.state, intake.business_zip || intake.zip].filter(Boolean).join(", ");
   if (addr) lines.push(`- address: ${addr}`); else lines.push(`- address: (not set)`);
   if (intake.business_hours || intake.hours) lines.push(`- hours: set`);
-  const socials = ["instagram_url","facebook_url","tiktok_url","linkedin_url"].filter(k => intake[k]);
+  const socials = ["instagram_url", "facebook_url", "tiktok_url", "linkedin_url"].filter((k) => intake[k]);
   if (socials.length) lines.push(`- socials: ${socials.length} set`);
   return lines.join("\n") || "(empty)";
 }
@@ -334,15 +449,21 @@ Uploaded media: ${(media || []).length} files
 HOW TO WORK:
 Use the tools to read files, make changes, and deploy. Don't load everything upfront — fetch what you need.
 
-Match the existing design when adding or extending. Read the existing HTML/CSS, then add new things that fit the same patterns. Don't invent new visual treatments.
+When you write files, update intake, or push to staging, the changes apply IMMEDIATELY. Snapshots are taken automatically before each write so the operator can undo with one click if needed. Just do the work and tell the operator what you did. Be specific in change_summary — clearly state what changed and where.
+
+write_deployed_file already writes to storage AND pushes to staging in one step. You normally do NOT need to call push_to_staging afterwards.
+
+Match the existing design when adding or extending. Read the existing HTML/CSS first, then add new things that fit the same patterns. Don't invent new visual treatments.
 
 For data fields that appear in multiple places (address, phone, hours), update everywhere they appear AND update the intake so future regenerations include the change.
 
-Destructive actions (writing files, updating intake, pushing to staging, snapshots, restores) are paused for operator confirmation automatically — just call the tool, the confirmation happens before it runs.
+HONEST REPORTING:
+If a tool returns success: false (or staging_push: "failed" / "pushed_but_unverified"), the change did NOT fully land. Do NOT claim success in your message. Explain exactly what failed and suggest next steps (retry, manual check, etc.).
 
-After making changes that should be visible, call push_to_staging with the affected files.
+SAFETY:
+If the operator asks for a vague destructive action ("delete everything", "wipe the site"), ask for clarification before doing it. Specific destructive actions ("remove the testimonials section") are fine — the operator means it.
 
-Be concise. Be honest. If a request is ambiguous, ask. After completing work, briefly tell the operator what you did.`;
+Be concise. After completing work, briefly tell the operator what you did and where to verify.`;
 }
 
 // ─── Streaming handler ──────────────────────────────────────────────────────
@@ -358,7 +479,6 @@ serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser(auth.replace("Bearer ", ""));
   if (!user) return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: corsHeaders });
 
-  // Operator check
   const { data: isOp } = await supabase.rpc("is_operator", { _user_id: user.id });
   if (!isOp) return new Response(JSON.stringify({ error: "Operator only" }), { status: 403, headers: corsHeaders });
 
@@ -369,12 +489,10 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "client_id and user_message required" }), { status: 400, headers: corsHeaders });
   }
 
-  // Load client + site
   const { data: client, error: cErr } = await supabase.from("clients").select("*").eq("id", client_id).single();
   if (cErr || !client) return new Response(JSON.stringify({ error: "Client not found" }), { status: 404, headers: corsHeaders });
   const { data: site } = await supabase.from("sites").select("*").eq("client_id", client_id).maybeSingle();
 
-  // Load or create chat
   let chatId = chat_id;
   if (!chatId) {
     const { data: existing } = await supabase
@@ -399,7 +517,6 @@ serve(async (req) => {
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!anthropicKey) return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), { status: 500, headers: corsHeaders });
 
-  // Persist the user message
   const userContent: any[] = [{ type: "text", text: user_message }];
   if (Array.isArray(attachments)) {
     for (const a of attachments) {
@@ -408,10 +525,8 @@ serve(async (req) => {
   }
   await supabase.from("operator_chat_messages").insert({ chat_id: chatId, role: "user", content: userContent });
 
-  const ctx: ToolCtx = { supabase, clientId: client_id, site: site || {} };
   const systemPrompt = await buildSystemPrompt(supabase, client, site);
   const history = await loadChatMessages(supabase, chatId);
-  // Strip our custom image_url parts (Claude expects different format); for simplicity, only forward text from user messages
   const messages = history.map((m: any) => {
     if (Array.isArray(m.content)) {
       const safe = m.content.filter((b: any) => b && typeof b === "object" && (b.type === "text" || b.type === "tool_use" || b.type === "tool_result"));
@@ -429,6 +544,8 @@ serve(async (req) => {
       try {
         let convo = messages;
         let stopReason = "end_turn";
+        // Aggregate writes across all assistant turns in this loop, scoped per-message.
+        const turnWritesByMessage: Record<string, WriteRecord[]> = {};
 
         for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
           const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -457,7 +574,6 @@ serve(async (req) => {
           const decoder = new TextDecoder();
           let buf = "";
           const assistantContent: any[] = [];
-          let currentBlock: any = null;
           let currentJson = "";
 
           while (true) {
@@ -473,10 +589,10 @@ serve(async (req) => {
               try {
                 const ev = JSON.parse(data);
                 if (ev.type === "content_block_start") {
-                  currentBlock = { ...ev.content_block };
+                  const block: any = { ...ev.content_block };
                   currentJson = "";
-                  if (currentBlock.type === "text") currentBlock.text = "";
-                  assistantContent[ev.index] = currentBlock;
+                  if (block.type === "text") block.text = "";
+                  assistantContent[ev.index] = block;
                 } else if (ev.type === "content_block_delta") {
                   const block = assistantContent[ev.index];
                   if (!block) continue;
@@ -499,12 +615,15 @@ serve(async (req) => {
             }
           }
 
-          // Persist assistant turn
-          await supabase.from("operator_chat_messages").insert({
-            chat_id: chatId,
-            role: "assistant",
-            content: assistantContent,
-          });
+          // Persist assistant turn and get its ID (needed to tag snapshots)
+          const { data: persisted, error: persistErr } = await supabase
+            .from("operator_chat_messages")
+            .insert({ chat_id: chatId, role: "assistant", content: assistantContent })
+            .select("id")
+            .single();
+          if (persistErr) throw new Error(`Could not persist assistant message: ${persistErr.message}`);
+          const assistantMessageId = persisted.id;
+
           convo = [...convo, { role: "assistant", content: assistantContent }];
 
           const toolUses = assistantContent.filter((b: any) => b?.type === "tool_use");
@@ -513,51 +632,25 @@ serve(async (req) => {
             break;
           }
 
-          // Execute each tool, gathering results
+          // Tool execution — no confirmation gates
+          const writeLog: WriteRecord[] = [];
+          turnWritesByMessage[assistantMessageId] = writeLog;
+          const ctx: ToolCtx = {
+            supabase, clientId: client_id, site: site || {},
+            assistantMessageId, writeLog,
+          };
+
           const toolResults: any[] = [];
           for (const tu of toolUses) {
-            const isDestructive = DESTRUCTIVE_TOOLS.has(tu.name);
+            send({ type: "tool_use_started", tool_name: tu.name, tool_input: tu.input, message_id: tu.id });
             let result: any;
-
-            if (isDestructive) {
-              // Persist a pending message and wait for confirmation
-              const { data: pending, error } = await supabase
-                .from("operator_chat_messages")
-                .insert({
-                  chat_id: chatId,
-                  role: "system_note",
-                  content: { type: "pending_confirmation", tool_name: tu.name, tool_input: tu.input, summary: describeAction(tu.name, tu.input) },
-                  tool_name: tu.name,
-                  tool_input: tu.input,
-                  requires_confirmation: true,
-                })
-                .select("id")
-                .single();
-              if (error) { result = { error: "Could not record confirmation request" }; }
-              else {
-                send({
-                  type: "tool_use_requires_confirmation",
-                  tool_name: tu.name,
-                  tool_input: tu.input,
-                  summary: describeAction(tu.name, tu.input),
-                  message_id: pending.id,
-                });
-                const outcome = await waitForConfirmation(supabase, pending.id);
-                if (outcome === "approved") {
-                  result = await runTool(tu.name, tu.input, ctx);
-                } else if (outcome === "cancelled") {
-                  result = { cancelled: true, reason: "Operator cancelled the action." };
-                } else {
-                  result = { error: "Confirmation timed out" };
-                }
-                await supabase.from("operator_chat_messages").update({ tool_result: result }).eq("id", pending.id);
-              }
-            } else {
-              send({ type: "tool_use_started", tool_name: tu.name, tool_input: tu.input, message_id: tu.id });
+            try {
               result = await runTool(tu.name, tu.input, ctx);
+            } catch (e: any) {
+              result = { success: false, error: e.message || String(e) };
             }
-
-            send({ type: "tool_result", message_id: tu.id, result });
+            const ok = result?.success !== false && !result?.error;
+            send({ type: "tool_result", message_id: tu.id, result, success: ok });
             toolResults.push({
               type: "tool_result",
               tool_use_id: tu.id,
@@ -565,13 +658,25 @@ serve(async (req) => {
             });
           }
 
-          // Persist tool results as a user-role message
           await supabase.from("operator_chat_messages").insert({
-            chat_id: chatId,
-            role: "tool_result",
-            content: toolResults,
+            chat_id: chatId, role: "tool_result", content: toolResults,
           });
           convo = [...convo, { role: "user", content: toolResults }];
+
+          // Emit a turn_summary for this assistant message if it produced writes
+          if (writeLog.length > 0) {
+            const anyFailures = writeLog.some((w) => w.status !== "success");
+            const firstStagingUrl = writeLog.find((w) => w.staging_url)?.staging_url;
+            send({
+              type: "turn_summary",
+              message_id: assistantMessageId,
+              writes: writeLog,
+              any_failures: anyFailures,
+              staging_url: firstStagingUrl || stagingUrlFor(client_id, "index.html"),
+              undo_available: writeLog.some((w) => w.type === "file_edit" && (w.status === "success" || w.status === "partial")),
+              undo_token: assistantMessageId,
+            });
+          }
         }
 
         send({ type: "done", stop_reason: stopReason });
