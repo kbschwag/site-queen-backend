@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { LogContactModal } from "@/components/operator/LogContactModal";
 import { ConvertToClientModal } from "@/components/operator/ConvertToClientModal";
 import { ALL_PROSPECT_STAGES, STAGE_LABELS, STAGE_COLORS, CHANNEL_LABELS } from "@/lib/prospect-utils";
-import { InlineRevisionPanel } from "@/components/operator/InlineRevisionPanel";
+import { OperatorChatPanel } from "@/components/operator/OperatorChatPanel";
 import { MyTickets } from "@/components/client/MyTickets";
 
 export default function ProspectDetail() {
@@ -225,21 +225,23 @@ export default function ProspectDetail() {
 
         <Card className="md:col-span-3">
           <CardHeader>
-            <CardTitle className="text-base">Request Changes</CardTitle>
+            <CardTitle className="text-base">Chat with Claude</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Refine this prospect's demo site — same revision flow used for active clients. Changes deploy to staging immediately.
+              Talk to Claude about this site. Ask for edits, audits, new pages, or fixes — Claude reads the deployed files, proposes changes, and (after your approval) deploys them.
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
             {demoUrl ? (
-              <InlineRevisionPanel clientId={c.id} />
+              <OperatorChatPanel clientId={c.id} />
             ) : (
-              <p className="text-sm text-muted-foreground">Generate the demo site first before requesting changes.</p>
+              <p className="text-sm text-muted-foreground">Generate the demo site first before starting a chat.</p>
             )}
-            <div className="pt-4 border-t">
-              <h3 className="text-sm font-semibold mb-3">Request History ({changeRequests.length})</h3>
-              <MyTickets changeRequests={changeRequests} clientId={c.id} />
-            </div>
+            {changeRequests.length > 0 && (
+              <div className="pt-4 border-t">
+                <h3 className="text-sm font-semibold mb-3">Legacy Request History ({changeRequests.length})</h3>
+                <MyTickets changeRequests={changeRequests} clientId={c.id} />
+              </div>
+            )}
           </CardContent>
         </Card>
 
