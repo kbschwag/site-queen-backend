@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import {
   Globe, Eye, Send, CheckCircle2, AlertTriangle, Wrench, Loader2, Rocket, Sparkles, ImageIcon, Mail, Pencil, Phone, RefreshCw,
 } from "lucide-react";
-import { InlineRevisionPanel } from "./InlineRevisionPanel";
+import { OperatorChatPanel } from "./OperatorChatPanel";
 import { FailureCard } from "./GenerationFailureCard";
 import { CodeEditorModal } from "./CodeEditorModal";
 import { useFileUpload } from "@/hooks/useFileUpload";
@@ -590,7 +590,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
                 <Wrench className="h-4 w-4" /> Revise Site
               </Button>
             </div>
-            {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
+            {revisionPanelOpen && <OperatorChatPanel clientId={clientId} />}
           </CardContent>
         </Card>
       )}
@@ -650,7 +650,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               </Button>
             </div>
 
-            {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
+            {revisionPanelOpen && <OperatorChatPanel clientId={clientId} />}
           </CardContent>
         </Card>
       )}
@@ -707,7 +707,7 @@ export function WebsiteBuildPanel({ clientId, businessName }: Props) {
               <Wrench className="h-4 w-4" /> Revise Site
             </Button>
 
-            {revisionPanelOpen && <InlineRevisionPanel clientId={clientId} />}
+            {revisionPanelOpen && <OperatorChatPanel clientId={clientId} />}
           </CardContent>
         </Card>
       )}
