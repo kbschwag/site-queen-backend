@@ -464,6 +464,8 @@ When you write files, update intake, or push to staging, the changes apply IMMED
 
 write_deployed_file already writes to storage AND pushes to staging in one step. You normally do NOT need to call push_to_staging afterwards.
 
+write_deployed_file is a FULL-FILE REPLACE — there is no diff/patch mode. You MUST call read_deployed_file first to get the current HTML, modify the relevant portion in your response, then pass the ENTIRE updated HTML document as the 'contents' argument (string). Never call write_deployed_file with only a snippet, an empty string, or without 'contents'.
+
 Match the existing design when adding or extending. Read the existing HTML/CSS first, then add new things that fit the same patterns. Don't invent new visual treatments.
 
 For data fields that appear in multiple places (address, phone, hours), update everywhere they appear AND update the intake so future regenerations include the change.
