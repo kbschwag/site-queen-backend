@@ -59,7 +59,7 @@ const TOOLS = [
   },
   {
     name: "write_deployed_file",
-    description: "Write new contents to a deployed HTML file. Automatically takes a snapshot first, writes to storage, AND pushes to Hostinger staging. Verifies both succeeded and reports honestly. You do NOT need to call push_to_staging separately after this.",
+    description: "Replace a deployed HTML file with new full contents. Use this only for brand-new files or full rewrites. For most edits PREFER edit_deployed_file (find-and-replace) — it's faster and avoids re-emitting the entire document. Automatically snapshots, writes to storage, AND pushes to staging.",
     input_schema: {
       type: "object",
       required: ["filename", "contents", "change_summary"],
@@ -70,6 +70,30 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: "edit_deployed_file",
+    description: "Make targeted find-and-replace edits to a deployed HTML file. Pass an array of {find, replace} pairs. Each 'find' string must appear EXACTLY ONCE in the file (include enough surrounding context to make it unique). Use this for almost all edits — much more efficient than rewriting the whole file. Automatically snapshots, writes to storage, AND pushes to staging.",
+    input_schema: {
+      type: "object",
+      required: ["filename", "edits", "change_summary"],
+      properties: {
+        filename: { type: "string" },
+        edits: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["find", "replace"],
+            properties: {
+              find: { type: "string", description: "Exact string to find. Must match exactly ONCE in the file. Include surrounding context if the snippet is short." },
+              replace: { type: "string", description: "String to replace it with. Pass an empty string to delete." },
+            },
+          },
+        },
+        change_summary: { type: "string", description: "Brief description of what changed and why" },
+      },
+    },
+  },
+
   {
     name: "read_template_file",
     description: "Read a file from the template this client was generated from.",
