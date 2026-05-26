@@ -3,7 +3,7 @@ project_id = "onrvqbygwzhmhgkctcrm"
 [functions.operator-chat]
 verify_jwt = true
 
-[functions.operator-chat-confirm]
+[functions.operator-chat-undo]
 verify_jwt = true
 
 [functions.change-request-preview]
