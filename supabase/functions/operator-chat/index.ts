@@ -545,7 +545,10 @@ When you write files, update intake, or push to staging, the changes apply IMMED
 
 write_deployed_file already writes to storage AND pushes to staging in one step. You normally do NOT need to call push_to_staging afterwards.
 
-write_deployed_file is a FULL-FILE REPLACE — there is no diff/patch mode. You MUST call read_deployed_file first to get the current HTML, modify the relevant portion in your response, then pass the ENTIRE updated HTML document as the 'contents' argument (string). Never call write_deployed_file with only a snippet, an empty string, or without 'contents'.
+EDITING FILES:
+- For almost all changes, use edit_deployed_file with one or more {find, replace} pairs. The 'find' string must match the file EXACTLY ONCE — include surrounding HTML context (a parent tag, an adjacent class, etc.) if the literal snippet appears multiple times. Always read_deployed_file first so you copy the exact bytes (whitespace, quotes, casing all matter).
+- Use write_deployed_file ONLY for creating brand-new files or doing a full rewrite. It expects the entire HTML document as a string and is wasteful for small edits.
+- Both tools snapshot, write to storage, and push to staging in one step. You do NOT need to call push_to_staging separately.
 
 Match the existing design when adding or extending. Read the existing HTML/CSS first, then add new things that fit the same patterns. Don't invent new visual treatments.
 
