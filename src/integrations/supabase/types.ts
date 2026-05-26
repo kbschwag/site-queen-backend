@@ -1451,6 +1451,91 @@ export type Database = {
           },
         ]
       }
+      operator_chat_messages: {
+        Row: {
+          cancelled_at: string | null
+          chat_id: string
+          confirmed_at: string | null
+          content: Json
+          created_at: string
+          id: string
+          requires_confirmation: boolean
+          role: string
+          tool_input: Json | null
+          tool_name: string | null
+          tool_result: Json | null
+        }
+        Insert: {
+          cancelled_at?: string | null
+          chat_id: string
+          confirmed_at?: string | null
+          content: Json
+          created_at?: string
+          id?: string
+          requires_confirmation?: boolean
+          role: string
+          tool_input?: Json | null
+          tool_name?: string | null
+          tool_result?: Json | null
+        }
+        Update: {
+          cancelled_at?: string | null
+          chat_id?: string
+          confirmed_at?: string | null
+          content?: Json
+          created_at?: string
+          id?: string
+          requires_confirmation?: boolean
+          role?: string
+          tool_input?: Json | null
+          tool_name?: string | null
+          tool_result?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_chat_messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "operator_chats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operator_chats: {
+        Row: {
+          archived: boolean
+          client_id: string
+          created_at: string
+          id: string
+          operator_id: string
+          updated_at: string
+        }
+        Insert: {
+          archived?: boolean
+          client_id: string
+          created_at?: string
+          id?: string
+          operator_id: string
+          updated_at?: string
+        }
+        Update: {
+          archived?: boolean
+          client_id?: string
+          created_at?: string
+          id?: string
+          operator_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_chats_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       operator_edits: {
         Row: {
           client_id: string
@@ -2113,6 +2198,7 @@ export type Database = {
         Args: { p_client_id: string; p_date: string; p_event_type: string }
         Returns: undefined
       }
+      is_operator: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
