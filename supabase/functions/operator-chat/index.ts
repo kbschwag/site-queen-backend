@@ -242,8 +242,15 @@ async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
 
     case "write_deployed_file": {
       const { filename, contents, change_summary } = input;
-      if (!filename || typeof contents !== "string") {
-        return { success: false, error: "write_deployed_file requires filename and contents (string)" };
+      if (!filename || typeof filename !== "string") {
+        return { success: false, error: "write_deployed_file requires a 'filename' string (e.g. 'index.html')." };
+      }
+      if (typeof contents !== "string" || contents.length === 0) {
+        return {
+          success: false,
+          error: `write_deployed_file requires the FULL new HTML in the 'contents' field as a non-empty string. You passed contents of type '${contents === null ? "null" : typeof contents}'. There is no partial/patch mode — call read_deployed_file first, modify the HTML in memory, then send the entire updated document as 'contents'.`,
+          received_keys: Object.keys(input || {}),
+        };
       }
 
       // 1. Snapshot
