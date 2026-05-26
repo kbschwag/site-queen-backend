@@ -272,80 +272,57 @@ async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
       if (typeof contents !== "string" || contents.length === 0) {
         return {
           success: false,
-          error: `write_deployed_file requires the FULL new HTML in the 'contents' field as a non-empty string. You passed contents of type '${contents === null ? "null" : typeof contents}'. There is no partial/patch mode — call read_deployed_file first, modify the HTML in memory, then send the entire updated document as 'contents'.`,
+          error: `write_deployed_file requires the FULL new HTML in 'contents' (non-empty string). For targeted changes, use edit_deployed_file instead.`,
           received_keys: Object.keys(input || {}),
         };
       }
+      return await commitFileChange(ctx, filename, contents, change_summary);
+    }
 
-      // 1. Snapshot
-      let snapshotPath: string | null = null;
-      try {
-        snapshotPath = await snapshotFileToChatMessage(supabase, clientId, filename, ctx.assistantMessageId);
-        if (snapshotPath) {
-          await recordSnapshotRow(supabase, clientId, ctx.assistantMessageId, filename, change_summary || `chat edit: ${filename}`);
-        }
-      } catch (e: any) {
-        return { success: false, error: `Snapshot failed: ${e.message}`, stage: "snapshot" };
+    case "edit_deployed_file": {
+      const { filename, edits, change_summary } = input;
+      if (!filename || typeof filename !== "string") {
+        return { success: false, error: "edit_deployed_file requires a 'filename' string." };
       }
-
-      // 2. Write storage
-      const storagePath = `${clientId}/deploy/${filename}`;
-      const { error: writeError } = await supabase.storage
+      if (!Array.isArray(edits) || edits.length === 0) {
+        return { success: false, error: "edit_deployed_file requires a non-empty 'edits' array of {find, replace} objects." };
+      }
+      // Load current file
+      const { data: curData } = await supabase.storage
         .from("generated-sites")
-        .upload(storagePath, new Blob([contents], { type: "text/html" }), {
-          upsert: true, contentType: "text/html",
-        });
-      if (writeError) {
-        return { success: false, error: `Storage write failed: ${writeError.message}`, stage: "storage_write" };
+        .download(`${clientId}/deploy/${filename}`);
+      if (!curData) return { success: false, error: `File ${filename} not found — use write_deployed_file to create it.` };
+      let current = await curData.text();
+      const applied: any[] = [];
+      for (let i = 0; i < edits.length; i++) {
+        const e = edits[i];
+        if (typeof e?.find !== "string" || typeof e?.replace !== "string") {
+          return { success: false, error: `Edit #${i + 1} must have string 'find' and 'replace' fields.` };
+        }
+        if (e.find.length === 0) {
+          return { success: false, error: `Edit #${i + 1} has an empty 'find' string.` };
+        }
+        const firstIdx = current.indexOf(e.find);
+        if (firstIdx === -1) {
+          return {
+            success: false,
+            error: `Edit #${i + 1}: 'find' string not found in ${filename}. Re-read the file and copy the exact substring (whitespace and casing matter).`,
+            find_preview: e.find.slice(0, 200),
+          };
+        }
+        const lastIdx = current.lastIndexOf(e.find);
+        if (firstIdx !== lastIdx) {
+          return {
+            success: false,
+            error: `Edit #${i + 1}: 'find' string appears multiple times in ${filename}. Add surrounding context so it matches exactly once.`,
+            find_preview: e.find.slice(0, 200),
+          };
+        }
+        current = current.slice(0, firstIdx) + e.replace + current.slice(firstIdx + e.find.length);
+        applied.push({ index: i + 1, replaced_bytes: e.find.length, with_bytes: e.replace.length });
       }
-
-      // 3. Verify storage
-      const { data: verifyBlob } = await supabase.storage.from("generated-sites").download(storagePath);
-      if (!verifyBlob) {
-        return { success: false, error: "Storage write completed but file could not be re-fetched", stage: "storage_verify" };
-      }
-      const verifyText = await verifyBlob.text();
-      if (verifyText !== contents) {
-        return {
-          success: false,
-          error: "Storage write completed but contents do not match",
-          stage: "storage_verify",
-          details: { wrote_bytes: contents.length, read_bytes: verifyText.length },
-        };
-      }
-
-      // 4. Push to staging + verify
-      const push = await pushOneToStaging(supabase, clientId, filename);
-      const url = push.url;
-
-      const success = push.ok && push.verified;
-      const message = success
-        ? `Updated ${filename} and verified live at staging.`
-        : push.ok
-          ? `Wrote ${filename} to staging but could not verify the change is live. Check ${url} manually.`
-          : `Wrote ${filename} to storage but staging push failed: ${push.error}.`;
-
-      ctx.writeLog.push({
-        type: "file_edit",
-        filename,
-        status: success ? "success" : (push.ok ? "partial" : "failed"),
-        message: change_summary || `Updated ${filename}`,
-        staging_url: url,
-        staging_verified: push.verified,
-        staging_error: push.error,
-      });
-
-      return {
-        success,
-        filename,
-        bytes_written: contents.length,
-        snapshot_path: snapshotPath,
-        storage_write: "success",
-        staging_push: push.ok ? (push.verified ? "success" : "pushed_but_unverified") : "failed",
-        staging_error: push.error,
-        staging_url: url,
-        message,
-      };
+      const result = await commitFileChange(ctx, filename, current, change_summary);
+      return { ...result, edits_applied: applied };
     }
 
     case "read_template_file": {
@@ -386,6 +363,7 @@ async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
       });
       return { success: true, field: field_name, value: new_value, message: `Updated intake.${field_name}` };
     }
+
 
     case "list_uploaded_media": {
       const { data } = await supabase.storage.from("client-uploads").list(clientId);
