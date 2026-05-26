@@ -1,5 +1,11 @@
 project_id = "onrvqbygwzhmhgkctcrm"
 
+[functions.operator-chat]
+verify_jwt = true
+
+[functions.operator-chat-confirm]
+verify_jwt = true
+
 [functions.change-request-preview]
 verify_jwt = true
 
