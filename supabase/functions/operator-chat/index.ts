@@ -248,8 +248,87 @@ async function pushOneToStaging(
   return { ok: true, verified, url };
 }
 
+async function commitFileChange(
+  ctx: ToolCtx,
+  filename: string,
+  contents: string,
+  change_summary?: string,
+): Promise<any> {
+  const { supabase, clientId } = ctx;
+
+  // 1. Snapshot
+  let snapshotPath: string | null = null;
+  try {
+    snapshotPath = await snapshotFileToChatMessage(supabase, clientId, filename, ctx.assistantMessageId);
+    if (snapshotPath) {
+      await recordSnapshotRow(supabase, clientId, ctx.assistantMessageId, filename, change_summary || `chat edit: ${filename}`);
+    }
+  } catch (e: any) {
+    return { success: false, error: `Snapshot failed: ${e.message}`, stage: "snapshot" };
+  }
+
+  // 2. Write storage
+  const storagePath = `${clientId}/deploy/${filename}`;
+  const { error: writeError } = await supabase.storage
+    .from("generated-sites")
+    .upload(storagePath, new Blob([contents], { type: "text/html" }), {
+      upsert: true, contentType: "text/html",
+    });
+  if (writeError) {
+    return { success: false, error: `Storage write failed: ${writeError.message}`, stage: "storage_write" };
+  }
+
+  // 3. Verify storage
+  const { data: verifyBlob } = await supabase.storage.from("generated-sites").download(storagePath);
+  if (!verifyBlob) {
+    return { success: false, error: "Storage write completed but file could not be re-fetched", stage: "storage_verify" };
+  }
+  const verifyText = await verifyBlob.text();
+  if (verifyText !== contents) {
+    return {
+      success: false,
+      error: "Storage write completed but contents do not match",
+      stage: "storage_verify",
+      details: { wrote_bytes: contents.length, read_bytes: verifyText.length },
+    };
+  }
+
+  // 4. Push to staging + verify
+  const push = await pushOneToStaging(supabase, clientId, filename);
+  const url = push.url;
+  const success = push.ok && push.verified;
+  const message = success
+    ? `Updated ${filename} and verified live at staging.`
+    : push.ok
+      ? `Wrote ${filename} to staging but could not verify the change is live. Check ${url} manually.`
+      : `Wrote ${filename} to storage but staging push failed: ${push.error}.`;
+
+  ctx.writeLog.push({
+    type: "file_edit",
+    filename,
+    status: success ? "success" : (push.ok ? "partial" : "failed"),
+    message: change_summary || `Updated ${filename}`,
+    staging_url: url,
+    staging_verified: push.verified,
+    staging_error: push.error,
+  });
+
+  return {
+    success,
+    filename,
+    bytes_written: contents.length,
+    snapshot_path: snapshotPath,
+    storage_write: "success",
+    staging_push: push.ok ? (push.verified ? "success" : "pushed_but_unverified") : "failed",
+    staging_error: push.error,
+    staging_url: url,
+    message,
+  };
+}
+
 async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
   const { supabase, clientId } = ctx;
+
 
   switch (name) {
     case "read_deployed_file": {
