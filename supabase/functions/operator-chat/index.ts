@@ -137,6 +137,16 @@ const TOOLS = [
     description: "List available snapshots for this client, most recent first.",
     input_schema: { type: "object", properties: {} },
   },
+  {
+    name: "read_call_notes",
+    description: "Read the discovery / sales-call notes captured for this client (their story, ideal customer, inspiration sites, pages agreed, color direction, vibe/tone, expert additions, things to avoid, exact phrases the owner wants, final notes, internal notes, etc.). Use this whenever you need the operator's actual conversation context with the client before editing copy, choosing tone, or making design decisions.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "read_application",
+    description: "Read the original application this client submitted (business type, industry, location, socials, ideal customer, goals, restricted niches, anything_else, referral source). Useful background before edits.",
+    input_schema: { type: "object", properties: {} },
+  },
 ];
 
 // ─── Tool execution ─────────────────────────────────────────────────────────
@@ -144,6 +154,7 @@ const TOOLS = [
 interface ToolCtx {
   supabase: any;
   clientId: string;
+  client: any;
   site: any;
   assistantMessageId: string; // tags snapshots taken during this assistant turn
   writeLog: WriteRecord[]; // collected for the turn_summary
@@ -483,6 +494,32 @@ async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
       return { success: true, snapshots: snaps };
     }
 
+    case "read_call_notes": {
+      const { data, error } = await supabase
+        .from("call_notes")
+        .select("*")
+        .eq("client_id", clientId)
+        .maybeSingle();
+      if (error) return { success: false, error: error.message };
+      if (!data) return { success: true, call_notes: null, message: "No call notes recorded for this client yet." };
+      // Strip noisy fields
+      const { id, created_at, updated_at, completed_by, ...notes } = data;
+      return { success: true, call_notes: notes };
+    }
+
+    case "read_application": {
+      const appId = ctx.client?.application_id;
+      if (!appId) return { success: true, application: null, message: "No application linked to this client." };
+      const { data: app, error } = await supabase
+        .from("applications")
+        .select("*")
+        .eq("id", appId)
+        .maybeSingle();
+      if (error) return { success: false, error: error.message };
+      if (!app) return { success: true, application: null, message: "Linked application not found." };
+      return { success: true, application: app };
+    }
+
     default:
       return { success: false, error: `Unknown tool: ${name}` };
   }
@@ -539,7 +576,7 @@ Deployed files: ${deployedFiles.join(", ") || "(none)"}
 Uploaded media: ${(media || []).length} files
 
 HOW TO WORK:
-Use the tools to read files, make changes, and deploy. Don't load everything upfront — fetch what you need.
+Use the tools to read files, make changes, and deploy. Don't load everything upfront — fetch what you need. Beyond the deployed HTML and intake, you can also pull the discovery-call notes (read_call_notes) and the original application (read_application) for tone, brand, and story context.
 
 When you write files, update intake, or push to staging, the changes apply IMMEDIATELY. Snapshots are taken automatically before each write so the operator can undo with one click if needed. Just do the work and tell the operator what you did. Be specific in change_summary — clearly state what changed and where.
 
@@ -815,7 +852,7 @@ serve(async (req) => {
           const writeLog: WriteRecord[] = [];
           turnWritesByMessage[assistantMessageId] = writeLog;
           const ctx: ToolCtx = {
-            supabase, clientId: client_id, site: site || {},
+            supabase, clientId: client_id, client, site: site || {},
             assistantMessageId, writeLog,
           };
 
