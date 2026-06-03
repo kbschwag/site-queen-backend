@@ -13,6 +13,33 @@ import { formatDistanceToNow } from "date-fns";
 interface Props { clientId: string; }
 type Status = "idle" | "previewing" | "awaiting" | "applying" | "success" | "error";
 
+const REVISION_SAFE_IMAGE_BYTES = 4.5 * 1024 * 1024;
+const REVISION_MAX_IMAGE_DIMENSION = 1800;
+
+function extensionFor(file: File): string {
+  if (file.type === "image/jpeg") return "jpg";
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  return (file.name.split(".").pop() || "jpg").replace(/[^a-z0-9]/gi, "").toLowerCase() || "jpg";
+}
+
+async function prepareRevisionImage(file: File): Promise<{ file: File; optimized: boolean }> {
+  const type = file.type || (file.name.toLowerCase().endsWith(".png") ? "image/png" : "");
+  if (!["image/jpeg", "image/png", "image/webp"].includes(type) || file.size <= REVISION_SAFE_IMAGE_BYTES) {
+    return { file, optimized: false };
+  }
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, REVISION_MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+  if (!blob) return { file, optimized: false };
+  return { file: new File([blob], file.name.replace(/\.[^.]+$/, "") + "-optimized.jpg", { type: "image/jpeg" }), optimized: true };
+}
+
 interface Plan {
   tool: string;
   summary: string;
@@ -90,17 +117,20 @@ export function InlineRevisionPanel({ clientId }: Props) {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    const fileType = file.type || (file.name.toLowerCase().endsWith(".png") ? "image/png" : "");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(fileType)) {
       setStatus("error"); setStatusMsg("Only JPG, PNG or WebP allowed"); return;
     }
     setUploading(true); setStatus("idle"); setStatusMsg("");
     try {
-      const ext = file.name.split(".").pop() || "jpg";
+      const prepared = await prepareRevisionImage(file);
+      const ext = extensionFor(prepared.file);
       const path = `${clientId}/revisions/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("client-uploads").upload(path, file, { upsert: true, contentType: file.type });
+      const { error: upErr } = await supabase.storage.from("client-uploads").upload(path, prepared.file, { upsert: true, contentType: prepared.file.type });
       if (upErr) throw upErr;
       const { data: urlData } = supabase.storage.from("client-uploads").getPublicUrl(path);
-      setUploadedUrl(urlData.publicUrl); setUploadedName(file.name);
+      setUploadedUrl(urlData.publicUrl); setUploadedName(prepared.file.name);
+      if (prepared.optimized) setStatusMsg("Large image optimized for Claude.");
     } catch (err: any) {
       setStatus("error"); setStatusMsg(err?.message || "Upload failed");
     } finally {
