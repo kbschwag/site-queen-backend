@@ -765,6 +765,9 @@ serve(async (req) => {
         let stopReason = "end_turn";
         // Aggregate writes across all assistant turns in this loop, scoped per-message.
         const turnWritesByMessage: Record<string, WriteRecord[]> = {};
+        // Circuit breaker: track repeated identical failing tool calls.
+        const failureCounts: Record<string, number> = {};
+
 
         for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
           const resp = await fetch("https://api.anthropic.com/v1/messages", {
