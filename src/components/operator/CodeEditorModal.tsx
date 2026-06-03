@@ -109,6 +109,10 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
 
   const htmlHostRef = useRef<HTMLDivElement | null>(null);
   const htmlEditorRef = useRef<any>(null);
+  // Snapshot of the file as it was when we loaded it into the editor.
+  // Used on save to detect if storage changed underneath us (e.g. AI chat
+  // edits) so we don't silently clobber newer content with a stale buffer.
+  const loadedBaselineRef = useRef<string | null>(null);
 
   // Load list of pages from deploy/ when opening
   useEffect(() => {
