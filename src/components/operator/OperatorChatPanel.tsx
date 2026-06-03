@@ -182,8 +182,18 @@ export function OperatorChatPanel({ clientId }: Props) {
     setMessages((prev) => [...prev, { kind: "user", text: userText }, { kind: "assistant", text: "", toolRuns: [] }]);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { toast.error("Not authenticated"); setSending(false); return; }
+      let { data: { session } } = await supabase.auth.getSession();
+      // Refresh if token is missing or expires within 60s
+      const expSoon = session?.expires_at ? (session.expires_at * 1000 - Date.now()) < 60_000 : true;
+      if (!session || expSoon) {
+        const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
+        if (refreshErr || !refreshed.session) {
+          toast.error("Session expired. Please sign in again.");
+          setSending(false);
+          return;
+        }
+        session = refreshed.session;
+      }
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/operator-chat`;
       const resp = await fetch(url, {
         method: "POST",
