@@ -20,7 +20,7 @@ const corsHeaders = {
 };
 
 const MODEL = "claude-sonnet-4-20250514";
-const MAX_ITERATIONS = 10;
+const MAX_ITERATIONS = 30;
 const MAX_HISTORY_MESSAGES = 60;
 
 function injectNoindex(html: string): string {
