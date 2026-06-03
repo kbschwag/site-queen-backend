@@ -493,6 +493,45 @@ async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
       return { success: true, snapshots: snaps };
     }
 
+    case "read_call_notes": {
+      const { data, error } = await supabase
+        .from("call_notes")
+        .select("*")
+        .eq("client_id", clientId)
+        .maybeSingle();
+      if (error) return { success: false, error: error.message };
+      if (!data) return { success: true, call_notes: null, message: "No call notes recorded for this client yet." };
+      // Strip noisy fields
+      const { id, created_at, updated_at, completed_by, ...notes } = data;
+      return { success: true, call_notes: notes };
+    }
+
+    case "read_application": {
+      // Applications are linked via the prospect/client. Try direct client_id first, fall back via call_notes.application_id.
+      let { data: app } = await supabase
+        .from("applications")
+        .select("*")
+        .eq("client_id", clientId)
+        .maybeSingle();
+      if (!app) {
+        const { data: cn } = await supabase
+          .from("call_notes")
+          .select("application_id")
+          .eq("client_id", clientId)
+          .maybeSingle();
+        if (cn?.application_id) {
+          const { data: app2 } = await supabase
+            .from("applications")
+            .select("*")
+            .eq("id", cn.application_id)
+            .maybeSingle();
+          app = app2;
+        }
+      }
+      if (!app) return { success: true, application: null, message: "No application record found for this client." };
+      return { success: true, application: app };
+    }
+
     default:
       return { success: false, error: `Unknown tool: ${name}` };
   }
