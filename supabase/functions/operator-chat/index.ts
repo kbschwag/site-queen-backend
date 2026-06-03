@@ -507,28 +507,15 @@ async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
     }
 
     case "read_application": {
-      // Applications are linked via the prospect/client. Try direct client_id first, fall back via call_notes.application_id.
-      let { data: app } = await supabase
+      const appId = ctx.client?.application_id;
+      if (!appId) return { success: true, application: null, message: "No application linked to this client." };
+      const { data: app, error } = await supabase
         .from("applications")
         .select("*")
-        .eq("client_id", clientId)
+        .eq("id", appId)
         .maybeSingle();
-      if (!app) {
-        const { data: cn } = await supabase
-          .from("call_notes")
-          .select("application_id")
-          .eq("client_id", clientId)
-          .maybeSingle();
-        if (cn?.application_id) {
-          const { data: app2 } = await supabase
-            .from("applications")
-            .select("*")
-            .eq("id", cn.application_id)
-            .maybeSingle();
-          app = app2;
-        }
-      }
-      if (!app) return { success: true, application: null, message: "No application record found for this client." };
+      if (error) return { success: false, error: error.message };
+      if (!app) return { success: true, application: null, message: "Linked application not found." };
       return { success: true, application: app };
     }
 
