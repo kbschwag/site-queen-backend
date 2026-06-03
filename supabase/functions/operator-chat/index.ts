@@ -811,6 +811,7 @@ serve(async (req) => {
           type: "image",
           source: { type: "url", url: a.url },
         });
+        userContent.push({ type: "text", text: imageUrlText(a.url, a.name) });
       } else if (a?.url) {
         // Non-image attachment — include as a text reference so Claude knows about it
         userContent.push({ type: "text", text: `[Attached file: ${a.name || a.url} — ${a.url}]` });
@@ -824,7 +825,7 @@ serve(async (req) => {
   const history = await loadChatMessages(supabase, chatId);
   const messages: any[] = history.map((m: any) => {
     if (Array.isArray(m.content)) {
-      const safe = m.content.filter((b: any) => b && typeof b === "object" && (b.type === "text" || b.type === "tool_use" || b.type === "tool_result" || b.type === "image"));
+      const safe = normalizeContentForClaude(m.content);
       return { role: m.role, content: safe.length ? safe : [{ type: "text", text: "" }] };
     }
     return m;
