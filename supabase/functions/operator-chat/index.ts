@@ -863,6 +863,7 @@ serve(async (req) => {
           };
 
           const toolResults: any[] = [];
+          let circuitTripped = false;
           for (const tu of toolUses) {
             send({ type: "tool_use_started", tool_name: tu.name, tool_input: tu.input, message_id: tu.id });
             let result: any;
@@ -872,6 +873,15 @@ serve(async (req) => {
               result = { success: false, error: e.message || String(e) };
             }
             const ok = result?.success !== false && !result?.error;
+            // Circuit breaker: if the same tool fails with the same input 3x, stop the loop.
+            if (!ok) {
+              const sig = `${tu.name}:${JSON.stringify(tu.input || {})}`;
+              failureCounts[sig] = (failureCounts[sig] || 0) + 1;
+              if (failureCounts[sig] >= 3) {
+                result = { success: false, error: `Aborted: ${tu.name} failed 3 times with the same input. Stopping the loop. Original error: ${result?.error || "unknown"}` };
+                circuitTripped = true;
+              }
+            }
             send({ type: "tool_result", message_id: tu.id, result, success: ok });
             toolResults.push({
               type: "tool_result",
@@ -879,6 +889,7 @@ serve(async (req) => {
               content: typeof result === "string" ? result : JSON.stringify(result).slice(0, 30000),
             });
           }
+
 
           await supabase.from("operator_chat_messages").insert({
             chat_id: chatId, role: "tool_result", content: toolResults,
