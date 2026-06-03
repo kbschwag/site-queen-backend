@@ -573,7 +573,6 @@ Only include issues you are confident about. If you find nothing wrong, return {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!anthropicKey) return json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
 
