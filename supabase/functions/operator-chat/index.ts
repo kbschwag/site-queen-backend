@@ -779,7 +779,7 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               model: MODEL,
-              max_tokens: 4096,
+              max_tokens: 16000,
               system: systemPrompt,
               tools: TOOLS,
               messages: convo,
@@ -827,7 +827,13 @@ serve(async (req) => {
                 } else if (ev.type === "content_block_stop") {
                   const block = assistantContent[ev.index];
                   if (block?.type === "tool_use") {
-                    try { block.input = currentJson ? JSON.parse(currentJson) : {}; } catch { block.input = {}; }
+                    try {
+                      block.input = currentJson ? JSON.parse(currentJson) : {};
+                    } catch {
+                      // Truncated/invalid JSON — mark it so we can return a useful error
+                      // instead of silently passing {} to the tool.
+                      block.input = { __parse_failed: true, __raw: currentJson.slice(0, 200) };
+                    }
                   }
                   currentJson = "";
                 } else if (ev.type === "message_delta") {
@@ -867,10 +873,17 @@ serve(async (req) => {
           for (const tu of toolUses) {
             send({ type: "tool_use_started", tool_name: tu.name, tool_input: tu.input, message_id: tu.id });
             let result: any;
-            try {
-              result = await runTool(tu.name, tu.input, ctx);
-            } catch (e: any) {
-              result = { success: false, error: e.message || String(e) };
+            if (tu.input?.__parse_failed) {
+              result = {
+                success: false,
+                error: `Your tool call arguments were truncated/cut off mid-stream (response hit the token limit). Do NOT retry write_deployed_file with the full HTML — use edit_deployed_file with targeted {find, replace} edits instead, which is far smaller.`,
+              };
+            } else {
+              try {
+                result = await runTool(tu.name, tu.input, ctx);
+              } catch (e: any) {
+                result = { success: false, error: e.message || String(e) };
+              }
             }
             const ok = result?.success !== false && !result?.error;
             // Circuit breaker: if the same tool fails with the same input 3x, stop the loop.
