@@ -58,15 +58,15 @@ const TOOLS = [
     input_schema: { type: "object", properties: {} },
   },
   {
-    name: "write_deployed_file",
-    description: "Replace a deployed HTML file with new full contents. Use this only for brand-new files or full rewrites. For most edits PREFER edit_deployed_file (find-and-replace) — it's faster and avoids re-emitting the entire document. Automatically snapshots, writes to storage, AND pushes to staging.",
+    name: "apply_site_change",
+    description: "Primary website-edit tool. Give it the operator's natural-language request and, optionally, a filename. It silently reads the deployed HTML, creates exact targeted edits, writes storage, and pushes staging. Use this for normal website edits instead of rewriting files.",
     input_schema: {
       type: "object",
-      required: ["filename", "contents", "change_summary"],
+      required: ["instructions"],
       properties: {
-        filename: { type: "string" },
-        contents: { type: "string", description: "Full new HTML contents" },
-        change_summary: { type: "string", description: "Brief description of what changed and why" },
+        instructions: { type: "string", description: "The operator's requested website change, in plain English." },
+        filename: { type: "string", description: "Optional page to edit, e.g. index.html. Leave blank for sitewide or uncertain changes." },
+        files: { type: "array", items: { type: "string" }, description: "Optional specific deployed HTML files to edit." },
       },
     },
   },
@@ -156,6 +156,7 @@ interface ToolCtx {
   clientId: string;
   client: any;
   site: any;
+  anthropicKey: string;
   assistantMessageId: string; // tags snapshots taken during this assistant turn
   writeLog: WriteRecord[]; // collected for the turn_summary
 }
@@ -337,11 +338,105 @@ async function commitFileChange(
   };
 }
 
+function extractJsonObject(text: string): any {
+  try { return JSON.parse(text); } catch {}
+  const match = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
+  if (match?.[1]) return JSON.parse(match[1]);
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1));
+  throw new Error("No JSON object found in editor response");
+}
+
+function shouldEditAllPages(instructions: string): boolean {
+  return /\b(everywhere|sitewide|all pages|whole site|every page|wherever|anywhere|all files)\b/i.test(instructions);
+}
+
+async function planTargetedSiteEdits(ctx: ToolCtx, input: any): Promise<any> {
+  const instructions = typeof input?.instructions === "string" ? input.instructions.trim() : "";
+  if (!instructions) return { success: false, error: "apply_site_change requires plain-English instructions." };
+
+  const deployed = await listDeployedFilenames(ctx.supabase, ctx.clientId);
+  const requestedFiles = Array.isArray(input?.files) ? input.files.filter((f: any) => typeof f === "string") : [];
+  if (typeof input?.filename === "string" && input.filename.trim()) requestedFiles.unshift(input.filename.trim());
+  const candidates = requestedFiles.length
+    ? Array.from(new Set(requestedFiles))
+    : shouldEditAllPages(instructions)
+      ? deployed
+      : [deployed.includes("index.html") ? "index.html" : deployed[0]].filter(Boolean);
+
+  const files: Record<string, string> = {};
+  for (const filename of candidates) {
+    const { data } = await ctx.supabase.storage.from("generated-sites").download(`${ctx.clientId}/deploy/${filename}`);
+    if (data) files[filename] = await data.text();
+  }
+  if (Object.keys(files).length === 0) return { success: false, error: "No deployed HTML files could be read for this client." };
+
+  const filePayload = Object.entries(files).map(([filename, html]) => `--- ${filename} ---\n${html}`).join("\n\n");
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ctx.anthropicKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 12000,
+      system: `You are a precise HTML editor. Return ONLY valid JSON. Do not use markdown. Make targeted exact find/replace edits, not full-file rewrites.
+
+Schema:
+{
+  "changes": [
+    { "filename": "index.html", "change_summary": "brief summary", "edits": [{ "find": "exact existing substring", "replace": "new substring" }] }
+  ],
+  "note": "one short sentence"
+}
+
+Rules:
+- Every find string must be copied exactly from the provided HTML and appear exactly once in that file.
+- Include enough surrounding HTML to make each find unique.
+- Do not include unchanged files.
+- If the request is impossible from the provided HTML, return {"changes":[],"note":"explain briefly"}.`,
+      messages: [{ role: "user", content: `Operator request:\n${instructions}\n\nCurrent deployed HTML:\n${filePayload}` }],
+    }),
+  });
+  if (!resp.ok) return { success: false, error: `Internal editor failed: ${await resp.text()}` };
+  const data = await resp.json();
+  const text = (data?.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+  let plan: any;
+  try { plan = extractJsonObject(text); } catch (e: any) { return { success: false, error: `Internal editor returned invalid JSON: ${e.message}`, preview: text.slice(0, 500) }; }
+  if (!Array.isArray(plan?.changes) || plan.changes.length === 0) {
+    return { success: false, error: plan?.note || "No applicable HTML changes were produced." };
+  }
+
+  const results: any[] = [];
+  for (const change of plan.changes) {
+    const result = await runTool("edit_deployed_file", {
+      filename: change.filename,
+      edits: change.edits,
+      change_summary: change.change_summary || instructions.slice(0, 120),
+    }, ctx);
+    results.push({ filename: change.filename, ...result });
+  }
+  const failures = results.filter((r) => r?.success === false || r?.error);
+  return {
+    success: failures.length === 0,
+    message: failures.length === 0 ? (plan.note || "Applied requested website change.") : `${failures.length} file edit(s) failed.`,
+    planned_files: plan.changes.map((c: any) => c.filename),
+    results,
+  };
+}
+
 async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
   const { supabase, clientId } = ctx;
 
 
   switch (name) {
+    case "apply_site_change": {
+      return await planTargetedSiteEdits(ctx, input);
+    }
+
     case "read_deployed_file": {
       const { data, error } = await supabase.storage
         .from("generated-sites")
@@ -535,9 +630,25 @@ async function loadChatMessages(supabase: any, chatId: string): Promise<any[]> {
     .eq("chat_id", chatId)
     .order("created_at", { ascending: false })
     .limit(MAX_HISTORY_MESSAGES);
-  const rows = (data || [])
+  const rawRows = (data || [])
     .filter((m: any) => m.role === "user" || m.role === "assistant" || m.role === "tool_result")
     .reverse();
+  const rows: any[] = [];
+  let dropNextToolResult = false;
+  for (const row of rawRows) {
+    if (dropNextToolResult && row.role === "tool_result") {
+      dropNextToolResult = false;
+      continue;
+    }
+    dropNextToolResult = false;
+    const blocks = Array.isArray(row.content) ? row.content : [];
+    const legacyRewrite = row.role === "assistant" && blocks.some((b: any) => b?.type === "tool_use" && b?.name === "write_deployed_file");
+    if (legacyRewrite) {
+      dropNextToolResult = true;
+      continue;
+    }
+    rows.push(row);
+  }
   return rows.map((m: any) => ({ role: m.role === "tool_result" ? "user" : m.role, content: m.content }));
 }
 
@@ -579,16 +690,17 @@ HOW TO WORK:
 You are Claude — act like it. Just make the change. Don't narrate, don't ask for confirmation, don't dump file contents into chat. Be efficient with tool calls.
 
 DEFAULT WORKFLOW FOR ANY EDIT:
-1. read_deployed_file to load the page you're touching (usually index.html).
-2. edit_deployed_file with one or more {find, replace} pairs to make the change.
+1. Use apply_site_change with the operator's plain-English request.
+2. If apply_site_change reports a specific failed exact-match edit, then read_deployed_file and retry with edit_deployed_file using exact copied HTML.
 3. One short sentence to the operator: what changed and where to see it.
 
-That's it. Don't call list_deployed_files unless you genuinely don't know which file to edit. Don't call read_call_notes / read_application unless the operator asks about brand/tone/story context. Don't call write_deployed_file unless you are creating a brand-new page from scratch — and never with empty arguments. Don't call push_to_staging — edits push automatically.
+That's it. Don't call list_deployed_files unless you genuinely don't know which file to edit. Don't call read_call_notes / read_application unless the operator asks about brand/tone/story context. Do not use full-file rewrites for basic changes. Don't call push_to_staging — edits push automatically.
 
-NEVER call a tool with empty {} input. If you don't have a filename and contents, don't call write_deployed_file. If a tool fails, read the error and fix the arguments — do not retry the same broken call.
+NEVER call a tool with empty {} input. For normal site edits, apply_site_change only needs {"instructions":"..."}. If a tool fails, read the error and fix the arguments — do not retry the same broken call.
 
 EDITING RULES:
-- edit_deployed_file is the right tool 95% of the time. Each 'find' must match the file EXACTLY ONCE — include surrounding HTML (parent tag, adjacent class) when the snippet is short or repeated.
+- apply_site_change is the right tool 95% of the time. It handles reading, exact targeted edits, storage writes, and staging pushes internally.
+- If manually using edit_deployed_file, each 'find' must match the file EXACTLY ONCE — include surrounding HTML (parent tag, adjacent class) when the snippet is short or repeated.
 - Read the file first so you copy the exact bytes — whitespace, quotes, and casing all matter.
 - Match the existing design when adding new sections; don't invent visual treatments.
 - For data fields that appear in multiple places (address, phone, hours), update everywhere AND update intake via update_intake_field so future regenerations include the change.
@@ -864,7 +976,7 @@ serve(async (req) => {
           const writeLog: WriteRecord[] = [];
           turnWritesByMessage[assistantMessageId] = writeLog;
           const ctx: ToolCtx = {
-            supabase, clientId: client_id, client, site: site || {},
+            supabase, clientId: client_id, client, site: site || {}, anthropicKey,
             assistantMessageId, writeLog,
           };
 
