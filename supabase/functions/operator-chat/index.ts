@@ -910,7 +910,14 @@ serve(async (req) => {
               undo_token: assistantMessageId,
             });
           }
+
+          if (circuitTripped) {
+            send({ type: "text_delta", text: "\n\n[Stopped — the same tool call kept failing. Try rephrasing the request.]" });
+            send({ type: "done", stop_reason: "circuit_breaker" });
+            break;
+          }
         }
+
 
         send({ type: "done", stop_reason: stopReason });
       } catch (e: any) {
