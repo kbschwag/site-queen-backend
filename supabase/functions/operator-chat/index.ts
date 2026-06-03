@@ -225,6 +225,47 @@ async function listDeployedFilenames(supabase: any, clientId: string): Promise<s
   return (data || []).map((f: any) => f.name).filter((n: string) => n && !n.startsWith("."));
 }
 
+function imageUrlText(url: string, name?: string): string {
+  return `[Attached image${name ? `: ${name}` : ""} — use this exact URL when placing it in the website: ${url}]`;
+}
+
+function normalizeContentForClaude(content: any): any[] {
+  const blocks = Array.isArray(content) ? content : [];
+  const out: any[] = [];
+  for (const b of blocks) {
+    if (!b || typeof b !== "object") continue;
+    if (b.type === "text" || b.type === "tool_use" || b.type === "tool_result") {
+      out.push(b);
+      continue;
+    }
+    const url = b.type === "image" ? b.source?.url : b.type === "image_url" ? b.url : null;
+    if (typeof url === "string" && url) {
+      out.push({ type: "image", source: { type: "url", url } });
+      out.push({ type: "text", text: imageUrlText(url, b.name) });
+    } else if (typeof b.url === "string" && b.url) {
+      out.push({ type: "text", text: `[Attached file${b.name ? `: ${b.name}` : ""} — ${b.url}]` });
+    }
+  }
+  return out;
+}
+
+async function listUploadedFilesRecursive(supabase: any, clientId: string, prefix = ""): Promise<any[]> {
+  const folder = prefix ? `${clientId}/${prefix}` : clientId;
+  const { data } = await supabase.storage.from("client-uploads").list(folder);
+  const rows: any[] = [];
+  for (const item of data || []) {
+    if (!item?.name || item.name.startsWith(".")) continue;
+    const relPath = prefix ? `${prefix}/${item.name}` : item.name;
+    if (!item.id && !item.metadata?.size) {
+      rows.push(...await listUploadedFilesRecursive(supabase, clientId, relPath));
+    } else {
+      const url = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/client-uploads/${clientId}/${relPath}`;
+      rows.push({ name: item.name, path: relPath, url, uploaded_at: item.created_at, size: item.metadata?.size || null });
+    }
+  }
+  return rows;
+}
+
 function stagingUrlFor(clientId: string, filename: string): string {
   return `https://staging.sitequeen.ai/${clientId}/${filename}`;
 }
