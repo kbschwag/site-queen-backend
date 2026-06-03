@@ -50,6 +50,42 @@ const MAX_IMAGE_DIMENSION = 1800;
 
 type ChatAttachment = { url: string; name: string; type: "image" | "file"; mime_type: string; size?: number };
 
+function extensionFor(file: File): string {
+  if (file.type === "image/jpeg") return "jpg";
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  return (file.name.split(".").pop() || "file").replace(/[^a-z0-9]/gi, "").toLowerCase() || "file";
+}
+
+async function prepareChatAttachment(file: File): Promise<{ file: File; mimeType: string; displayName: string; optimized: boolean }> {
+  const inferredType = file.type || (file.name.toLowerCase().endsWith(".png") ? "image/png" : "application/octet-stream");
+  const isCompressibleImage = ["image/jpeg", "image/png", "image/webp"].includes(inferredType);
+  if (!isCompressibleImage || file.size <= CLAUDE_SAFE_IMAGE_BYTES) {
+    return { file, mimeType: inferredType, displayName: file.name, optimized: false };
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { file, mimeType: inferredType, displayName: file.name, optimized: false };
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+  if (!blob) return { file, mimeType: inferredType, displayName: file.name, optimized: false };
+
+  const optimizedName = file.name.replace(/\.[^.]+$/, "") + "-optimized.jpg";
+  return {
+    file: new File([blob], optimizedName, { type: "image/jpeg" }),
+    mimeType: "image/jpeg",
+    displayName: optimizedName,
+    optimized: true,
+  };
+}
+
 export function OperatorChatPanel({ clientId }: Props) {
   const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<RenderedMsg[]>([]);
