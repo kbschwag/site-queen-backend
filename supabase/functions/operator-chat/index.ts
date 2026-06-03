@@ -137,6 +137,16 @@ const TOOLS = [
     description: "List available snapshots for this client, most recent first.",
     input_schema: { type: "object", properties: {} },
   },
+  {
+    name: "read_call_notes",
+    description: "Read the discovery / sales-call notes captured for this client (their story, ideal customer, inspiration sites, pages agreed, color direction, vibe/tone, expert additions, things to avoid, exact phrases the owner wants, final notes, internal notes, etc.). Use this whenever you need the operator's actual conversation context with the client before editing copy, choosing tone, or making design decisions.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "read_application",
+    description: "Read the original application this client submitted (business type, industry, location, socials, ideal customer, goals, restricted niches, anything_else, referral source). Useful background before edits.",
+    input_schema: { type: "object", properties: {} },
+  },
 ];
 
 // ─── Tool execution ─────────────────────────────────────────────────────────
