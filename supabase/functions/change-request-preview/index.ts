@@ -580,9 +580,17 @@ serve(async (req) => {
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!anthropicKey) return json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
 
+  const token = authHeader.replace("Bearer ", "");
+  const supabaseAuth = createClient(
+    supabaseUrl,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } },
+  );
+  const { data: claimsData, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
+  if (claimsErr || !claimsData?.claims?.sub) return json({ error: "Invalid token" }, 401);
+  const caller = { id: claimsData.claims.sub as string };
+
   const supabase = createClient(supabaseUrl, serviceKey);
-  const { data: { user: caller }, error: authErr } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-  if (authErr || !caller) return json({ error: "Invalid token" }, 401);
 
   const [{ data: roleRow }, { data: profileRow }] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", caller.id).eq("role", "admin").maybeSingle(),
