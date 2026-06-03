@@ -22,24 +22,11 @@ function injectNoindex(html: string): string {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const auth = req.headers.get("Authorization");
-  if (!auth?.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
-
-  const token = auth.replace("Bearer ", "");
-  const supabaseAuth = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  );
-  const { data: claimsData, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
-  if (claimsErr || !claimsData?.claims?.sub) return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: corsHeaders });
-  const user = { id: claimsData.claims.sub as string };
-
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: isOp } = await supabase.rpc("is_operator", { _user_id: user.id });
-  if (!isOp) return new Response(JSON.stringify({ error: "Operator only" }), { status: 403, headers: corsHeaders });
+  const authed = await requireUser(req, corsHeaders);
+  if (authed instanceof Response) return authed;
+  const op = await requireOperator(authed, corsHeaders);
+  if (op instanceof Response) return op;
+  const { user, supabase } = authed;
 
   let body: any;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: corsHeaders }); }
