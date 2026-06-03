@@ -765,12 +765,21 @@ serve(async (req) => {
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!anthropicKey) return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), { status: 500, headers: corsHeaders });
 
-  const userContent: any[] = [{ type: "text", text: user_message }];
+  const userContent: any[] = [];
   if (Array.isArray(attachments)) {
     for (const a of attachments) {
-      if (a?.type === "image" && a.url) userContent.push({ type: "image_url", url: a.url, name: a.name });
+      if (a?.type === "image" && a.url) {
+        userContent.push({
+          type: "image",
+          source: { type: "url", url: a.url },
+        });
+      } else if (a?.url) {
+        // Non-image attachment — include as a text reference so Claude knows about it
+        userContent.push({ type: "text", text: `[Attached file: ${a.name || a.url} — ${a.url}]` });
+      }
     }
   }
+  userContent.push({ type: "text", text: user_message });
   await supabase.from("operator_chat_messages").insert({ chat_id: chatId, role: "user", content: userContent });
 
   const systemPrompt = await buildSystemPrompt(supabase, client, site);
