@@ -960,7 +960,7 @@ serve(async (req) => {
           const writeLog: WriteRecord[] = [];
           turnWritesByMessage[assistantMessageId] = writeLog;
           const ctx: ToolCtx = {
-            supabase, clientId: client_id, client, site: site || {},
+            supabase, clientId: client_id, client, site: site || {}, anthropicKey,
             assistantMessageId, writeLog,
           };
 
