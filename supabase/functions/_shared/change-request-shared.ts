@@ -77,7 +77,7 @@ export async function uploadAndPushFile(
   runInBackground((async () => {
     try {
       const stagingHtml = injectNoindex(html);
-      await uploadFileToHostingerFtp(`/public_html/${clientId}/${filename}`, stagingHtml);
+      await uploadFileToHostingerFtp(`/public_html/staging/${clientId}/${filename}`, stagingHtml);
     } catch (e: any) {
       console.error(`[change-request] FTP push error for ${filename}:`, e);
     }

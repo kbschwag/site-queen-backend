@@ -284,7 +284,7 @@ async function pushOneToStaging(
   const original = await data.text();
   const html = injectNoindex(original);
   try {
-    await uploadFileToHostingerFtp(`/public_html/${clientId}/${filename}`, html);
+    await uploadFileToHostingerFtp(`/public_html/staging/${clientId}/${filename}`, html);
   } catch (e: any) {
     return { ok: false, verified: false, error: e.message || String(e), url };
   }
