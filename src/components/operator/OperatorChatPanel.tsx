@@ -71,6 +71,8 @@ async function prepareChatAttachment(file: File): Promise<{ file: File; mimeType
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
   const ctx = canvas.getContext("2d");
   if (!ctx) return { file, mimeType: inferredType, displayName: file.name, optimized: false };
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close?.();
 
@@ -328,7 +330,7 @@ export function OperatorChatPanel({ clientId }: Props) {
           </div>
         )}
         <div className="flex gap-2 items-end">
-          <input ref={fileInputRef} type="file" className="hidden" onChange={handleAttach} />
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,.png,.jpg,.jpeg,.webp" className="hidden" onChange={handleAttach} />
           <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={sending || attachmentUploading}>
             {attachmentUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
           </Button>
