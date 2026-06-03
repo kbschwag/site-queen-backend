@@ -156,6 +156,7 @@ interface ToolCtx {
   clientId: string;
   client: any;
   site: any;
+  anthropicKey: string;
   assistantMessageId: string; // tags snapshots taken during this assistant turn
   writeLog: WriteRecord[]; // collected for the turn_summary
 }
@@ -337,11 +338,105 @@ async function commitFileChange(
   };
 }
 
+function extractJsonObject(text: string): any {
+  try { return JSON.parse(text); } catch {}
+  const match = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
+  if (match?.[1]) return JSON.parse(match[1]);
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1));
+  throw new Error("No JSON object found in editor response");
+}
+
+function shouldEditAllPages(instructions: string): boolean {
+  return /\b(everywhere|sitewide|all pages|whole site|every page|wherever|anywhere|all files)\b/i.test(instructions);
+}
+
+async function planTargetedSiteEdits(ctx: ToolCtx, input: any): Promise<any> {
+  const instructions = typeof input?.instructions === "string" ? input.instructions.trim() : "";
+  if (!instructions) return { success: false, error: "apply_site_change requires plain-English instructions." };
+
+  const deployed = await listDeployedFilenames(ctx.supabase, ctx.clientId);
+  const requestedFiles = Array.isArray(input?.files) ? input.files.filter((f: any) => typeof f === "string") : [];
+  if (typeof input?.filename === "string" && input.filename.trim()) requestedFiles.unshift(input.filename.trim());
+  const candidates = requestedFiles.length
+    ? Array.from(new Set(requestedFiles))
+    : shouldEditAllPages(instructions)
+      ? deployed
+      : [deployed.includes("index.html") ? "index.html" : deployed[0]].filter(Boolean);
+
+  const files: Record<string, string> = {};
+  for (const filename of candidates) {
+    const { data } = await ctx.supabase.storage.from("generated-sites").download(`${ctx.clientId}/deploy/${filename}`);
+    if (data) files[filename] = await data.text();
+  }
+  if (Object.keys(files).length === 0) return { success: false, error: "No deployed HTML files could be read for this client." };
+
+  const filePayload = Object.entries(files).map(([filename, html]) => `--- ${filename} ---\n${html}`).join("\n\n");
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ctx.anthropicKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 12000,
+      system: `You are a precise HTML editor. Return ONLY valid JSON. Do not use markdown. Make targeted exact find/replace edits, not full-file rewrites.
+
+Schema:
+{
+  "changes": [
+    { "filename": "index.html", "change_summary": "brief summary", "edits": [{ "find": "exact existing substring", "replace": "new substring" }] }
+  ],
+  "note": "one short sentence"
+}
+
+Rules:
+- Every find string must be copied exactly from the provided HTML and appear exactly once in that file.
+- Include enough surrounding HTML to make each find unique.
+- Do not include unchanged files.
+- If the request is impossible from the provided HTML, return {"changes":[],"note":"explain briefly"}.`,
+      messages: [{ role: "user", content: `Operator request:\n${instructions}\n\nCurrent deployed HTML:\n${filePayload}` }],
+    }),
+  });
+  if (!resp.ok) return { success: false, error: `Internal editor failed: ${await resp.text()}` };
+  const data = await resp.json();
+  const text = (data?.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+  let plan: any;
+  try { plan = extractJsonObject(text); } catch (e: any) { return { success: false, error: `Internal editor returned invalid JSON: ${e.message}`, preview: text.slice(0, 500) }; }
+  if (!Array.isArray(plan?.changes) || plan.changes.length === 0) {
+    return { success: false, error: plan?.note || "No applicable HTML changes were produced." };
+  }
+
+  const results: any[] = [];
+  for (const change of plan.changes) {
+    const result = await runTool("edit_deployed_file", {
+      filename: change.filename,
+      edits: change.edits,
+      change_summary: change.change_summary || instructions.slice(0, 120),
+    }, ctx);
+    results.push({ filename: change.filename, ...result });
+  }
+  const failures = results.filter((r) => r?.success === false || r?.error);
+  return {
+    success: failures.length === 0,
+    message: failures.length === 0 ? (plan.note || "Applied requested website change.") : `${failures.length} file edit(s) failed.`,
+    planned_files: plan.changes.map((c: any) => c.filename),
+    results,
+  };
+}
+
 async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
   const { supabase, clientId } = ctx;
 
 
   switch (name) {
+    case "apply_site_change": {
+      return await planTargetedSiteEdits(ctx, input);
+    }
+
     case "read_deployed_file": {
       const { data, error } = await supabase.storage
         .from("generated-sites")
