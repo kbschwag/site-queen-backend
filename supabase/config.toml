@@ -1,7 +1,7 @@
 project_id = "onrvqbygwzhmhgkctcrm"
 
 [functions.operator-chat]
-verify_jwt = true
+verify_jwt = false
 
 [functions.operator-chat-undo]
 verify_jwt = true
