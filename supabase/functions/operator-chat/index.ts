@@ -13,6 +13,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
+import { requireUser, requireOperator } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -810,27 +811,11 @@ function sanitizeMessagesForClaude(messages: any[]): any[] {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const auth = req.headers.get("Authorization");
-  if (!auth?.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
-
-  const token = auth.replace("Bearer ", "");
-  const supabaseAuth = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
-  );
-  const { data: claimsData, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
-  if (claimsErr || !claimsData?.claims?.sub) {
-    console.error("getClaims failed:", claimsErr);
-    return new Response(JSON.stringify({ error: "Invalid token", detail: claimsErr?.message }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
-  const user = { id: claimsData.claims.sub as string };
-
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: isOp } = await supabase.rpc("is_operator", { _user_id: user.id });
-  if (!isOp) return new Response(JSON.stringify({ error: "Operator only" }), { status: 403, headers: corsHeaders });
+  const authed = await requireUser(req, corsHeaders);
+  if (authed instanceof Response) return authed;
+  const op = await requireOperator(authed, corsHeaders);
+  if (op instanceof Response) return op;
+  const { user, supabase } = authed;
 
   let body: any;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: corsHeaders }); }
