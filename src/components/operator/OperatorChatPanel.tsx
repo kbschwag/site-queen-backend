@@ -45,12 +45,56 @@ type RenderedMsg =
   | { kind: "assistant"; text: string; toolRuns: ToolRun[]; summary?: TurnSummary }
   | { kind: "system"; note: string };
 
+const CLAUDE_SAFE_IMAGE_BYTES = 4.5 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 1800;
+
+type ChatAttachment = { url: string; name: string; type: "image" | "file"; mime_type: string; size?: number };
+
+function extensionFor(file: File): string {
+  if (file.type === "image/jpeg") return "jpg";
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  return (file.name.split(".").pop() || "file").replace(/[^a-z0-9]/gi, "").toLowerCase() || "file";
+}
+
+async function prepareChatAttachment(file: File): Promise<{ file: File; mimeType: string; displayName: string; optimized: boolean }> {
+  const inferredType = file.type || (file.name.toLowerCase().endsWith(".png") ? "image/png" : "application/octet-stream");
+  const isCompressibleImage = ["image/jpeg", "image/png", "image/webp"].includes(inferredType);
+  if (!isCompressibleImage || file.size <= CLAUDE_SAFE_IMAGE_BYTES) {
+    return { file, mimeType: inferredType, displayName: file.name, optimized: false };
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { file, mimeType: inferredType, displayName: file.name, optimized: false };
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+  if (!blob) return { file, mimeType: inferredType, displayName: file.name, optimized: false };
+
+  const optimizedName = file.name.replace(/\.[^.]+$/, "") + "-optimized.jpg";
+  return {
+    file: new File([blob], optimizedName, { type: "image/jpeg" }),
+    mimeType: "image/jpeg",
+    displayName: optimizedName,
+    optimized: true,
+  };
+}
+
 export function OperatorChatPanel({ clientId }: Props) {
   const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<RenderedMsg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [attachments, setAttachments] = useState<{ url: string; name: string; type: "image" | "file"; mime_type: string }[]>([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,17 +127,31 @@ export function OperatorChatPanel({ clientId }: Props) {
   const handleAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const path = `${clientId}/chat/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("client-uploads").upload(path, file, { upsert: false });
-    if (error) { toast.error(error.message); return; }
-    const { data } = supabase.storage.from("client-uploads").getPublicUrl(path);
-    setAttachments((prev) => [...prev, {
-      url: data.publicUrl,
-      name: file.name,
-      mime_type: file.type,
-      type: file.type.startsWith("image/") ? "image" : "file",
-    }]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setAttachmentUploading(true);
+    try {
+      const prepared = await prepareChatAttachment(file);
+      const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${extensionFor(prepared.file)}`;
+      const path = `${clientId}/chat/${safeName}`;
+      const { error } = await supabase.storage.from("client-uploads").upload(path, prepared.file, {
+        upsert: false,
+        contentType: prepared.mimeType,
+      });
+      if (error) throw error;
+      const { data } = supabase.storage.from("client-uploads").getPublicUrl(path);
+      setAttachments((prev) => [...prev, {
+        url: data.publicUrl,
+        name: prepared.displayName,
+        mime_type: prepared.mimeType,
+        type: prepared.mimeType.startsWith("image/") ? "image" : "file",
+        size: prepared.file.size,
+      }]);
+      if (prepared.optimized) toast.success("Large image optimized for Claude.");
+    } catch (error: any) {
+      toast.error(error?.message || "Upload failed");
+    } finally {
+      setAttachmentUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleUndo = async (messageId: string) => {
@@ -272,9 +330,9 @@ export function OperatorChatPanel({ clientId }: Props) {
           </div>
         )}
         <div className="flex gap-2 items-end">
-          <input ref={fileInputRef} type="file" className="hidden" onChange={handleAttach} />
-          <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={sending}>
-            <Paperclip className="h-4 w-4" />
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,.png,.jpg,.jpeg,.webp" className="hidden" onChange={handleAttach} />
+          <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={sending || attachmentUploading}>
+            {attachmentUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
           </Button>
           <Textarea
             value={input}
@@ -285,7 +343,7 @@ export function OperatorChatPanel({ clientId }: Props) {
             className="resize-none"
             disabled={sending}
           />
-          <Button onClick={send} disabled={sending || !input.trim()} size="icon">
+          <Button onClick={send} disabled={sending || attachmentUploading || !input.trim()} size="icon">
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
