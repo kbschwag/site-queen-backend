@@ -429,12 +429,22 @@ function summarizeInput(input: any): string {
 
 function reduceHistory(rows: any[]): RenderedMsg[] {
   const out: RenderedMsg[] = [];
+  let skipNextLegacyRewriteResult = false;
   for (const row of rows) {
+    if (skipNextLegacyRewriteResult && row.role === "tool_result") {
+      skipNextLegacyRewriteResult = false;
+      continue;
+    }
+    skipNextLegacyRewriteResult = false;
     if (row.role === "user") {
       const text = Array.isArray(row.content) ? row.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n") : String(row.content || "");
       out.push({ kind: "user", text });
     } else if (row.role === "assistant") {
       const blocks = Array.isArray(row.content) ? row.content : [];
+      if (blocks.some((b: any) => b.type === "tool_use" && b.name === "write_deployed_file" && (!b.input || Object.keys(b.input).length === 0))) {
+        skipNextLegacyRewriteResult = true;
+        continue;
+      }
       const text = blocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
       const toolRuns: ToolRun[] = blocks.filter((b: any) => b.type === "tool_use").map((b: any) => ({
         message_id: b.id, tool_name: b.name, tool_input: b.input, status: "done", result: undefined,
