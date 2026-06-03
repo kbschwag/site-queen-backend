@@ -154,6 +154,7 @@ const TOOLS = [
 interface ToolCtx {
   supabase: any;
   clientId: string;
+  client: any;
   site: any;
   assistantMessageId: string; // tags snapshots taken during this assistant turn
   writeLog: WriteRecord[]; // collected for the turn_summary
