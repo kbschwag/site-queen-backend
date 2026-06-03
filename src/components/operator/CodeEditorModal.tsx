@@ -109,6 +109,10 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
 
   const htmlHostRef = useRef<HTMLDivElement | null>(null);
   const htmlEditorRef = useRef<any>(null);
+  // Snapshot of the file as it was when we loaded it into the editor.
+  // Used on save to detect if storage changed underneath us (e.g. AI chat
+  // edits) so we don't silently clobber newer content with a stale buffer.
+  const loadedBaselineRef = useRef<string | null>(null);
 
   // Load list of pages from deploy/ when opening
   useEffect(() => {
@@ -167,6 +171,8 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
           if (htmlRes.data) htmlContent = await htmlRes.data.text();
         }
 
+        loadedBaselineRef.current = htmlContent;
+
         await new Promise((r) => setTimeout(r, 0));
         if (cancelled) return;
 
@@ -208,6 +214,31 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
     setSaving(true);
     try {
       const htmlContent = htmlEditorRef.current.getValue();
+
+      // Stale-write guard: re-fetch current storage and bail out if the file
+      // changed since we loaded it (e.g. an AI chat edit landed in the
+      // meantime). Otherwise this save would silently clobber that work.
+      try {
+        const fresh = await supabase.storage
+          .from("generated-sites")
+          .download(`${clientId}/deploy/${activePage}`);
+        const liveText = fresh.data ? await fresh.data.text() : "";
+        const baseline = loadedBaselineRef.current;
+        if (baseline !== null && liveText && liveText !== baseline && liveText !== htmlContent) {
+          setSaving(false);
+          const proceed = window.confirm(
+            "This file was edited somewhere else (likely the AI chat) since you opened the code editor. Saving now will overwrite those changes.\n\nClick OK to overwrite anyway, or Cancel to close and reopen the editor to pull the latest version.",
+          );
+          if (!proceed) {
+            toast.warning("Save cancelled — close and reopen the editor to load the latest version.");
+            return;
+          }
+          setSaving(true);
+        }
+      } catch (e) {
+        console.warn("Stale-write check failed, continuing:", e);
+      }
+
       const htmlBlob = new Blob([htmlContent], { type: "text/html" });
 
       // 1) Save clean copy to deploy/ backup folder using exact filename
@@ -218,6 +249,7 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
           contentType: "text/html",
         });
       if (upErr) throw upErr;
+      loadedBaselineRef.current = htmlContent;
 
       // 2) Push staging copy to Hostinger so the live preview updates
       const { error: pushErr } = await supabase.functions.invoke("push-to-staging", {
