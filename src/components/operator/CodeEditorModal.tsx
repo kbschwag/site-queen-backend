@@ -171,6 +171,8 @@ export function CodeEditorModal({ open, onOpenChange, clientId, onSaved }: Props
           if (htmlRes.data) htmlContent = await htmlRes.data.text();
         }
 
+        loadedBaselineRef.current = htmlContent;
+
         await new Promise((r) => setTimeout(r, 0));
         if (cancelled) return;
 
