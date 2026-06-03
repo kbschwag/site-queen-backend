@@ -297,13 +297,13 @@ export function OperatorChatPanel({ clientId }: Props) {
 function ToolRunRow({ run }: { run: ToolRun }) {
   const [open, setOpen] = useState(false);
   const failed = run.status === "done" && run.success === false;
+  const label = friendlyToolLabel(run.tool_name, run.tool_input);
   return (
     <div className="text-xs border rounded bg-muted/40">
       <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-2 px-2 py-1.5 text-left">
         {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         <Wrench className="h-3 w-3" />
-        <span className="font-mono">{run.tool_name}</span>
-        <span className="text-muted-foreground flex-1 truncate">{summarizeInput(run.tool_input)}</span>
+        <span className="flex-1 truncate">{label}</span>
         {run.status === "running"
           ? <Loader2 className="h-3 w-3 animate-spin" />
           : failed
@@ -321,6 +321,27 @@ function ToolRunRow({ run }: { run: ToolRun }) {
     </div>
   );
 }
+
+function friendlyToolLabel(name: string, input: any): string {
+  const f = input?.filename ? ` ${input.filename}` : "";
+  switch (name) {
+    case "read_deployed_file": return `Reading${f}`;
+    case "list_deployed_files": return `Listing site files`;
+    case "edit_deployed_file": return `Editing${f}`;
+    case "write_deployed_file": return `Rewriting${f}`;
+    case "read_template_file": return `Reading template${f}`;
+    case "read_intake_field": return `Reading intake: ${input?.field_name || ""}`;
+    case "read_full_intake": return `Reading intake`;
+    case "update_intake_field": return `Updating intake: ${input?.field_name || ""}`;
+    case "list_uploaded_media": return `Listing uploads`;
+    case "push_to_staging": return `Pushing to staging`;
+    case "list_snapshots": return `Listing snapshots`;
+    case "read_call_notes": return `Reading call notes`;
+    case "read_application": return `Reading application`;
+    default: return name;
+  }
+}
+
 
 function TurnSummaryCard({ summary, onUndo }: { summary: TurnSummary; onUndo: (id: string) => void }) {
   const [undoing, setUndoing] = useState(false);
