@@ -325,6 +325,7 @@ function ToolRunRow({ run }: { run: ToolRun }) {
 function friendlyToolLabel(name: string, input: any): string {
   const f = input?.filename ? ` ${input.filename}` : "";
   switch (name) {
+    case "apply_site_change": return input?.filename ? `Applying change${f}` : `Applying site change`;
     case "read_deployed_file": return `Reading${f}`;
     case "list_deployed_files": return `Listing site files`;
     case "edit_deployed_file": return `Editing${f}`;
