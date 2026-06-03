@@ -630,9 +630,25 @@ async function loadChatMessages(supabase: any, chatId: string): Promise<any[]> {
     .eq("chat_id", chatId)
     .order("created_at", { ascending: false })
     .limit(MAX_HISTORY_MESSAGES);
-  const rows = (data || [])
+  const rawRows = (data || [])
     .filter((m: any) => m.role === "user" || m.role === "assistant" || m.role === "tool_result")
     .reverse();
+  const rows: any[] = [];
+  let dropNextToolResult = false;
+  for (const row of rawRows) {
+    if (dropNextToolResult && row.role === "tool_result") {
+      dropNextToolResult = false;
+      continue;
+    }
+    dropNextToolResult = false;
+    const blocks = Array.isArray(row.content) ? row.content : [];
+    const legacyRewrite = row.role === "assistant" && blocks.some((b: any) => b?.type === "tool_use" && b?.name === "write_deployed_file");
+    if (legacyRewrite) {
+      dropNextToolResult = true;
+      continue;
+    }
+    rows.push(row);
+  }
   return rows.map((m: any) => ({ role: m.role === "tool_result" ? "user" : m.role, content: m.content }));
 }
 
