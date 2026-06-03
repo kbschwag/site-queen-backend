@@ -3,7 +3,7 @@
 // Writes plan + tool params to quick_edit_jobs. UI calls change-request-apply on confirm.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+
 import {
   corsHeaders, json, ALL_PAGE_FILES, loadDeployedHtml,
   FIELD_INTAKE_KEYS, getCurrentFieldValue,
