@@ -4,16 +4,16 @@ project_id = "onrvqbygwzhmhgkctcrm"
 verify_jwt = false
 
 [functions.operator-chat-undo]
-verify_jwt = true
+verify_jwt = false
 
 [functions.change-request-preview]
-verify_jwt = true
+verify_jwt = false
 
 [functions.change-request-apply]
-verify_jwt = true
+verify_jwt = false
 
 [functions.change-request-cancel]
-verify_jwt = true
+verify_jwt = false
 
 [functions.track-prospect-view]
 verify_jwt = false
