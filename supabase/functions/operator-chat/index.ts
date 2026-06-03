@@ -58,15 +58,15 @@ const TOOLS = [
     input_schema: { type: "object", properties: {} },
   },
   {
-    name: "write_deployed_file",
-    description: "Replace a deployed HTML file with new full contents. Use this only for brand-new files or full rewrites. For most edits PREFER edit_deployed_file (find-and-replace) — it's faster and avoids re-emitting the entire document. Automatically snapshots, writes to storage, AND pushes to staging.",
+    name: "apply_site_change",
+    description: "Primary website-edit tool. Give it the operator's natural-language request and, optionally, a filename. It silently reads the deployed HTML, creates exact targeted edits, writes storage, and pushes staging. Use this for normal website edits instead of rewriting files.",
     input_schema: {
       type: "object",
-      required: ["filename", "contents", "change_summary"],
+      required: ["instructions"],
       properties: {
-        filename: { type: "string" },
-        contents: { type: "string", description: "Full new HTML contents" },
-        change_summary: { type: "string", description: "Brief description of what changed and why" },
+        instructions: { type: "string", description: "The operator's requested website change, in plain English." },
+        filename: { type: "string", description: "Optional page to edit, e.g. index.html. Leave blank for sitewide or uncertain changes." },
+        files: { type: "array", items: { type: "string" }, description: "Optional specific deployed HTML files to edit." },
       },
     },
   },
