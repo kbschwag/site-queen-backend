@@ -576,7 +576,7 @@ Deployed files: ${deployedFiles.join(", ") || "(none)"}
 Uploaded media: ${(media || []).length} files
 
 HOW TO WORK:
-Use the tools to read files, make changes, and deploy. Don't load everything upfront — fetch what you need.
+Use the tools to read files, make changes, and deploy. Don't load everything upfront — fetch what you need. Beyond the deployed HTML and intake, you can also pull the discovery-call notes (read_call_notes) and the original application (read_application) for tone, brand, and story context.
 
 When you write files, update intake, or push to staging, the changes apply IMMEDIATELY. Snapshots are taken automatically before each write so the operator can undo with one click if needed. Just do the work and tell the operator what you did. Be specific in change_summary — clearly state what changed and where.
 
