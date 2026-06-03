@@ -8,6 +8,7 @@ import {
   corsHeaders, json, ALL_PAGE_FILES, loadDeployedHtml,
   FIELD_INTAKE_KEYS, getCurrentFieldValue,
 } from "../_shared/change-request-shared.ts";
+import { requireUser } from "../_shared/auth.ts";
 
 const MODEL = "claude-sonnet-4-20250514";
 
