@@ -45,12 +45,18 @@ type RenderedMsg =
   | { kind: "assistant"; text: string; toolRuns: ToolRun[]; summary?: TurnSummary }
   | { kind: "system"; note: string };
 
+const CLAUDE_SAFE_IMAGE_BYTES = 4.5 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 1800;
+
+type ChatAttachment = { url: string; name: string; type: "image" | "file"; mime_type: string; size?: number };
+
 export function OperatorChatPanel({ clientId }: Props) {
   const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<RenderedMsg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [attachments, setAttachments] = useState<{ url: string; name: string; type: "image" | "file"; mime_type: string }[]>([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,17 +89,31 @@ export function OperatorChatPanel({ clientId }: Props) {
   const handleAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const path = `${clientId}/chat/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("client-uploads").upload(path, file, { upsert: false });
-    if (error) { toast.error(error.message); return; }
-    const { data } = supabase.storage.from("client-uploads").getPublicUrl(path);
-    setAttachments((prev) => [...prev, {
-      url: data.publicUrl,
-      name: file.name,
-      mime_type: file.type,
-      type: file.type.startsWith("image/") ? "image" : "file",
-    }]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setAttachmentUploading(true);
+    try {
+      const prepared = await prepareChatAttachment(file);
+      const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${extensionFor(prepared.file)}`;
+      const path = `${clientId}/chat/${safeName}`;
+      const { error } = await supabase.storage.from("client-uploads").upload(path, prepared.file, {
+        upsert: false,
+        contentType: prepared.mimeType,
+      });
+      if (error) throw error;
+      const { data } = supabase.storage.from("client-uploads").getPublicUrl(path);
+      setAttachments((prev) => [...prev, {
+        url: data.publicUrl,
+        name: prepared.displayName,
+        mime_type: prepared.mimeType,
+        type: prepared.mimeType.startsWith("image/") ? "image" : "file",
+        size: prepared.file.size,
+      }]);
+      if (prepared.optimized) toast.success("Large image optimized for Claude.");
+    } catch (error: any) {
+      toast.error(error?.message || "Upload failed");
+    } finally {
+      setAttachmentUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleUndo = async (messageId: string) => {
@@ -273,8 +293,8 @@ export function OperatorChatPanel({ clientId }: Props) {
         )}
         <div className="flex gap-2 items-end">
           <input ref={fileInputRef} type="file" className="hidden" onChange={handleAttach} />
-          <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={sending}>
-            <Paperclip className="h-4 w-4" />
+          <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={sending || attachmentUploading}>
+            {attachmentUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
           </Button>
           <Textarea
             value={input}
@@ -285,7 +305,7 @@ export function OperatorChatPanel({ clientId }: Props) {
             className="resize-none"
             disabled={sending}
           />
-          <Button onClick={send} disabled={sending || !input.trim()} size="icon">
+          <Button onClick={send} disabled={sending || attachmentUploading || !input.trim()} size="icon">
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
