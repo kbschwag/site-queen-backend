@@ -484,25 +484,13 @@ async function logEdit(supabase: any, clientId: string, opId: string, opEmail: s
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!anthropicKey) return json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
 
-  const token = authHeader.replace("Bearer ", "");
-  const supabaseAuth = createClient(
-    supabaseUrl,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  );
-  const { data: claimsData, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
-  if (claimsErr || !claimsData?.claims?.sub) return json({ error: "Invalid token" }, 401);
-  const caller = { id: claimsData.claims.sub as string };
-
-  const supabase = createClient(supabaseUrl, serviceKey);
+  const authed = await requireUser(req, corsHeaders);
+  if (authed instanceof Response) return authed;
+  const caller = authed.user;
+  const supabase = authed.supabase;
 
   const [{ data: roleRow }, { data: profileRow }] = await Promise.all([
     supabase.from("user_roles").select("role").eq("user_id", caller.id).eq("role", "admin").maybeSingle(),
