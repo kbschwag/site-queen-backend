@@ -786,7 +786,7 @@ serve(async (req) => {
   const history = await loadChatMessages(supabase, chatId);
   const messages: any[] = history.map((m: any) => {
     if (Array.isArray(m.content)) {
-      const safe = m.content.filter((b: any) => b && typeof b === "object" && (b.type === "text" || b.type === "tool_use" || b.type === "tool_result"));
+      const safe = m.content.filter((b: any) => b && typeof b === "object" && (b.type === "text" || b.type === "tool_use" || b.type === "tool_result" || b.type === "image"));
       return { role: m.role, content: safe.length ? safe : [{ type: "text", text: "" }] };
     }
     return m;
