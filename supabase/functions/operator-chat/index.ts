@@ -752,6 +752,60 @@ Be concise. After completing work, one short sentence: what you did and where to
 
 }
 
+function sanitizeMessagesForClaude(messages: any[]): any[] {
+  const cleaned: any[] = [];
+
+  for (const original of messages) {
+    const msg = Array.isArray(original?.content) ? { ...original, content: [...original.content] } : original;
+
+    if (msg?.role === "user" && Array.isArray(msg.content)) {
+      const previous = cleaned[cleaned.length - 1];
+      const expectedIds = new Set<string>(
+        previous?.role === "assistant" && Array.isArray(previous.content)
+          ? previous.content.filter((b: any) => b?.type === "tool_use" && b.id).map((b: any) => b.id)
+          : [],
+      );
+      const toolResults = msg.content.filter(
+        (b: any) => b?.type === "tool_result" && b.tool_use_id && expectedIds.has(b.tool_use_id),
+      );
+      const nonToolResults = msg.content.filter((b: any) => b?.type !== "tool_result");
+      msg.content = [...toolResults, ...nonToolResults];
+      if (msg.content.length === 0) continue;
+    }
+
+    cleaned.push(msg);
+
+    if (msg?.role === "assistant" && Array.isArray(msg.content)) {
+      const toolUseIds: string[] = msg.content
+        .filter((b: any) => b?.type === "tool_use" && b.id)
+        .map((b: any) => b.id);
+      if (toolUseIds.length === 0) continue;
+
+      const next = messages[messages.indexOf(original) + 1];
+      const nextResultIds = new Set<string>();
+      if (next?.role === "user" && Array.isArray(next.content)) {
+        for (const b of next.content) {
+          if (b?.type === "tool_result" && b.tool_use_id) nextResultIds.add(b.tool_use_id);
+        }
+      }
+      const missing = toolUseIds.filter((id) => !nextResultIds.has(id));
+      if (missing.length > 0) {
+        cleaned.push({
+          role: "user",
+          content: missing.map((id) => ({
+            type: "tool_result",
+            tool_use_id: id,
+            content: JSON.stringify({ success: false, error: "Previous turn was interrupted before this tool completed." }),
+            is_error: true,
+          })),
+        });
+      }
+    }
+  }
+
+  return cleaned;
+}
+
 // ─── Streaming handler ──────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -831,87 +885,9 @@ serve(async (req) => {
     return m;
   });
 
-  // Sanitize conversation for Claude's strict tool_use/tool_result pairing.
-  // Two failure modes we defend against:
-  //  (a) Assistant tool_use rows persisted but tool_result row never inserted
-  //      (prior turn interrupted) → next message is a plain user text, leaving
-  //      tool_use orphaned.
-  //  (b) Recent-N history window starts in the middle, so the first message
-  //      is a user(tool_result) with no preceding assistant tool_use.
-  // Strategy: walk forward, drop orphan leading tool_result blocks, and for
-  // every assistant tool_use, inject a synthetic error tool_result if the
-  // very next message doesn't already supply one.
-  {
-    // 1. Drop leading user messages whose content is only orphan tool_results.
-    while (messages.length > 0) {
-      const m0 = messages[0];
-      if (m0.role !== "user" || !Array.isArray(m0.content)) break;
-      const filtered = m0.content.filter((b: any) => b?.type !== "tool_result");
-      if (filtered.length === m0.content.length) break; // no tool_results to worry about
-      if (filtered.length === 0) {
-        messages.shift();
-        continue;
-      }
-      m0.content = filtered;
-      break;
-    }
-
-    // 2. For each assistant with tool_use, ensure next message provides results.
-    const repaired: any[] = [];
-    for (let i = 0; i < messages.length; i++) {
-      const m = messages[i];
-      repaired.push(m);
-      if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
-      const toolUseIds: string[] = m.content
-        .filter((b: any) => b?.type === "tool_use" && b.id)
-        .map((b: any) => b.id);
-      if (toolUseIds.length === 0) continue;
-      const next = messages[i + 1];
-      const nextResultIds = new Set<string>();
-      if (next?.role === "user" && Array.isArray(next.content)) {
-        for (const b of next.content) {
-          if (b?.type === "tool_result" && b.tool_use_id) nextResultIds.add(b.tool_use_id);
-        }
-      }
-      const missing = toolUseIds.filter((id) => !nextResultIds.has(id));
-      if (missing.length === 0) continue;
-      const synthetic = missing.map((id) => ({
-        type: "tool_result",
-        tool_use_id: id,
-        content: JSON.stringify({ success: false, error: "Previous turn was interrupted before this tool completed." }),
-        is_error: true,
-      }));
-      if (next?.role === "user" && Array.isArray(next.content)) {
-        next.content = [...synthetic, ...next.content];
-      } else {
-        // Inject a new user message with just the synthetic results.
-        repaired.push({ role: "user", content: synthetic });
-      }
-    }
-    messages.length = 0;
-    messages.push(...repaired);
-  }
-
-  // Final guard: validate every tool_use has a following tool_result. If any
-  // orphan still slips through (shouldn't), strip those tool_use blocks rather
-  // than 400ing the user.
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i];
-    if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
-    const next = messages[i + 1];
-    const nextIds = new Set<string>();
-    if (next?.role === "user" && Array.isArray(next.content)) {
-      for (const b of next.content) {
-        if (b?.type === "tool_result" && b.tool_use_id) nextIds.add(b.tool_use_id);
-      }
-    }
-    const cleaned = m.content.filter(
-      (b: any) => b?.type !== "tool_use" || (b.id && nextIds.has(b.id))
-    );
-    if (cleaned.length !== m.content.length) {
-      m.content = cleaned.length ? cleaned : [{ type: "text", text: "" }];
-    }
-  }
+  const sanitizedMessages = sanitizeMessagesForClaude(messages);
+  messages.length = 0;
+  messages.push(...sanitizedMessages);
 
 
   const encoder = new TextEncoder();
