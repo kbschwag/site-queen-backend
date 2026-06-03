@@ -592,13 +592,10 @@ async function runTool(name: string, input: any, ctx: ToolCtx): Promise<any> {
 
 
     case "list_uploaded_media": {
-      const { data } = await supabase.storage.from("client-uploads").list(clientId);
-      const base = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/client-uploads/${clientId}`;
+      const media = await listUploadedFilesRecursive(supabase, clientId);
       return {
         success: true,
-        media: (data || []).filter((f: any) => f.name && !f.name.startsWith(".")).map((f: any) => ({
-          name: f.name, url: `${base}/${f.name}`, uploaded_at: f.created_at,
-        })),
+        media,
       };
     }
 
