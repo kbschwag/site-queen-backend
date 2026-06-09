@@ -60,28 +60,6 @@ function MarketingNav() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
           <Link
-            to="/pricing"
-            style={{
-              color: "var(--sq-charcoal)",
-              textDecoration: "none",
-              fontSize: "0.9375rem",
-              fontFamily: '"Inter", sans-serif',
-            }}
-          >
-            Pricing
-          </Link>
-          <Link
-            to="/how-it-works"
-            style={{
-              color: "var(--sq-charcoal)",
-              textDecoration: "none",
-              fontSize: "0.9375rem",
-              fontFamily: '"Inter", sans-serif',
-            }}
-          >
-            How it works
-          </Link>
-          <Link
             to="/help"
             style={{
               color: "var(--sq-charcoal)",
@@ -92,6 +70,7 @@ function MarketingNav() {
           >
             Help
           </Link>
+
           <Link to="/apply" className="sq-button">
             Apply to qualify
           </Link>
