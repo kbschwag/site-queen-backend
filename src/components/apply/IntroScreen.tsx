@@ -1,32 +1,75 @@
-import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
-
 interface Props {
   onStart: () => void;
 }
 
 export default function IntroScreen({ onStart }: Props) {
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
-      <div className="max-w-xl w-full text-center space-y-8">
-        <div className="text-6xl mb-2">♛</div>
-        <h1 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
-          Apply to work with SiteQueen ♛
+    <div
+      style={{
+        minHeight: "100vh",
+        backgroundColor: "var(--sq-cream)",
+        color: "var(--sq-charcoal)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "3rem 1rem",
+      }}
+    >
+      <div style={{ maxWidth: "38rem", width: "100%", textAlign: "center" }}>
+        <div
+          style={{
+            fontSize: "3.5rem",
+            color: "var(--sq-aubergine)",
+            marginBottom: "1rem",
+            lineHeight: 1,
+          }}
+        >
+          ♛
+        </div>
+        <h1
+          style={{
+            fontFamily: '"Playfair Display", Georgia, serif',
+            fontSize: "2.5rem",
+            fontWeight: 500,
+            color: "var(--sq-aubergine)",
+            lineHeight: 1.15,
+            letterSpacing: "-0.01em",
+            margin: "0 0 1.5rem",
+          }}
+        >
+          Apply to work with SiteQueen
         </h1>
-        <div className="space-y-4 text-muted-foreground text-base sm:text-lg leading-relaxed text-left sm:text-center">
-          <p>
+        <hr className="sq-divider" style={{ margin: "0 auto 2rem", maxWidth: "8rem" }} />
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.25rem",
+            fontFamily: '"Inter", sans-serif',
+            fontSize: "1.0625rem",
+            lineHeight: 1.7,
+            color: "var(--sq-charcoal)",
+            marginBottom: "2.5rem",
+          }}
+        >
+          <p style={{ margin: 0 }}>
             SiteQueen works with a limited number of businesses each month. We pour real time, expertise, and creative energy into every website we build — so we're selective about who we work with.
           </p>
-          <p>
+          <p style={{ margin: 0 }}>
             Tell us about your business. If we think we can build something incredible together we'll be in touch within 24 hours.
           </p>
-          <p className="text-foreground font-medium">
+          <p className="sq-serif-italic" style={{ margin: 0, color: "var(--sq-aubergine)", fontSize: "1.125rem" }}>
             We review every application personally. ♛
           </p>
         </div>
-        <Button onClick={onStart} size="lg" className="w-full gap-2 text-base">
-          Tell us about your business <ArrowRight className="w-5 h-5" />
-        </Button>
+        <button
+          type="button"
+          onClick={onStart}
+          className="sq-button"
+          style={{ fontSize: "1rem" }}
+        >
+          Tell us about your business →
+        </button>
       </div>
     </div>
   );
