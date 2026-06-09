@@ -279,17 +279,45 @@ export default function Apply() {
   if (showIntro) return <IntroScreen onStart={() => setShowIntro(false)} />;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen"
+      style={{
+        backgroundColor: "var(--sq-cream)",
+        color: "var(--sq-charcoal)",
+        fontFamily: '"Inter", sans-serif',
+      }}
+    >
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
+      <div
+        className="sticky top-0 z-10"
+        style={{
+          backgroundColor: "rgba(245, 239, 230, 0.95)",
+          backdropFilter: "blur(8px)",
+          borderBottom: "1px solid rgba(60, 31, 59, 0.08)",
+        }}
+      >
         <div className="max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-muted-foreground">
+            <p
+              style={{
+                fontFamily: '"Playfair Display", Georgia, serif',
+                fontSize: "1rem",
+                color: "var(--sq-aubergine)",
+                fontWeight: 500,
+                letterSpacing: "-0.01em",
+              }}
+            >
               Step {step} of {TOTAL_STEPS}
             </p>
-            <p className="text-sm text-muted-foreground">{STEP_LABELS[step - 1]}</p>
+            <p style={{ fontSize: "0.8125rem", color: "var(--sq-stone)", letterSpacing: "0.04em" }}>
+              {STEP_LABELS[step - 1]}
+            </p>
           </div>
-          <Progress value={(step / TOTAL_STEPS) * 100} className="h-2" />
+          <Progress
+            value={(step / TOTAL_STEPS) * 100}
+            className="h-1.5"
+            style={{ backgroundColor: "rgba(60, 31, 59, 0.1)" }}
+          />
         </div>
       </div>
 
@@ -304,25 +332,47 @@ export default function Apply() {
       </div>
 
       {/* Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t">
+      <div
+        className="fixed bottom-0 left-0 right-0"
+        style={{
+          backgroundColor: "rgba(245, 239, 230, 0.95)",
+          backdropFilter: "blur(8px)",
+          borderTop: "1px solid rgba(60, 31, 59, 0.08)",
+        }}
+      >
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
           {step > 1 ? (
-            <Button variant="ghost" onClick={handleBack} className="gap-2">
+            <Button
+              variant="ghost"
+              onClick={handleBack}
+              className="gap-2"
+              style={{ color: "var(--sq-aubergine)" }}
+            >
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           ) : (
             <div />
           )}
           {step < TOTAL_STEPS ? (
-            <Button onClick={handleNext} className="gap-2">
-              Continue <ArrowRight className="w-4 h-4" />
-            </Button>
+            <Link to="#" onClick={(e) => { e.preventDefault(); handleNext(); }} className="sq-button">
+              Continue →
+            </Link>
           ) : (
-            <div className="flex flex-col items-end gap-1">
-              <Button onClick={handleSubmit} disabled={loading} className="gap-2">
-                {loading ? "Submitting..." : <>Submit my application ♛ <Send className="w-4 h-4" /></>}
-              </Button>
-              <p className="text-xs text-muted-foreground">We review every application personally and will be in touch within 24 hours. ♛</p>
+            <div className="flex flex-col items-end gap-2">
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="sq-button"
+                style={{ border: "none", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1 }}
+              >
+                {loading ? "Submitting..." : "Submit my application ♛"}
+              </button>
+              <p
+                className="sq-serif-italic"
+                style={{ fontSize: "0.75rem", color: "var(--sq-stone)", maxWidth: "280px", textAlign: "right" }}
+              >
+                We review every application personally and will be in touch within 24 hours.
+              </p>
             </div>
           )}
         </div>
@@ -330,3 +380,4 @@ export default function Apply() {
     </div>
   );
 }
+
