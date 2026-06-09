@@ -129,12 +129,11 @@ function MarketingFooter() {
           </div>
 
           <div style={{ display: "flex", gap: "3rem", flexWrap: "wrap" }}>
-            <FooterLink to="/pricing">Pricing</FooterLink>
-            <FooterLink to="/how-it-works">How it works</FooterLink>
             <FooterLink to="/help">Help</FooterLink>
             <FooterLink to="/apply">Apply</FooterLink>
             <FooterLink to="/privacy">Privacy</FooterLink>
             <FooterLink to="/terms">Terms</FooterLink>
+
           </div>
         </div>
 
