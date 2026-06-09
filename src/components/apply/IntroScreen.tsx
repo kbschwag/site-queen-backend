@@ -5,7 +5,7 @@ interface Props {
 export default function IntroScreen({ onStart }: Props) {
   return (
     <div
-      className="marketing-scope min-h-screen flex items-center justify-center px-4 py-12"
+      className="min-h-screen flex items-center justify-center px-4 py-12"
       style={{ backgroundColor: "var(--sq-cream)", color: "var(--sq-charcoal)" }}
     >
       <div className="max-w-xl w-full text-center space-y-8">
