@@ -12,16 +12,19 @@ import "@/styles/marketing-tokens.css";
  * Do NOT share this layout with the authenticated app.
  */
 export default function MarketingLayout() {
+  const location = useLocation();
+  const hideFooter = location.pathname.startsWith("/apply");
   return (
     <div className="marketing-scope">
       <MarketingNav />
       <main>
         <Outlet />
       </main>
-      <MarketingFooter />
+      {!hideFooter && <MarketingFooter />}
     </div>
   );
 }
+
 
 function MarketingNav() {
   return (
