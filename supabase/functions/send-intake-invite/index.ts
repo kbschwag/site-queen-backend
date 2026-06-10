@@ -104,7 +104,9 @@ serve(async (req) => {
         id: clientId,
         user_id: userId,
         business_name: businessName,
+        business_type: "other",
         plan,
+
         site_status: "building",
         subscription_status: "active",
         lifecycle_stage: "converted",
