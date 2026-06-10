@@ -3,17 +3,21 @@ import { useOperatorRole } from "@/hooks/useOperatorRole";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Crown, Users, FileText, MessageSquare, AlertTriangle, TrendingUp, Zap, Eye, Clock, RefreshCw, Loader2, Target } from "lucide-react";
+import { Crown, Users, FileText, MessageSquare, AlertTriangle, TrendingUp, Zap, Eye, Clock, RefreshCw, Loader2, Target, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { SendIntakeInviteModal } from "@/components/operator/SendIntakeInviteModal";
+
 
 export default function OperatorDashboard() {
   const { role, isOwner } = useOperatorRole();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+
 
   const { data: failedSites = [] } = useQuery({
     queryKey: ["operator-failed-sites"],
@@ -236,6 +240,10 @@ export default function OperatorDashboard() {
               <Eye className="h-4 w-4" /> Clients Needing Attention
               {stats?.needsAttention ? <span className="bg-amber-100 text-amber-700 rounded-full px-1.5 text-xs">{stats.needsAttention}</span> : null}
             </Button>
+            <Button onClick={() => setInviteOpen(true)} variant="outline" className="gap-2">
+              <Send className="h-4 w-4" /> Send Intake Form
+            </Button>
+
           </div>
         </CardContent>
       </Card>
