@@ -372,6 +372,9 @@ export default function OperatorDashboard() {
           )}
         </CardContent>
       </Card>
+
+      <SendIntakeInviteModal open={inviteOpen} onOpenChange={setInviteOpen} />
     </div>
   );
+
 }
