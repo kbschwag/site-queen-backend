@@ -2,88 +2,117 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* =========================================================
+   Site Queen — Global Design System
+   All colors are HSL. Brand tokens are mapped onto shadcn
+   semantic variables so every existing component inherits
+   the theme automatically.
+   ========================================================= */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* --- Brand palette (raw) --- */
+    --sq-purple: 263 49% 33%;        /* #4A2A7C */
+    --sq-purple-deep: 263 48% 24%;   /* #36205C */
+    --sq-purple-soft: 264 56% 96%;   /* #F5F1FB */
+    --sq-gold: 41 47% 55%;           /* #C2A256 */
+    --sq-gold-deep: 41 49% 44%;      /* #A8863A */
+    --sq-ink: 252 28% 14%;           /* #1F1A2E */
+    --sq-muted: 257 13% 45%;         /* #6C6580 */
+    --sq-line: 264 50% 91%;          /* #E7E0F3 */
+    --sq-surface: 0 0% 100%;         /* #FFFFFF */
+    --sq-bg: 270 56% 98%;            /* #FAF8FD */
+    --sq-success: 150 56% 41%;       /* #2EA56B */
+    --sq-warning: 38 73% 55%;        /* #E0A33B */
+    --sq-error: 0 73% 56%;           /* #E23B3B */
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Convenience aliases used by brand-aware components */
+    --purple: var(--sq-purple);
+    --purple-deep: var(--sq-purple-deep);
+    --purple-soft: var(--sq-purple-soft);
+    --gold: var(--sq-gold);
+    --gold-deep: var(--sq-gold-deep);
+    --ink: var(--sq-ink);
+    --line: var(--sq-line);
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    /* --- shadcn semantic mapping --- */
+    --background: var(--sq-bg);
+    --foreground: var(--sq-ink);
 
-    --primary: 280 60% 50%;
+    --card: var(--sq-surface);
+    --card-foreground: var(--sq-ink);
+
+    --popover: var(--sq-surface);
+    --popover-foreground: var(--sq-ink);
+
+    --primary: var(--sq-purple);
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 280 30% 96%;
-    --secondary-foreground: 280 60% 30%;
+    --secondary: var(--sq-purple-soft);
+    --secondary-foreground: var(--sq-purple);
 
-    --muted: 280 10% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: var(--sq-purple-soft);
+    --muted-foreground: var(--sq-muted);
 
-    --accent: 330 80% 55%;
-    --accent-foreground: 0 0% 100%;
+    --accent: var(--sq-gold);
+    --accent-foreground: var(--sq-ink);
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: var(--sq-error);
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 280 60% 50%;
+    --success: var(--sq-success);
+    --success-foreground: 0 0% 100%;
+    --warning: var(--sq-warning);
+    --warning-foreground: var(--sq-ink);
 
-    --radius: 0.5rem;
+    --border: var(--sq-line);
+    --input: var(--sq-line);
+    --ring: var(--sq-purple);
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 280 60% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 280 30% 96%;
-    --sidebar-accent-foreground: 280 60% 30%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 280 60% 50%;
+    --radius: 1.25rem;            /* cards 20px */
+    --radius-input: 0.75rem;      /* inputs 12px */
+    --radius-pill: 999px;
+
+    /* Typography */
+    --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-serif: 'Lora', Georgia, serif;
+
+    /* Shadows */
+    --shadow-sm: 0 4px 12px rgba(40, 22, 80, .05);
+    --shadow-md: 0 10px 30px rgba(40, 22, 80, .08);
+    --shadow-lg: 0 22px 50px rgba(40, 22, 80, .12);
+
+    /* Sidebar (deep purple chrome) */
+    --sidebar-background: var(--sq-purple-deep);
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: var(--sq-gold);
+    --sidebar-primary-foreground: var(--sq-ink);
+    --sidebar-accent: 263 48% 30%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 263 48% 28%;
+    --sidebar-ring: var(--sq-gold);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: var(--sq-purple-deep);
+    --foreground: 0 0% 100%;
+    --card: 263 48% 18%;
+    --card-foreground: 0 0% 100%;
+    --popover: 263 48% 18%;
+    --popover-foreground: 0 0% 100%;
+    --primary: var(--sq-gold);
+    --primary-foreground: var(--sq-ink);
+    --secondary: 263 48% 22%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 263 30% 22%;
+    --muted-foreground: 264 20% 75%;
+    --accent: var(--sq-gold);
+    --accent-foreground: var(--sq-ink);
+    --destructive: var(--sq-error);
+    --destructive-foreground: 0 0% 100%;
+    --border: 263 30% 28%;
+    --input: 263 30% 28%;
+    --ring: var(--sq-gold);
   }
 }
 
@@ -92,7 +121,104 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-display);
+    font-feature-settings: "ss01", "cv11";
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    color: hsl(var(--ink));
+    letter-spacing: -0.01em;
+  }
+
+  h1 { font-weight: 800; line-height: 1.15; }
+  h2 { font-weight: 700; line-height: 1.2; }
+  h3, h4 { font-weight: 700; line-height: 1.25; }
+
+  /* Serif: editorial moments */
+  .font-serif,
+  .sq-serif {
+    font-family: var(--font-serif);
+  }
+
+  a {
+    color: hsl(var(--sq-purple));
+    text-decoration: none;
+  }
+  a:hover { text-decoration: underline; }
+
+  /* Focus ring — always visible, brand purple */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px hsl(var(--sq-purple) / 0.25);
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: hsl(var(--sq-purple) / 0.18);
+    color: hsl(var(--sq-ink));
+  }
+
+  /* Form helpers */
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(var(--sq-muted));
+  }
+
+  /* Scrollbar — subtle brand tint */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--sq-line));
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--sq-purple) / 0.4); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Brand utility classes */
+  .sq-card {
+    @apply bg-card text-card-foreground border border-border;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 1.75rem;
+  }
+  .sq-card-hover {
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .sq-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .sq-badge-gold {
+    background: hsl(var(--sq-gold) / 0.15);
+    color: hsl(var(--sq-gold-deep));
+    border: 1px solid hsl(var(--sq-gold) / 0.35);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .sq-link {
+    color: hsl(var(--sq-purple));
+    font-weight: 600;
+  }
+  .sq-link:hover { color: hsl(var(--sq-purple-deep)); text-decoration: underline; }
 }

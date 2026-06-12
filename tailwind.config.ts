@@ -13,6 +13,11 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["Plus Jakarta Sans", "system-ui", "-apple-system", "sans-serif"],
+        display: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
+        serif: ["Lora", "Georgia", "serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -47,6 +52,29 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+        // Site Queen brand palette
+        brand: {
+          purple: "hsl(var(--sq-purple))",
+          "purple-deep": "hsl(var(--sq-purple-deep))",
+          "purple-soft": "hsl(var(--sq-purple-soft))",
+          gold: "hsl(var(--sq-gold))",
+          "gold-deep": "hsl(var(--sq-gold-deep))",
+          ink: "hsl(var(--sq-ink))",
+          muted: "hsl(var(--sq-muted))",
+          line: "hsl(var(--sq-line))",
+          surface: "hsl(var(--sq-surface))",
+          bg: "hsl(var(--sq-bg))",
+        },
+        ink: "hsl(var(--sq-ink))",
+        line: "hsl(var(--sq-line))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -60,8 +88,17 @@ export default {
       },
       borderRadius: {
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        md: "calc(var(--radius) - 6px)",
+        sm: "calc(var(--radius) - 10px)",
+        input: "var(--radius-input)",
+        card: "var(--radius)",
+        pill: "var(--radius-pill)",
+      },
+      boxShadow: {
+        sm: "var(--shadow-sm)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
+        brand: "var(--shadow-md)",
       },
       keyframes: {
         "accordion-down": {
