@@ -279,50 +279,24 @@ export default function Apply() {
   if (showIntro) return <IntroScreen onStart={() => setShowIntro(false)} />;
 
   return (
-    <div
-      className="min-h-screen"
-      style={{
-        backgroundColor: "var(--sq-cream)",
-        color: "var(--sq-charcoal)",
-        fontFamily: '"Inter", sans-serif',
-      }}
-    >
+    <main className="min-h-dvh bg-background text-foreground">
       {/* Header */}
-      <div
-        className="sticky top-0 z-10"
-        style={{
-          backgroundColor: "rgba(245, 239, 230, 0.95)",
-          backdropFilter: "blur(8px)",
-          borderBottom: "1px solid rgba(60, 31, 59, 0.08)",
-        }}
-      >
+      <div className="sticky top-0 z-10 bg-background/85 backdrop-blur border-b border-border">
         <div className="max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-3">
-            <p
-              style={{
-                fontFamily: '"Playfair Display", Georgia, serif',
-                fontSize: "1rem",
-                color: "var(--sq-aubergine)",
-                fontWeight: 500,
-                letterSpacing: "-0.01em",
-              }}
-            >
+            <p className="text-base font-bold text-ink tracking-tight">
               Step {step} of {TOTAL_STEPS}
             </p>
-            <p style={{ fontSize: "0.8125rem", color: "var(--sq-stone)", letterSpacing: "0.04em" }}>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
               {STEP_LABELS[step - 1]}
             </p>
           </div>
-          <Progress
-            value={(step / TOTAL_STEPS) * 100}
-            className="h-1.5"
-            style={{ backgroundColor: "rgba(60, 31, 59, 0.1)" }}
-          />
+          <Progress value={(step / TOTAL_STEPS) * 100} className="h-1.5" />
         </div>
       </div>
 
       {/* Form content */}
-      <div className="max-w-2xl mx-auto px-4 py-8 pb-32">
+      <div className="max-w-2xl mx-auto px-4 py-10 pb-32">
         <div className="transition-opacity duration-300">
           {step === 1 && <StepBusiness form={form} update={update} />}
           {step === 2 && <StepCustomers form={form} update={update} />}
@@ -332,52 +306,33 @@ export default function Apply() {
       </div>
 
       {/* Navigation */}
-      <div
-        className="fixed bottom-0 left-0 right-0"
-        style={{
-          backgroundColor: "rgba(245, 239, 230, 0.95)",
-          backdropFilter: "blur(8px)",
-          borderTop: "1px solid rgba(60, 31, 59, 0.08)",
-        }}
-      >
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div className="fixed bottom-0 left-0 right-0 bg-background/90 backdrop-blur border-t border-border">
+        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           {step > 1 ? (
-            <Button
-              variant="ghost"
-              onClick={handleBack}
-              className="gap-2"
-              style={{ color: "var(--sq-aubergine)" }}
-            >
+            <Button variant="ghost" onClick={handleBack} className="gap-2">
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           ) : (
             <div />
           )}
           {step < TOTAL_STEPS ? (
-            <Link to="#" onClick={(e) => { e.preventDefault(); handleNext(); }} className="sq-button">
-              Continue →
-            </Link>
+            <Button onClick={handleNext}>
+              Continue
+            </Button>
           ) : (
             <div className="flex flex-col items-end gap-2">
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="sq-button"
-                style={{ border: "none", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1 }}
-              >
-                {loading ? "Submitting..." : "Submit my application ♛"}
-              </button>
-              <p
-                className="sq-serif-italic"
-                style={{ fontSize: "0.75rem", color: "var(--sq-stone)", maxWidth: "280px", textAlign: "right" }}
-              >
+              <Button onClick={handleSubmit} disabled={loading} variant="gold">
+                {loading ? "Submitting…" : "Submit my application ♛"}
+              </Button>
+              <p className="text-xs text-muted-foreground max-w-[280px] text-right font-serif italic">
                 We review every application personally and will be in touch within 24 hours.
               </p>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
+
 
