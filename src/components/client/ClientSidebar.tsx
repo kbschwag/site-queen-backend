@@ -95,7 +95,7 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
               {navItems.slice(0, 2).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end={item.url === "/dashboard"} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                    <NavLink to={item.url} end={item.url === "/dashboard"} className="text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
@@ -105,7 +105,7 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
 
               {/* Analytics expandable group */}
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={() => setForceOpen((o) => !o)} className="hover:bg-sidebar-accent/50">
+                <SidebarMenuButton onClick={() => setForceOpen((o) => !o)} className="text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground">
                   <BarChart3 className="mr-2 h-4 w-4" />
                   {!collapsed && (
                     <span className="flex-1 flex items-center justify-between">
@@ -118,7 +118,7 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
               {!collapsed && isAnalyticsExpanded && analyticsSubItems.map((sub) => (
                 <SidebarMenuItem key={sub.url}>
                   <SidebarMenuButton asChild size="sm">
-                    <NavLink to={sub.url} end className="hover:bg-sidebar-accent/50 pl-8" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                    <NavLink to={sub.url} end className="text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground pl-8" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
                       <span className="flex-1 flex items-center justify-between text-xs">
                         <span>{sub.title}</span>
                         {sub.premium && !isPremium && <Badge variant="outline" className="text-[9px] px-1 py-0 ml-2 border-amber-400 text-amber-600">PREMIUM</Badge>}
@@ -131,7 +131,7 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
               {navItems.slice(2).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end={item.url === "/dashboard"} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                    <NavLink to={item.url} end={item.url === "/dashboard"} className="text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && (
                         <span className="flex-1 flex items-center justify-between">
@@ -154,7 +154,7 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
             <SidebarMenuButton asChild>
               <NavLink
                 to="/dashboard/settings"
-                className="hover:bg-sidebar-accent/50"
+                className="text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                 activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
               >
                 <Settings className="mr-2 h-4 w-4" />
@@ -166,8 +166,8 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
 
         {!collapsed && (
           <div className="px-2 py-1">
-            <p className="text-xs font-medium truncate">{businessName}</p>
-            <Badge variant="outline" className="text-[10px] mt-0.5">
+            <p className="text-xs font-medium truncate text-sidebar-foreground">{businessName}</p>
+            <Badge variant="outline" className="text-[10px] mt-0.5 border-sidebar-border text-sidebar-foreground">
               {planLabels[plan] || plan} Plan
             </Badge>
           </div>
@@ -176,7 +176,7 @@ export function ClientSidebar({ businessName, plan, creditsBalance = 0 }: Client
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start gap-2 text-muted-foreground hover:text-destructive"
+          className="w-full justify-start gap-2 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
           onClick={handleSignOut}
         >
           <LogOut className="h-4 w-4" />
