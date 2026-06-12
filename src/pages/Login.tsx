@@ -233,7 +233,7 @@ export default function Login() {
           </div>
 
           <p className="text-center text-sm text-muted-foreground">
-            Don't have an account? <Link to="/signup" className="text-primary underline">Sign up</Link>
+            Don't have an account? <Link to="/apply" className="text-primary underline">Apply</Link>
           </p>
         </CardContent>
       </Card>
