@@ -113,7 +113,7 @@ export function OperatorSidebar() {
                     <NavLink
                       to={item.url}
                       end={item.url === "/operator"}
-                      className="hover:bg-sidebar-accent/50"
+                      className="text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                       activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                     >
                       <item.icon className="mr-2 h-4 w-4" />
@@ -129,14 +129,14 @@ export function OperatorSidebar() {
 
       <SidebarFooter className="p-2">
         {!collapsed && user && (
-          <p className="text-xs text-muted-foreground truncate px-2 mb-1">
+          <p className="text-xs text-sidebar-foreground/70 truncate px-2 mb-1">
             {user.email}
           </p>
         )}
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start gap-2 text-muted-foreground hover:text-destructive"
+          className="w-full justify-start gap-2 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
           onClick={handleSignOut}
         >
           <LogOut className="h-4 w-4" />
