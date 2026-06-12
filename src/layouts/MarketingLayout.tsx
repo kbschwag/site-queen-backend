@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import logoAsset from "@/assets/sitequeen-logo.png.asset.json";
 
 /**
  * MarketingLayout — wraps public-facing pages (/, /pricing, /how-it-works, /apply, /help).
