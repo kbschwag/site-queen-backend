@@ -72,6 +72,14 @@ function MarketingFooter() {
             <FooterLink to="/apply">Apply</FooterLink>
             <FooterLink to="/privacy">Privacy</FooterLink>
             <FooterLink to="/terms">Terms</FooterLink>
+            <a
+              href="https://sitequeen.ai/contact"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-foreground hover:text-brand-purple hover:no-underline"
+            >
+              Contact
+            </a>
           </div>
         </div>
 

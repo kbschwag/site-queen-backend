@@ -47,6 +47,8 @@ import OperatorTeam from "./pages/operator/OperatorTeam";
 import OperatorSettings from "./pages/operator/OperatorSettings";
 import OperatorTools from "./pages/operator/OperatorTools";
 import ClaimProspect from "./pages/ClaimProspect";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +69,8 @@ const App = () => (
               <Route path="/old-home" element={<MarketingHome />} />
             </Route>
 
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
