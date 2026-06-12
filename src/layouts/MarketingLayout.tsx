@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import logoAsset from "@/assets/sitequeen-logo.png.asset.json";
 
 /**
  * MarketingLayout — wraps public-facing pages (/, /pricing, /how-it-works, /apply, /help).
@@ -20,17 +21,15 @@ export default function MarketingLayout() {
 }
 
 function Wordmark({ size = "md" }: { size?: "md" | "lg" }) {
-  const cls =
-    size === "lg"
-      ? "text-2xl md:text-[1.75rem]"
-      : "text-xl";
+  const h = size === "lg" ? "h-10 md:h-12" : "h-8";
   return (
-    <Link
-      to="/"
-      className={`${cls} font-extrabold tracking-tight text-ink hover:no-underline inline-flex items-center gap-1.5`}
-    >
-      Site<span className="text-brand-purple">Queen</span>
-      <span className="text-brand-gold text-base align-middle">♛</span>
+    <Link to="/" className="inline-flex items-center hover:no-underline" aria-label="Site Queen home">
+      <img
+        src={logoAsset.url}
+        alt="Site Queen"
+        className={`${h} w-auto select-none`}
+        draggable={false}
+      />
     </Link>
   );
 }
