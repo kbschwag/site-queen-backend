@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, Mail, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
 import { FAQS, FAQ_CATEGORIES, type FaqCategory } from "@/data/help-faqs";
 
 type Filter = "All" | FaqCategory;
@@ -39,105 +40,50 @@ export default function MarketingHelp() {
   }, [visibleFaqs]);
 
   return (
-    <>
+    <main className="bg-background min-h-dvh">
       {/* Hero */}
-      <section
-        style={{
-          backgroundColor: "#534AB7",
-          color: "#ffffff",
-          padding: "5rem 2rem 4rem",
-        }}
-      >
-        <div style={{ maxWidth: 880, margin: "0 auto", textAlign: "center" }}>
-          <h1
-            style={{
-              fontFamily: '"Playfair Display", Georgia, serif',
-              fontSize: "clamp(2rem, 5vw, 3.25rem)",
-              margin: "0 0 1rem",
-              fontWeight: 500,
-              lineHeight: 1.15,
-            }}
-          >
-            How can we help? ♛
+      <section className="bg-brand-purple-deep text-white px-6 pt-20 pb-16">
+        <div className="max-w-3xl mx-auto text-center">
+          <h1 className="font-display text-4xl md:text-5xl font-extrabold tracking-tight mb-3 text-white">
+            How can we help? <span className="text-brand-gold">♛</span>
           </h1>
-          <p
-            style={{
-              fontSize: "1.125rem",
-              opacity: 0.85,
-              margin: "0 0 2.5rem",
-              fontFamily: '"Inter", sans-serif',
-            }}
-          >
-            Find answers to common questions about SiteQueen
+          <p className="text-lg text-white/80 mb-10">
+            Find answers to common questions about Site Queen
           </p>
 
           {/* Search */}
-          <div
-            style={{
-              position: "relative",
-              maxWidth: 640,
-              margin: "0 auto 1.5rem",
-            }}
-          >
+          <div className="relative max-w-xl mx-auto mb-6">
             <Search
               size={20}
-              style={{
-                position: "absolute",
-                left: 18,
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "#534AB7",
-                opacity: 0.6,
-              }}
+              className="absolute left-5 top-1/2 -translate-y-1/2 text-brand-purple/70 pointer-events-none"
+              aria-hidden
             />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for anything..."
-              style={{
-                width: "100%",
-                padding: "1rem 1rem 1rem 3rem",
-                borderRadius: 999,
-                border: "none",
-                fontSize: "1rem",
-                fontFamily: '"Inter", sans-serif',
-                color: "#1a1a2e",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-                outline: "none",
-              }}
+              placeholder="Search for anything…"
+              aria-label="Search help articles"
+              className="w-full h-14 pl-12 pr-5 rounded-pill bg-white text-foreground placeholder:text-muted-foreground shadow-lg outline-none focus-visible:ring-[3px] focus-visible:ring-brand-gold/60"
             />
           </div>
 
           {/* Filter chips */}
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              justifyContent: "center",
-              gap: "0.5rem",
-            }}
-          >
+          <div className="flex flex-wrap justify-center gap-2">
             {FILTERS.map((f) => {
               const active = f === filter;
               return (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  style={{
-                    padding: "0.5rem 1.1rem",
-                    borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.4)",
-                    background: active ? "#ffffff" : "transparent",
-                    color: active ? "#534AB7" : "#ffffff",
-                    fontSize: "0.875rem",
-                    fontFamily: '"Inter", sans-serif',
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                  }}
+                  className={[
+                    "px-4 py-2 rounded-pill text-sm font-semibold border transition-all",
+                    active
+                      ? "bg-white text-brand-purple border-white shadow-sm"
+                      : "bg-transparent text-white/90 border-white/40 hover:bg-white/10",
+                  ].join(" ")}
                 >
-                  {f === "All" ? "All" : f}
+                  {f}
                 </button>
               );
             })}
@@ -146,23 +92,16 @@ export default function MarketingHelp() {
       </section>
 
       {/* FAQ list */}
-      <section style={{ padding: "4rem 2rem" }}>
-        <div style={{ maxWidth: 880, margin: "0 auto" }}>
+      <section className="px-6 py-16">
+        <div className="max-w-3xl mx-auto">
           {visibleFaqs.length === 0 ? (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "3rem 1rem",
-                color: "var(--sq-stone, #6b6776)",
-                fontFamily: '"Inter", sans-serif',
-              }}
-            >
-              <p style={{ fontSize: "1rem", margin: 0 }}>
+            <div className="text-center py-12 text-muted-foreground">
+              <p className="text-base">
                 No results for &ldquo;{query}&rdquo; — try different keywords or
-                contact us at{" "}
+                email us at{" "}
                 <a
                   href="mailto:hello@sitequeen.ai"
-                  style={{ color: "#534AB7", fontWeight: 600 }}
+                  className="sq-link"
                 >
                   hello@sitequeen.ai
                 </a>
@@ -170,88 +109,45 @@ export default function MarketingHelp() {
             </div>
           ) : (
             Array.from(grouped.entries()).map(([cat, items]) => (
-              <div key={cat} style={{ marginBottom: "3rem" }}>
-                <h2
-                  style={{
-                    fontFamily: '"Playfair Display", Georgia, serif',
-                    fontSize: "1.75rem",
-                    fontWeight: 500,
-                    color: "var(--sq-aubergine, #3c1f3b)",
-                    marginBottom: "1.25rem",
-                  }}
-                >
+              <div key={cat} className="mb-12">
+                <h2 className="text-2xl font-bold text-ink mb-5">
                   {cat}
                 </h2>
 
-                <div
-                  style={{
-                    background: "#ffffff",
-                    borderRadius: 16,
-                    border: "1px solid rgba(60,31,59,0.08)",
-                    overflow: "hidden",
-                  }}
-                >
-                  {items.map((faq) => {
+                <div className="bg-card rounded-card border border-border shadow-sm overflow-hidden">
+                  {items.map((faq, idx) => {
                     const id = `${faq.category}-${faq.question}`;
                     const isOpen = openId === id;
                     return (
                       <div
                         key={id}
-                        style={{
-                          borderBottom: "1px solid rgba(60,31,59,0.06)",
-                        }}
+                        className={
+                          idx !== items.length - 1
+                            ? "border-b border-border"
+                            : ""
+                        }
                       >
                         <button
                           onClick={() => setOpenId(isOpen ? null : id)}
-                          style={{
-                            width: "100%",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "1.1rem 1.5rem",
-                            background: "transparent",
-                            border: "none",
-                            textAlign: "left",
-                            cursor: "pointer",
-                            fontFamily: '"Inter", sans-serif',
-                            fontSize: "1rem",
-                            fontWeight: 500,
-                            color: "var(--sq-charcoal, #2a2530)",
-                          }}
                           aria-expanded={isOpen}
+                          className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left font-semibold text-ink hover:bg-brand-purple-soft/60 transition-colors"
                         >
                           <span>{faq.question}</span>
                           <ChevronDown
                             size={18}
-                            style={{
-                              transform: isOpen ? "rotate(180deg)" : "none",
-                              transition: "transform 0.2s",
-                              flexShrink: 0,
-                              marginLeft: "1rem",
-                              color: "#534AB7",
-                            }}
+                            className={[
+                              "shrink-0 text-brand-purple transition-transform",
+                              isOpen ? "rotate-180" : "",
+                            ].join(" ")}
                           />
                         </button>
                         <div
+                          className="overflow-hidden transition-all duration-300"
                           style={{
                             maxHeight: isOpen ? 600 : 0,
-                            overflow: "hidden",
-                            transition:
-                              "max-height 0.3s ease, padding 0.2s ease",
-                            padding: isOpen
-                              ? "0 1.5rem 1.25rem 1.5rem"
-                              : "0 1.5rem",
                           }}
                         >
-                          <p
-                            style={{
-                              margin: 0,
-                              color: "var(--sq-stone, #6b6776)",
-                              fontFamily: '"Inter", sans-serif',
-                              fontSize: "0.95rem",
-                              lineHeight: 1.7,
-                            }}
-                          >
+                          <p className="px-6 pb-5 text-muted-foreground leading-relaxed">
                             {faq.answer}
                           </p>
                         </div>
@@ -266,64 +162,33 @@ export default function MarketingHelp() {
       </section>
 
       {/* Contact CTA */}
-      <section
-        style={{
-          background: "var(--sq-cream, #f8f5f0)",
-          padding: "4rem 2rem",
-          textAlign: "center",
-        }}
-      >
+      <section className="bg-brand-purple-soft px-6 py-16 text-center">
         <Mail
           size={32}
-          style={{ color: "#534AB7", marginBottom: "1rem" }}
+          className="mx-auto text-brand-purple mb-3"
           aria-hidden
         />
-        <h2
-          style={{
-            fontFamily: '"Playfair Display", Georgia, serif',
-            fontSize: "2rem",
-            fontWeight: 500,
-            color: "var(--sq-aubergine, #3c1f3b)",
-            margin: "0 0 0.5rem",
-          }}
-        >
-          Still have questions? ♛
+        <h2 className="text-3xl font-extrabold text-ink mb-2">
+          Still have questions? <span className="text-brand-gold">♛</span>
         </h2>
-        <p
-          style={{
-            fontFamily: '"Inter", sans-serif',
-            color: "var(--sq-stone, #6b6776)",
-            margin: "0 0 2rem",
-          }}
-        >
-          We&apos;re real people — reach out anytime
+        <p className="text-muted-foreground mb-8">
+          We&apos;re real people — reach out anytime.
         </p>
-        <div
-          style={{
-            display: "flex",
-            gap: "1rem",
-            justifyContent: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <a
-            href="mailto:hello@sitequeen.ai"
-            className="sq-button"
-            style={{ background: "#534AB7" }}
-          >
-            Email us
-          </a>
+        <div className="flex flex-wrap gap-3 justify-center">
+          <Button asChild>
+            <a href="mailto:hello@sitequeen.ai">Email us</a>
+          </Button>
           {isLoggedIn ? (
-            <Link to="/dashboard" className="sq-button">
-              Go to my dashboard
-            </Link>
+            <Button asChild variant="outline">
+              <Link to="/dashboard">Go to my dashboard</Link>
+            </Button>
           ) : (
-            <Link to="/apply" className="sq-button">
-              Apply now
-            </Link>
+            <Button asChild variant="outline">
+              <Link to="/apply">Apply now</Link>
+            </Button>
           )}
         </div>
       </section>
-    </>
+    </main>
   );
 }
