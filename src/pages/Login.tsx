@@ -26,6 +26,14 @@ export default function Login() {
   const [noPasswordHint, setNoPasswordHint] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, isAdmin } = useAuth();
+
+  // Redirect already-logged-in users away from login page
+  useEffect(() => {
+    if (user) {
+      navigate(isAdmin ? "/admin" : "/dashboard");
+    }
+  }, [user, isAdmin, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
