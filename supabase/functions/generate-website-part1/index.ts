@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
-const AI_MODEL = "claude-sonnet-4-20250514";
+const AI_MODEL = "claude-opus-4-20250514";
 const TIMEOUT_MS = 600_000; // 10 minutes
 
 const STAGING_BASE_URL = "https://staging.sitequeen.ai";
