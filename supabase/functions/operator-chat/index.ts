@@ -20,7 +20,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "claude-opus-4-20250514";
+const MODEL = "claude-opus-4-5-20250929";
 const MAX_ITERATIONS = 30;
 const MAX_HISTORY_MESSAGES = 60;
 

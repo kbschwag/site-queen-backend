@@ -10,7 +10,7 @@ import {
 } from "../_shared/change-request-shared.ts";
 import { requireUser } from "../_shared/auth.ts";
 
-const MODEL = "claude-opus-4-20250514";
+const MODEL = "claude-opus-4-5-20250929";
 
 const TOOLS = [
   {
