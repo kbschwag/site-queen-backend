@@ -23,7 +23,7 @@ export const RESTAURANT_STORAGE_FILES: Record<string, string> = {
 };
 
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
-const AI_MODEL = "claude-opus-4-20250514";
+const AI_MODEL = "claude-opus-4-5-20250929";
 const LOVABLE_AI_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const LOVABLE_AI_MODEL = "google/gemini-3-flash-preview";
 const TIMEOUT_MS = 600_000;
