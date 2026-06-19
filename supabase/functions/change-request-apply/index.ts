@@ -10,7 +10,7 @@ import {
 } from "../_shared/change-request-shared.ts";
 import { requireUser } from "../_shared/auth.ts";
 
-const FALLBACK_MODEL = "claude-opus-4-5-20250929";
+const FALLBACK_MODEL = "claude-opus-4-8";
 
 function pageFile(t: string): string {
   const m: Record<string, string> = { index: "index.html", about: "about.html", services: "services.html", contact: "contact.html" };
