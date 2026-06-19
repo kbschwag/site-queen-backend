@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MODEL = "claude-opus-4-5-20250929";
+const MODEL = "claude-opus-4-8";
 
 const PAGE_MAP: Record<string, string> = {
   homepage: "index.html",

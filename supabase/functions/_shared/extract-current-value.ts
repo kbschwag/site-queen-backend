@@ -137,7 +137,7 @@ Rules:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-5-20250929",
+        model: "claude-opus-4-8",
         max_tokens: 500,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
