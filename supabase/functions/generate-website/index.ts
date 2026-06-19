@@ -1487,8 +1487,8 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
           continue;
         }
         const message = `Claude ${label} failed: ${r.status} — ${errText.substring(0, 300)}`;
-        if (LOVABLE_API_KEY && isAnthropicCreditError(r.status, errText)) {
-          console.warn(`[${label}] Anthropic credits unavailable — using Lovable AI fallback.`);
+        if (LOVABLE_API_KEY && (isAnthropicCreditError(r.status, errText) || isAnthropicModelUnavailable(r.status, errText))) {
+          console.warn(`[${label}] Anthropic unavailable — using Lovable AI fallback.`);
           return callLovableAI(LOVABLE_API_KEY, content, label);
         }
         throw new Error(message);
@@ -1519,6 +1519,15 @@ function isAnthropicCreditError(status: number, errText: string): boolean {
   );
 }
 
+function isAnthropicModelUnavailable(status: number, errText: string): boolean {
+  const lower = errText.toLowerCase();
+  return status === 404 && (
+    lower.includes("not_found_error") ||
+    lower.includes("model:") ||
+    lower.includes("model_not_found")
+  );
+}
+
 async function callLovableAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -1527,8 +1536,9 @@ async function callLovableAI(apiKey: string, content: string, label: string): Pr
       method: "POST",
       signal: controller.signal,
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
+        "Lovable-API-Key": apiKey,
         "Content-Type": "application/json",
+        "X-Lovable-AIG-SDK": "sitequeen-edge-function",
       },
       body: JSON.stringify({
         model: LOVABLE_AI_MODEL,
