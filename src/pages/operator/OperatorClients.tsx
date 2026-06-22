@@ -375,6 +375,17 @@ export default function OperatorClients() {
               <TabsContent value="brief" className="mt-4">
                 <WebsiteBriefPanel clientId={selected.id} businessName={selected.business_name} />
               </TabsContent>
+              <TabsContent value="intake" className="mt-4">
+                <IntakeForm
+                  clientId={selected.id}
+                  userId={selected.user_id || ""}
+                  plan={selected.plan}
+                  businessName={selected.business_name}
+                  onComplete={() => {
+                    queryClient.invalidateQueries({ queryKey: ["operator-clients"] });
+                  }}
+                />
+              </TabsContent>
             </Tabs>
           </SheetContent>
         </Sheet>
