@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
+import { IntakeForm } from "@/components/intake/IntakeForm";
 import { WebsiteBuildPanel } from "@/components/operator/WebsiteBuildPanel";
 import { GenerationDiagnosticsPanel } from "@/components/operator/GenerationDiagnosticsPanel";
 import { DomainDeployTab } from "@/components/operator/DomainDeployTab";
@@ -257,6 +258,7 @@ export default function OperatorClients() {
                 <TabsTrigger value="build" className="flex-1">Website Build</TabsTrigger>
                 <TabsTrigger value="domain" className="flex-1">Domain</TabsTrigger>
                 <TabsTrigger value="brief" className="flex-1">Brief</TabsTrigger>
+                <TabsTrigger value="intake" className="flex-1">Intake Form</TabsTrigger>
               </TabsList>
               <TabsContent value="details" className="space-y-4 mt-4">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -373,6 +375,17 @@ export default function OperatorClients() {
               </TabsContent>
               <TabsContent value="brief" className="mt-4">
                 <WebsiteBriefPanel clientId={selected.id} businessName={selected.business_name} />
+              </TabsContent>
+              <TabsContent value="intake" className="mt-4">
+                <IntakeForm
+                  clientId={selected.id}
+                  userId={selected.user_id || ""}
+                  plan={selected.plan}
+                  businessName={selected.business_name}
+                  onComplete={() => {
+                    queryClient.invalidateQueries({ queryKey: ["operator-clients"] });
+                  }}
+                />
               </TabsContent>
             </Tabs>
           </SheetContent>
