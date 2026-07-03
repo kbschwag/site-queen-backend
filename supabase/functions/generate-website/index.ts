@@ -5,6 +5,8 @@ import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
 import { autoFillPlaceholders } from "../_shared/autofill.ts";
 import { generateRestaurantSite, RESTAURANT_TEMPLATE_ID } from "../_shared/restaurant-generator.ts";
 import { applyBrandColorsToHTML, logColorApplication, type ColorPlacement, type SkippedBrandColor } from "../_shared/color-system.ts";
+import { SmartTextReplacer, COMMON_CONSTRAINTS, createCommonReplacer } from "../_shared/smart-text-replacer.ts";
+import { HTMLValidator } from "../_shared/html-validator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -580,14 +582,77 @@ Return this exact JSON structure (every field required, no empty strings unless 
 
     let copy: any = {};
     try {
-      copy = JSON.parse(stripMarkdown(copyResult.text));
+      let rawCopy = stripMarkdown(copyResult.text);
+      // ── JSON Repair: fix common Claude JSON mistakes ──
+      // Remove trailing commas before } or ]
+      rawCopy = rawCopy.replace(/,\s*([}\]])/g, "$1");
+      // Fix unescaped newlines inside string values
+      rawCopy = rawCopy.replace(/(["'])\s*\n\s*/g, "$1 ");
+      // Remove any BOM or zero-width chars
+      rawCopy = rawCopy.replace(/[\u200B-\u200D\uFEFF]/g, "");
+      // Attempt to extract JSON if wrapped in extra text
+      const jsonStart = rawCopy.indexOf("{");
+      const jsonEnd = rawCopy.lastIndexOf("}");
+      if (jsonStart > 0 || jsonEnd < rawCopy.length - 1) {
+        rawCopy = rawCopy.slice(jsonStart, jsonEnd + 1);
+      }
+      copy = JSON.parse(rawCopy);
     } catch (e) {
-      console.error("[generate] JSON parse failed:", e);
+      console.error("[generate] JSON parse failed after repair attempt:", e);
       console.error("[generate] Raw:", copyResult.text.substring(0, 500));
-      throw new Error("Claude returned invalid JSON for copy");
+      // Last resort: try to extract key-value pairs with regex
+      try {
+        const fallbackCopy: any = {};
+        const kvMatches = copyResult.text.matchAll(/"([A-Z_0-9]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
+        for (const m of kvMatches) {
+          fallbackCopy[m[1]] = m[2].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+        }
+        if (Object.keys(fallbackCopy).length > 10) {
+          console.warn("[generate] Used regex fallback to extract copy — got", Object.keys(fallbackCopy).length, "fields");
+          copy = fallbackCopy;
+        } else {
+          throw new Error("Claude returned invalid JSON for copy (repair failed)");
+        }
+      } catch (e2) {
+        throw new Error("Claude returned invalid JSON for copy (all repair attempts failed)");
+      }
     }
 
     await supabase.from("sites").update({ generation_progress: "filling_template" } as any).eq("client_id", clientId);
+
+    // ── Validate & truncate copy fields to prevent overflow ─────────────
+    const textReplacer = createCommonReplacer();
+    const fieldsToValidate: Array<{ key: string; constraint: string }> = [
+      { key: "HERO_HEADLINE_LINE1", constraint: "HERO_HEADLINE_LINE1" },
+      { key: "HERO_HEADLINE_HIGHLIGHT", constraint: "HERO_HEADLINE_HIGHLIGHT" },
+      { key: "HERO_HEADLINE_LINE2", constraint: "HERO_HEADLINE_LINE2" },
+      { key: "HERO_SUBHEADING", constraint: "HERO_SUBHEADING" },
+      { key: "ABOUT_HEADLINE", constraint: "ABOUT_HEADLINE" },
+      { key: "SERVICE_1_NAME", constraint: "SERVICE_NAME" },
+      { key: "SERVICE_2_NAME", constraint: "SERVICE_NAME" },
+      { key: "SERVICE_3_NAME", constraint: "SERVICE_NAME" },
+      { key: "SERVICE_4_NAME", constraint: "SERVICE_NAME" },
+      { key: "SERVICE_5_NAME", constraint: "SERVICE_NAME" },
+      { key: "SERVICE_6_NAME", constraint: "SERVICE_NAME" },
+      { key: "SERVICE_1_DESC", constraint: "SERVICE_DESC" },
+      { key: "SERVICE_2_DESC", constraint: "SERVICE_DESC" },
+      { key: "SERVICE_3_DESC", constraint: "SERVICE_DESC" },
+      { key: "SERVICE_4_DESC", constraint: "SERVICE_DESC" },
+      { key: "SERVICE_5_DESC", constraint: "SERVICE_DESC" },
+      { key: "SERVICE_6_DESC", constraint: "SERVICE_DESC" },
+      { key: "TESTIMONIAL_1_TEXT", constraint: "TESTIMONIAL_QUOTE" },
+      { key: "TESTIMONIAL_2_TEXT", constraint: "TESTIMONIAL_QUOTE" },
+      { key: "TESTIMONIAL_3_TEXT", constraint: "TESTIMONIAL_QUOTE" },
+    ];
+    for (const { key, constraint } of fieldsToValidate) {
+      if (copy[key]) {
+        const result = textReplacer.replace(constraint, copy[key]);
+        if (result.replaced !== copy[key]) {
+          console.warn(`[generate] Truncated ${key}: ${copy[key].length} → ${result.replaced.length} chars`);
+          copy[key] = result.replaced;
+        }
+      }
+    }
 
     // ── Render conditional sections + repeating COUPONS block ────────────
     let html = templateHTML;
@@ -1034,10 +1099,23 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
 
       try {
         console.log("[generate] Calling Claude for customizations...");
+        const preCustomizeHTML = html; // Save backup before customization
         const customizeResult = await callAI(ANTHROPIC_API_KEY, customizePrompt, "customizations");
         const customized = stripMarkdown(customizeResult.text);
         if (customized.includes("</html>") && customized.includes("<!DOCTYPE")) {
-          html = customized;
+          // Validate customized HTML before accepting it
+          const customValidator = new HTMLValidator(customized);
+          const customReport = customValidator.validate();
+          const preValidator = new HTMLValidator(preCustomizeHTML);
+          const preReport = preValidator.validate();
+          // Only accept if customization didn't degrade fidelity significantly
+          if (customReport.fidelityScore >= preReport.fidelityScore - 15) {
+            html = customized;
+            console.log(`[generate] Customization accepted (fidelity: ${customReport.fidelityScore} vs pre: ${preReport.fidelityScore})`);
+          } else {
+            console.warn(`[generate] Customization REJECTED — fidelity dropped from ${preReport.fidelityScore} to ${customReport.fidelityScore}. Using pre-customization HTML.`);
+            html = preCustomizeHTML;
+          }
         } else {
           console.warn("[generate] Customization call returned unexpected output — using pre-customization HTML");
         }
@@ -1100,6 +1178,28 @@ CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no cod
       primaryColor: primaryColorResolved,
     });
     html = injectFavicon(html, faviconTag);
+
+    // ── Pre-Upload Validation ────────────────────────────────────────────
+    const finalValidator = new HTMLValidator(html);
+    const validationReport = finalValidator.validate();
+    console.log(`[generate] Pre-upload fidelity score: ${validationReport.fidelityScore}/100`);
+    if (validationReport.issues.length > 0) {
+      const criticalIssues = validationReport.issues.filter(i => i.severity === "critical");
+      const highIssues = validationReport.issues.filter(i => i.severity === "high");
+      if (criticalIssues.length > 0) {
+        console.warn(`[generate] ${criticalIssues.length} CRITICAL issues found:`, criticalIssues.map(i => i.message).join("; "));
+      }
+      if (highIssues.length > 0) {
+        console.warn(`[generate] ${highIssues.length} HIGH issues found:`, highIssues.map(i => i.message).join("; "));
+      }
+    }
+    // Log validation report to generation_logs for debugging
+    await supabase.from("generation_logs").insert({
+      client_id: clientId,
+      template_id: templateId,
+      status: "validation_complete",
+      generation_notes: `Fidelity: ${validationReport.fidelityScore}/100. Issues: ${validationReport.issues.length} (${validationReport.issues.filter(i => i.severity === "critical").length} critical). Metrics: ${JSON.stringify(validationReport.metrics)}`,
+    } as any).catch((e: any) => console.warn("[generate] Failed to log validation:", e.message));
 
     // ── Upload to Hostinger staging ──────────────────────────────────────
     await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
