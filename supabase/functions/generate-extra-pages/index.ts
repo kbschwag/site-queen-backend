@@ -4,6 +4,8 @@ import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
 import { autoFillPlaceholders } from "../_shared/autofill.ts";
 import { applyBrandColorsToHTML, logColorApplication, type ColorPlacement, type SkippedBrandColor } from "../_shared/color-system.ts";
+import { SmartTextReplacer, COMMON_CONSTRAINTS, createCommonReplacer } from "../_shared/smart-text-replacer.ts";
+import { HTMLValidator } from "../_shared/html-validator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -242,6 +244,61 @@ serve(async (req) => {
 <script async src="https://${projectRefForBanner}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
 
 
+    // ── JSON Repair helper (same as generate-website) ─────────────────
+    function repairAndParseJSON(raw: string, label: string): any {
+      let text = stripMarkdown(raw);
+      // Remove trailing commas before } or ]
+      text = text.replace(/,\s*([}\]])/g, "$1");
+      // Fix unescaped newlines inside string values
+      text = text.replace(/(["'])\s*\n\s*/g, "$1 ");
+      // Remove BOM or zero-width chars
+      text = text.replace(/[\u200B-\u200D\uFEFF]/g, "");
+      // Extract JSON if wrapped in extra text
+      const jsonStart = text.indexOf("{");
+      const jsonEnd = text.lastIndexOf("}");
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
+        text = text.slice(jsonStart, jsonEnd + 1);
+      }
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.warn(`[extra-pages] ${label} JSON parse failed, trying regex fallback...`);
+        const fallback: any = {};
+        const kvMatches = raw.matchAll(/"([A-Z_0-9]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
+        for (const m of kvMatches) {
+          fallback[m[1]] = m[2].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+        }
+        if (Object.keys(fallback).length > 3) {
+          console.warn(`[extra-pages] ${label} regex fallback extracted ${Object.keys(fallback).length} fields`);
+          return fallback;
+        }
+        console.error(`[extra-pages] ${label} all JSON repair failed`);
+        return {};
+      }
+    }
+
+    // ── Text validation helper ───────────────────────────────────────────
+    const textReplacer = createCommonReplacer();
+    function validateCopyField(copy: any, key: string, constraint: string): void {
+      if (copy[key] && COMMON_CONSTRAINTS[constraint]) {
+        const result = textReplacer.replace(constraint, copy[key]);
+        if (result.replaced !== copy[key]) {
+          console.warn(`[extra-pages] Truncated ${key}: ${copy[key].length} → ${result.replaced.length} chars`);
+          copy[key] = result.replaced;
+        }
+      }
+    }
+
+    // ── Pre-upload validation helper ─────────────────────────────────────
+    function validateBeforeUpload(html: string, pageName: string): void {
+      const validator = new HTMLValidator(html);
+      const report = validator.validate();
+      console.log(`[extra-pages] ${pageName} fidelity: ${report.fidelityScore}/100`);
+      if (report.issues.filter(i => i.severity === "critical").length > 0) {
+        console.warn(`[extra-pages] ${pageName} has ${report.issues.filter(i => i.severity === "critical").length} critical issues`);
+      }
+    }
+
     const generated: string[] = [];
     const failed: string[] = [];
 
@@ -307,12 +364,11 @@ Return ONLY valid JSON. No markdown. No explanation:
 
       console.log(`[extra-pages] Generating about copy...`);
       const aboutCopyResult = await callAI(ANTHROPIC_API_KEY, aboutPrompt, "about-copy");
-      let aboutCopy: any = {};
-      try {
-        aboutCopy = JSON.parse(stripMarkdown(aboutCopyResult.text));
-      } catch (e) {
-        console.error("[extra-pages] About copy JSON parse failed:", e);
-      }
+      let aboutCopy: any = repairAndParseJSON(aboutCopyResult.text, "about-copy");
+      // Validate key fields against design constraints
+      validateCopyField(aboutCopy, "ABOUT_PAGE_SUBHEADING", "HERO_SUBHEADING");
+      validateCopyField(aboutCopy, "WHY_US_BADGE", "CTA_BUTTON_TEXT");
+      validateCopyField(aboutCopy, "WHY_US_TAGLINE", "ABOUT_HEADLINE");
 
       // Apply brand colors via the canonical color system
       const __aboutColor = applyBrandColorsToHTML(aboutHTML, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId);
@@ -359,6 +415,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       aboutHTML = wireContactForms(aboutHTML, clientId, supabaseUrl);
       aboutHTML = injectFavicon(aboutHTML, faviconTag);
 
+      validateBeforeUpload(aboutHTML, "about");
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/about.html`, injectNoindex(aboutHTML));
       await supabase.storage.from("generated-sites").upload(
         `${clientId}/deploy/about.html`,
@@ -479,12 +536,13 @@ Return ONLY valid JSON. No markdown:
 
       console.log(`[extra-pages] Generating services copy...`);
       const servicesCopyResult = await callAI(ANTHROPIC_API_KEY, servicesPrompt, "services-copy");
-      let servicesCopy: any = {};
-      try {
-        servicesCopy = JSON.parse(stripMarkdown(servicesCopyResult.text));
-      } catch (e) {
-        console.error("[extra-pages] Services copy JSON parse failed:", e);
-      }
+      let servicesCopy: any = repairAndParseJSON(servicesCopyResult.text, "services-copy");
+      // Validate key fields against design constraints
+      validateCopyField(servicesCopy, "SERVICES_PAGE_HEADLINE", "ABOUT_HEADLINE");
+      validateCopyField(servicesCopy, "SERVICES_MAIN_HEADLINE", "ABOUT_HEADLINE");
+      validateCopyField(servicesCopy, "CONTACT_CTA_SUBTEXT", "CTA_BUTTON_TEXT");
+      validateCopyField(servicesCopy, "WHY_US_BADGE", "CTA_BUTTON_TEXT");
+      validateCopyField(servicesCopy, "WHY_US_TAGLINE", "ABOUT_HEADLINE");
 
       // Apply brand colors via the canonical color system
       const __servicesColor = applyBrandColorsToHTML(servicesHTML, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId);
@@ -583,6 +641,7 @@ Return ONLY valid JSON. No markdown:
       servicesHTML = wireContactForms(servicesHTML, clientId, supabaseUrl);
       servicesHTML = injectFavicon(servicesHTML, faviconTag);
 
+      validateBeforeUpload(servicesHTML, "services");
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/services.html`, injectNoindex(servicesHTML));
       await supabase.storage.from("generated-sites").upload(
         `${clientId}/deploy/services.html`,
@@ -667,12 +726,11 @@ Return ONLY valid JSON. No markdown. No explanation:
 
       console.log(`[extra-pages] Generating contact copy...`);
       const contactCopyResult = await callAI(ANTHROPIC_API_KEY, contactPrompt, "contact-copy");
-      let contactCopy: any = {};
-      try {
-        contactCopy = JSON.parse(stripMarkdown(contactCopyResult.text));
-      } catch (e) {
-        console.error("[extra-pages] Contact copy JSON parse failed:", e);
-      }
+      let contactCopy: any = repairAndParseJSON(contactCopyResult.text, "contact-copy");
+      // Validate key fields against design constraints
+      validateCopyField(contactCopy, "CONTACT_PAGE_HEADLINE", "ABOUT_HEADLINE");
+      validateCopyField(contactCopy, "CONTACT_EYEBROW", "CTA_BUTTON_TEXT");
+      validateCopyField(contactCopy, "CONTACT_SUBMIT_LABEL", "CTA_BUTTON_TEXT");
 
       // Apply brand colors via the canonical color system
       const __contactColor = applyBrandColorsToHTML(contactHTML, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId);
@@ -711,6 +769,7 @@ Return ONLY valid JSON. No markdown. No explanation:
       contactHTML = wireContactForms(contactHTML, clientId, supabaseUrl);
       contactHTML = injectFavicon(contactHTML, faviconTag);
 
+      validateBeforeUpload(contactHTML, "contact");
       await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/contact.html`, injectNoindex(contactHTML));
       await supabase.storage.from("generated-sites").upload(
         `${clientId}/deploy/contact.html`,
@@ -890,6 +949,16 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
           if (!contentHTML || contentHTML.length < 100) {
             throw new Error(`Claude returned insufficient content (${contentHTML.length} chars)`);
           }
+          // Strip any accidentally included <header>, <footer>, <nav>, <!DOCTYPE> from content
+          contentHTML = contentHTML.replace(/<!DOCTYPE[^>]*>/gi, "");
+          contentHTML = contentHTML.replace(/<html[^>]*>[\s\S]*?<body[^>]*>/gi, "");
+          contentHTML = contentHTML.replace(/<\/body>[\s\S]*?<\/html>/gi, "");
+          contentHTML = contentHTML.replace(/<header[\s\S]*?<\/header>/gi, "");
+          contentHTML = contentHTML.replace(/<footer[\s\S]*?<\/footer>/gi, "");
+          // Remove any inline style blocks Claude might have snuck in
+          contentHTML = contentHTML.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+          // Remove inline style attributes
+          contentHTML = contentHTML.replace(/\s+style="[^"]*"/gi, "");
 
           // Assemble: doctype + head with extracted style + header + content + footer + analytics
           let fullHTML = assemblePage({
@@ -911,6 +980,7 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
           fullHTML = wireContactForms(fullHTML, clientId, supabaseUrl);
           fullHTML = injectFavicon(fullHTML, faviconTag);
 
+          validateBeforeUpload(fullHTML, spec.slug);
           await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/${spec.slug}.html`, injectNoindex(fullHTML));
           await supabase.storage.from("generated-sites").upload(
             `${clientId}/deploy/${spec.slug}.html`,
