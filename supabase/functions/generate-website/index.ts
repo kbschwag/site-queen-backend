@@ -1,12 +1,37 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * GENERATE-WEBSITE — SiteQueen Homepage Generator (v2 Rewrite)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Architecture:
+ *   1. FETCH — Pull all client data from Supabase
+ *   2. RESOLVE — Determine business context, photos, sections, mode
+ *   3. AI CALL — One smart call returns all copy + image terms + section decisions
+ *   4. EXECUTE — Deterministic template fill (AI never touches HTML)
+ *   5. POST-PROCESS — Colors, fonts, forms, analytics, favicon, validation
+ *   6. UPLOAD — FTP to Hostinger staging + Supabase backups
+ *   7. DISPATCH — Fire generate-extra-pages
+ *
+ * Principles:
+ *   - Figma templates are sacred — AI writes copy, never HTML
+ *   - One AI call, deterministic execution
+ *   - Empty sections are removed, never shown with placeholder text
+ *   - Images match the business (AI describes scenes, not categories)
+ *   - Character limits are enforced before injection
+ */
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
-// import { autoFillPlaceholders } from "../_shared/autofill.ts"; // REMOVED — deterministic fallback used instead
 import { generateRestaurantSite, RESTAURANT_TEMPLATE_ID } from "../_shared/restaurant-generator.ts";
 import { applyBrandColorsToHTML, logColorApplication, type ColorPlacement, type SkippedBrandColor } from "../_shared/color-system.ts";
-import { SmartTextReplacer, COMMON_CONSTRAINTS, createCommonReplacer } from "../_shared/smart-text-replacer.ts";
+// SmartTextReplacer not used directly — truncation is inline for simplicity
 import { HTMLValidator } from "../_shared/html-validator.ts";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,24 +39,38 @@ const corsHeaders = {
 };
 
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
-const AI_MODEL = "claude-opus-4-8";
+const AI_MODEL = "claude-sonnet-4-20250514";
 const LOVABLE_AI_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const LOVABLE_AI_MODEL = "google/gemini-3-flash-preview";
-const TIMEOUT_MS = 600_000; // 10 minutes per Claude call
+const TIMEOUT_MS = 300_000; // 5 minutes — sonnet is faster than opus
 
 const STAGING_BASE_URL = "https://staging.sitequeen.ai";
 const STAGING_FOLDER_ROOT = "/public_html";
 
-// Per-template canonical CTA defaults. Used whenever Claude does not supply
-// an explicit NAV_CTA / HERO_CTA / ABOUT_CTA / FINAL_CTA value. NEVER assume
-// coaching language ("BOOK A CALL", "WORK WITH ME", "BOOK YOUR DISCOVERY CALL").
+// Per-template CTA defaults — used when AI doesn't supply one
 const TEMPLATE_DEFAULT_CTAS: Record<string, string> = {
-  "trades-hero": "GET A QUOTE",
+  "trades-hero": "GET A FREE QUOTE",
   "business-professional": "SCHEDULE CONSULTATION",
-  "feminine-bold": "SCHEDULE CONSULTATION",
+  "feminine-bold": "LET'S WORK TOGETHER",
   "warm-welcome": "BOOK APPOINTMENT",
   "local-favorite": "RESERVE A TABLE",
 };
+
+// Template file mapping (short names → bucket folder names)
+const TEMPLATE_FILE_MAP: Record<string, string> = {
+  trades: "trades-hero",
+  feminine: "feminine-bold",
+  warm: "warm-welcome",
+  local: "local-favorite",
+  modern: "modern-business",
+  professional: "business-professional",
+};
+
+const FALLBACK_TEMPLATE = "trades-hero";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ═══════════════════════════════════════════════════════════════════════════
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -40,7 +79,7 @@ serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // ── Auth check — require valid JWT (preserved from previous version) ──
+  // ── Auth check ──────────────────────────────────────────────────────────
   const authHeader = req.headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.replace("Bearer ", "");
@@ -60,8 +99,9 @@ serve(async (req) => {
     });
   }
 
+  // ── Parse request ───────────────────────────────────────────────────────
   let clientId = "";
-  let mode: "full" | "lite" = "full"; // "full" = intake form client, "lite" = GBP prospect (minimal data)
+  let mode: "full" | "lite" = "full";
   try {
     const body = await req.json();
     clientId = body.client_id;
@@ -74,7 +114,11 @@ serve(async (req) => {
   }
 
   try {
-    // ── Bump attempt counter ─────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 1: FETCH ALL DATA
+    // ═════════════════════════════════════════════════════════════════════════
+
+    // Bump attempt counter
     const { data: existingSite } = await supabase
       .from("sites").select("generation_attempts").eq("client_id", clientId).maybeSingle();
 
@@ -86,7 +130,7 @@ serve(async (req) => {
       generation_error: null,
     } as any).eq("client_id", clientId);
 
-    // ── Fetch data (auto-create sites row if missing) ───────────────────
+    // Fetch or create site record
     let { data: siteData, error: siteError } = await supabase
       .from("sites").select("*").eq("client_id", clientId).maybeSingle();
     if (!siteData) {
@@ -109,11 +153,13 @@ serve(async (req) => {
 
     const intake: any = (siteData as any).intake_data || {};
 
+    // Snapshot intake for audit trail
     await supabase.from("sites").update({
       intake_snapshot: intake,
       intake_snapshot_saved_at: new Date().toISOString(),
     } as any).eq("client_id", clientId);
 
+    // Fetch call notes (expert instructions from onboarding call)
     const applicationId = (clientData as any)?.application_id;
     const { data: callNotes } = applicationId
       ? await supabase.from("call_notes").select("*").eq("application_id", applicationId).maybeSingle()
@@ -123,17 +169,9 @@ serve(async (req) => {
       await supabase.from("sites").update({ call_notes_snapshot: callNotes } as any).eq("client_id", clientId);
     }
 
-    // ── Load template ────────────────────────────────────────────────────
-    // Each template lives in its own folder inside the `templates` bucket:
-    //   {templateId}/index.html, {templateId}/style.css, etc.
-    const TEMPLATE_FILE_MAP: Record<string, string> = {
-      trades: "trades-hero",
-      feminine: "feminine-bold",
-      warm: "warm-welcome",
-      local: "local-favorite",
-      modern: "modern-business",
-      professional: "business-professional",
-    };
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 2: LOAD TEMPLATE
+    // ═════════════════════════════════════════════════════════════════════════
 
     const selectedTemplate =
       intake?.template_selected ||
@@ -142,15 +180,14 @@ serve(async (req) => {
 
     const requestedTemplateId = selectedTemplate
       ? (TEMPLATE_FILE_MAP[selectedTemplate] || selectedTemplate)
-      : "trades-hero";
-    const FALLBACK_TEMPLATE = "trades-hero";
+      : FALLBACK_TEMPLATE;
 
     let templateId = requestedTemplateId;
     let { data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}/index.html`);
     let { data: cssFile } = await supabase.storage.from("templates").download(`${templateId}/style.css`);
 
     if (!htmlFile && templateId !== FALLBACK_TEMPLATE) {
-      console.warn(`[generate] Template "${templateId}/index.html" not found — falling back to "${FALLBACK_TEMPLATE}".`);
+      console.warn(`[generate] Template "${templateId}" not found — falling back to "${FALLBACK_TEMPLATE}".`);
       templateId = FALLBACK_TEMPLATE;
       ({ data: htmlFile } = await supabase.storage.from("templates").download(`${templateId}/index.html`));
       ({ data: cssFile } = await supabase.storage.from("templates").download(`${templateId}/style.css`));
@@ -158,11 +195,11 @@ serve(async (req) => {
 
     if (!htmlFile) throw new Error(`Template not found: ${templateId}/index.html`);
 
-    // ── Restaurant template (local-favorite): fully isolated pipeline ────
+    // ── Restaurant template: fully isolated pipeline ─────────────────────
     if (templateId === RESTAURANT_TEMPLATE_ID) {
       try {
         const result = await generateRestaurantSite({
-          supabase, clientId, intake, callNotes,
+          supabase: supabase as any, clientId, intake, callNotes,
           clientData, siteData,
           supabaseUrl, serviceKey,
         });
@@ -183,41 +220,10 @@ serve(async (req) => {
     let templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
 
-    // ── business-professional: font/serif swap only (color half deleted — handled by color-system) ─
-    if (templateId === "business-professional") {
-      templateHTML = applyBusinessProfessionalFonts(templateHTML, intake);
-    }
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 3: RESOLVE BUSINESS CONTEXT
+    // ═════════════════════════════════════════════════════════════════════════
 
-    // ── Apply brand colors via the canonical color system ─────────────
-    // Single source of truth. Same code path on every page.
-    const __brand = { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null };
-    const __colorRes = applyBrandColorsToHTML(templateHTML, __brand, templateId);
-    templateHTML = __colorRes.html;
-    const primaryColorResolved = (intake.primary_color || "").trim() || "";
-    const accentColorResolved = (intake.accent_color || "").trim() || "";
-
-    // ── Fonts (independent of colors) ─────────────────────────────────
-    const headingFontResolved = resolveFontName(
-      (intake as any).heading_font || (intake as any).preferred_font || (intake as any).font_preference
-    );
-    const bodyFontResolved = resolveFontName(
-      (intake as any).body_font || (intake as any).preferred_font || (intake as any).font_preference
-    );
-    if (headingFontResolved || bodyFontResolved) {
-      templateHTML = injectFontTokensIntoRoot(templateHTML, {
-        headingFont: headingFontResolved || undefined,
-        bodyFont: bodyFontResolved || undefined,
-      });
-      templateHTML = injectGoogleFontsLink(templateHTML, headingFontResolved, bodyFontResolved);
-    }
-    console.log(`[generate] Brand tokens — primary=${primaryColorResolved || "(none)"}, accent=${accentColorResolved || "(none)"}, heading="${headingFontResolved}", body="${bodyFontResolved}"`);
-    console.log("[color-system] homepage", JSON.stringify({ templateId, applied: __colorRes.result.appliedPlacements, skipped: __colorRes.result.skippedBrandColors }));
-
-
-
-
-    // ── Business data shortcuts ──────────────────────────────────────────
-    console.log(`[generate] Mode: ${mode} | Client: ${clientId}`);
     const businessName = (clientData as any)?.business_name || intake.business_name || "Business";
     const businessType = (clientData as any)?.business_type || "Service Business";
     const city = intake.business_city || intake.city || "";
@@ -232,8 +238,8 @@ serve(async (req) => {
     const aboutStory = intake.about_story || intake.owner_bio_raw || intake.story_started || "";
     const ownerName = intake.owner_name || "";
     const ownerTitle = intake.owner_title || "Owner";
-    const noTestimonials = !!intake.no_testimonials || (mode === "lite" && !googleReviewCount);
     const tagline = intake.tagline || "";
+    const noTestimonials = !!intake.no_testimonials || (mode === "lite" && !googleReviewCount);
 
     const portfolioPhotos: string[] = (Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : []).filter(Boolean);
     const teamPhotos: string[] = (Array.isArray(intake.team_photos) ? intake.team_photos : []).filter(Boolean);
@@ -247,16 +253,22 @@ serve(async (req) => {
     const showCoupons = !!(callNotes as any)?.show_coupons || !!intake.show_coupons || coupons.length > 0;
     const showAwards = !!(callNotes as any)?.show_awards || awards.length > 0;
 
-    // ── Resolve photo slots ──────────────────────────────────────────────
-    // Priority: client uploads ALWAYS win. Stock only fills empty slots when allowed.
-    // Logo is never replaced with stock.
-    // `use_stock_photos` only controls whether stock fills EMPTY slots — never overrides uploads.
+    const serviceNames = services.slice(0, 6).map((s: any) =>
+      typeof s === "string" ? s : s?.name || s?.title || ""
+    ).filter(Boolean);
+
+    // Client-provided service areas
+    const clientServiceAreaNames: string[] = serviceAreas
+      .map((a: any) => (typeof a === "string" ? a : (a?.name || a?.city || a?.title || "")).toString().trim())
+      .filter(Boolean);
+
+    console.log(`[generate] Mode: ${mode} | Template: ${templateId} | Client: ${clientId}`);
+    console.log(`[generate] Business: "${businessName}" (${businessType}) in ${city}, ${state}`);
+
+    // ── Photo resolution ─────────────────────────────────────────────────
     const allowStock =
       intake.use_stock_photos !== false &&
       (siteData as any).using_stock_photos !== false;
-
-    const firstServiceName = (services[0] && (typeof services[0] === "string" ? services[0] : services[0]?.name || services[0]?.title)) || "";
-    const stockTerms = buildStockSearchTerms(businessType, firstServiceName, tagline, businessName);
 
     const heroCandidates = [intake.hero_photo_url, portfolioPhotos[0]].filter(Boolean) as string[];
     const aboutCandidates = [teamPhotos[0], intake.owner_photo_url, portfolioPhotos[1], portfolioPhotos[0]].filter(Boolean) as string[];
@@ -266,11 +278,38 @@ serve(async (req) => {
     let aboutImageUrl = aboutCandidates[0] || "";
     let whyUsImageUrl = whyUsCandidates[0] || "";
 
-    // NOTE: Stock photo fetching moved to AFTER AI call so we can use AI-suggested search terms
-    // See "AI-DRIVEN STOCK PHOTOS" section below
+    const logoUrlResolved = intake.logo_url || "";
+    console.log(`[generate] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} logo:${logoUrlResolved ? "✓" : "✗"} allowStock=${allowStock}`);
 
-    const logoUrlResolved = intake.logo_url || ""; // never replaced with stock
-    console.log(`[generate] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} logo:${logoUrlResolved ? "✓" : "✗"} (hero_upload=${!!intake.hero_photo_url}, portfolio=${portfolioPhotos.length}, team=${teamPhotos.length}, allowStock=${allowStock})`);
+    // ── Apply brand colors + fonts to template ───────────────────────────
+    if (templateId === "business-professional") {
+      templateHTML = applyBusinessProfessionalFonts(templateHTML, intake);
+    }
+
+    const __brand = { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null };
+    const __colorRes = applyBrandColorsToHTML(templateHTML, __brand, templateId);
+    templateHTML = __colorRes.html;
+    const primaryColorResolved = (intake.primary_color || "").trim() || "";
+    const accentColorResolved = (intake.accent_color || "").trim() || "";
+
+    const headingFontResolved = resolveFontName(
+      (intake as any).heading_font || (intake as any).preferred_font || (intake as any).font_preference
+    );
+    const bodyFontResolved = resolveFontName(
+      (intake as any).body_font || (intake as any).preferred_font || (intake as any).font_preference
+    );
+    if (headingFontResolved || bodyFontResolved) {
+      templateHTML = injectFontTokensIntoRoot(templateHTML, {
+        headingFont: headingFontResolved || undefined,
+        bodyFont: bodyFontResolved || undefined,
+      });
+      templateHTML = injectGoogleFontsLink(templateHTML, headingFontResolved, bodyFontResolved);
+    }
+    console.log(`[generate] Brand — primary=${primaryColorResolved || "(none)"}, heading="${headingFontResolved}", body="${bodyFontResolved}"`);
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 4: ONE SMART AI CALL
+    // ═════════════════════════════════════════════════════════════════════════
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
     if (!ANTHROPIC_API_KEY && !Deno.env.get("LOVABLE_API_KEY")) {
@@ -279,370 +318,34 @@ serve(async (req) => {
 
     await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
 
-    // ── CALL 1: Generate all copy as JSON ────────────────────────────────
-    const serviceNames = services.slice(0, 6).map((s: any) =>
-      typeof s === "string" ? s : s?.name || s?.title || ""
-    ).filter(Boolean);
+    const copyPrompt = buildCopyPrompt({
+      templateId, mode, businessName, businessType, city, state, phone, email,
+      address, yearsInBusiness, googleRating, googleReviewCount, aboutStory,
+      ownerName, ownerTitle, tagline, serviceNames, clientServiceAreaNames,
+      noTestimonials, showFinancing, showAwards, showCoupons,
+      intake, callNotes,
+    });
 
-    // Client-provided service-area names (intake.service_areas[]) — these are
-    // injected into the prompt so Claude uses them verbatim before generating
-    // any additional nearby cities.
-    const clientServiceAreaNames: string[] = serviceAreas
-      .map((a: any) => (typeof a === "string" ? a : (a?.name || a?.city || a?.title || "")).toString().trim())
-      .filter(Boolean);
-    const clientServiceAreaList = clientServiceAreaNames.length
-      ? clientServiceAreaNames.map((n, i) => `  ${i + 1}. ${n}`).join("\n")
-      : "(none provided — generate 8 real nearby cities/towns)";
+    console.log("[generate] Calling AI for site blueprint...");
+    const copyResult = await callAI(ANTHROPIC_API_KEY, copyPrompt, "site-blueprint");
 
-    const copyPrompt = `You are a professional copywriter for SiteQueen. Generate website copy for a ${businessType} business. Return ONLY valid JSON — no markdown, no explanation, no code blocks. Start with { and end with }.
-
-═══════════════════════════════════════════════════════════
-HARD CHARACTER LIMITS — THESE ARE NON-NEGOTIABLE (ALL TEMPLATES)
-═══════════════════════════════════════════════════════════
-The website uses fixed-width Figma containers. Text that exceeds these limits
-will OVERFLOW and BREAK the layout. Count your characters carefully.
-
-| Field Pattern              | Max Chars | Example Length |
-|----------------------------|-----------|----------------|
-| *_HEADLINE_LINE1/2/3       | 30        | "PHOENIX'S PREMIER" (18) |
-| *_HEADLINE_HIGHLIGHT       | 25        | "TAX & ACCOUNTING" (17) |
-| *_HEADLINE (single)        | 45        | "WHY HOMEOWNERS CHOOSE US" (25) |
-| *_BADGE / *_EYEBROW        | 25        | "TRUSTED SINCE 2005" (19) |
-| HERO_SUBHEADING            | 150       | 1-2 sentences max |
-| SERVICE_*_NAME             | 30        | "Drain Cleaning" (15) |
-| SERVICE_*_DESC             | 200       | 2 short sentences |
-| WHY_US_*_TITLE             | 30        | "Licensed & Insured" (19) |
-| WHY_US_*_DESC              | 200       | 2 short sentences |
-| STAT_*_NUMBER              | 8         | "500+" or "4.9★" |
-| STAT_*_LABEL               | 20        | "JOBS COMPLETED" (14) |
-| TESTIMONIAL_*_TEXT         | 250       | 2-3 sentences |
-| TESTIMONIAL_*_NAME         | 25        | "Sarah M." (9) |
-| FAQ_*_Q                    | 80        | Short question |
-| FAQ_*_A                    | 300       | 2-4 sentences |
-| AREA_*                     | 25        | "West Valley City" (16) |
-| AWARD_*                    | 35        | "EPA Lead-Safe Certified" (24) |
-| FOOTER_TAGLINE             | 50        | Short memorable phrase |
-| ABOUT_STORY                | 600       | 3-5 sentences |
-| *_SUBTEXT / *_INTRO        | 200       | 1-2 sentences |
-
-IF YOUR TEXT EXCEEDS THESE LIMITS, THE SITE WILL LOOK BROKEN.
-When in doubt, write SHORTER. Premium brands use restraint.
-═══════════════════════════════════════════════════════════
-
-${templateId === "business-professional" ? `═══════════════════════════════════════════════════════════
-CRITICAL CONTENT RULES — FOLLOW THESE EXACTLY (business-professional template)
-═══════════════════════════════════════════════════════════
-
-1) MULTI-SLOT HEADLINES MUST READ AS A COMPLETE SENTENCE.
-   The hero has three slots: HERO_HEADLINE_LINE1, HERO_HEADLINE_HIGHLIGHT, HERO_HEADLINE_LINE2.
-   They render stacked as one continuous headline. Read left-to-right top-to-bottom they MUST form a complete, grammatical phrase. NO hanging prepositions. NO fragments. NO incomplete thoughts.
-
-   GOOD:
-     LINE1="PHOENIX'S PREMIER" / HIGHLIGHT="TAX & ACCOUNTING" / LINE2="PARTNERS"
-     → "Phoenix's Premier Tax & Accounting Partners" ✓
-     LINE1="TRUSTED LEGAL" / HIGHLIGHT="COUNSEL" / LINE2="FOR ARIZONA BUSINESSES"
-     → "Trusted Legal Counsel for Arizona Businesses" ✓
-
-   BAD (never do this):
-     LINE1="PHOENIX'S PREMIER" / HIGHLIGHT="TAX & ACCOUNTING" / LINE2="SOLUTIONS FOR"
-     → "...Solutions For" ✗ (hanging "for")
-     LINE1="EXPERT GUIDANCE" / HIGHLIGHT="FOR EVERY" / LINE2="BUSINESS THAT"
-     → "...business that" ✗ (incomplete clause)
-
-   The same rule applies to ABOUT_HEADLINE_LINE1 + ABOUT_HEADLINE_LINE2 on about.html and SERVICES_HEADLINE + SERVICES_SUBHEADING on services.html.
-
-2) HEADLINE SLOTS ARE FOR SHORT PHRASES. BODY SLOTS ARE FOR SENTENCES.
-   Per-slot length limits:
-     - HERO_HEADLINE_LINE1, _HIGHLIGHT, _LINE2: 2-5 words each, max 30 characters
-     - ABOUT_HEADLINE_LINE1, ABOUT_HEADLINE_LINE2: 2-5 words each, max 30 characters
-     - SERVICES_HEADLINE, SERVICES_SUBHEADING: max 6 words each, MUST be noun phrases
-     - SERVE_HEADLINE, SERVE_SUBHEADING: max 6 words each
-     - Any other *_HEADLINE / SECTION_HEADING field: max 8 words
-
-   Body slots (HERO_SUBHEADING, SERVE_BODY, SERVICES_INTRO, ABOUT_STORY, *_DESC, etc.) take 1-3 full sentences (15-50 words).
-
-   If unsure whether content fits a headline or body slot, put it in the body slot. NEVER put a 15+ word sentence in a headline slot — it will render at 56-88px and break the page.
-
-3) FOOTER_LEGAL_NOTE IS A SHORT PROFESSIONAL DISCLAIMER, NOT A COPYRIGHT.
-   The footer already includes the copyright line ("© YYYY {Business Name} — All Rights Reserved") automatically. FOOTER_LEGAL_NOTE is a SEPARATE small-print disclaimer.
-
-   Good examples:
-     - "Not a law firm. Information provided is general and not legal advice."
-     - "Tax services provided by licensed professionals. Past performance does not guarantee results."
-     - "Information on this site is for general guidance only and does not constitute professional advice."
-
-   NEVER include "© YYYY", "All Rights Reserved", or repeat the business name in FOOTER_LEGAL_NOTE — that creates a duplicate copyright. If a meaningful disclaimer isn't appropriate for this business, return "".
-
-4) WHEN IN DOUBT, BE CONCISE.
-   Premium professional brands use restraint. A 4-word headline is more powerful than an 8-word one. Trust the design — short copy looks better in this template.
-═══════════════════════════════════════════════════════════
-
-` : ""}CRITICAL: Every field in this JSON must be filled. Empty strings are never acceptable unless the client has explicitly opted out of that section (like no_testimonials). If the client didn't provide information for a field, generate something specific and relevant based on everything you know about this business — their type, services, location, story, and tone. A trades contractor in Utah gets different content than a spa in Miami. Never use generic placeholder text. Every word should feel like it was written specifically for this business.
-
-FIELD-FILLING RULES:
-1. Client provided data → use it exactly, incorporating their exact words and phrases verbatim where possible.
-2. Client didn't provide data → generate something specific and credible based on the business type (${businessType}), services (${serviceNames.join(", ") || "n/a"}), city (${city}, ${state}), owner story, and tone. Never generic filler.
-3. Client explicitly opted out → return empty string ONLY for those specific fields. Currently opted out: ${[noTestimonials ? "TESTIMONIAL_1/2/3_*" : null].filter(Boolean).join(", ") || "none"}.
-
-${mode === "lite" ? `═══════════════════════════════════════════════════════════
-LITE MODE — MINIMAL DATA (GBP Prospect)
-═══════════════════════════════════════════════════════════
-This is a prospect site generated from Google Business Profile data only.
-You have very limited information. Your job is to INFER realistic, credible
-content based on the business type and location. Write as if you researched
-this business — use industry-specific language, mention common services for
-this type of business in this area, and create a professional impression.
-
-RULES FOR LITE MODE:
-- Infer 4-6 realistic services based on the business type
-- Write a credible about story based on the type and location
-- Generate realistic stats (use soft numbers like "500+" not exact counts)
-- Do NOT invent specific certifications, awards, or credentials
-- Do NOT claim specific years in business unless provided
-- Use the Google rating if provided, otherwise omit rating references
-- Write testimonials that reference the inferred services naturally
-═══════════════════════════════════════════════════════════
-` : ""}
-BUSINESS INFO:
-- Name: ${businessName}
-- Type: ${businessType}
-- City: ${city}, ${state}
-- Phone: ${phone}
-- Years in business: ${yearsInBusiness || "not provided"}
-- Owner name: ${ownerName || "not provided"}
-- Owner title: ${ownerTitle}
-- Owner story: ${aboutStory || "not provided"}
-- What makes them different: ${intake.story_different || "not provided"}
-- How they started: ${intake.story_started || "not provided"}
-- Ideal customer: ${intake.story_ideal_customer || "not provided"}
-- Google rating: ${googleRating || "not provided"}
-- Google review count: ${googleReviewCount || "not provided"}
-- Services: ${serviceNames.join(", ") || "not provided — infer from business type"}
-- Tagline: ${tagline || "not provided"}
-- Client-provided service areas (use these exact names FIRST for AREA_1..N before generating more):
-${clientServiceAreaList}
-
-═══════════════════════════════════════════════════════════
-SERVICE AREAS — GEOGRAPHIC GROUNDING (read carefully)
-═══════════════════════════════════════════════════════════
-The business is located in ${city || "(city not provided)"}, ${state || "(state not provided)"}.
-All service areas must be REAL cities and towns within reasonable driving distance of ${city}, ${state} specifically — NOT the state in general, NOT a different metro area in the same state, NOT a famous city elsewhere in the state if it isn't actually nearby.
-
-HARD RULES:
-1. Do NOT guess or assume the region. Use ONLY the provided city "${city}" and state "${state}" to determine nearby locations. If you are unsure which cities are actually near ${city}, ${state}, pick fewer real ones rather than inventing or guessing.
-2. If the client provided service areas above, use those EXACT names verbatim FIRST (in the order given) to fill AREA_1, AREA_2, … and only generate additional names to fill the remaining slots. Any generated additions must also be real towns geographically near ${city}, ${state}.
-3. Every AREA_* value must be a real, recognizable place name — never a generic descriptor like "Local Communities", "Surrounding Areas", "Rural Properties", "Nearby Towns", "The Greater Region", or "Outlying Districts".
-4. AREA_1 should normally be "${city || "the home city"}" itself unless the client list above starts with a different city.
-═══════════════════════════════════════════════════════════
-
-CALL NOTES (highest priority — follow exactly):
-${callNotes ? JSON.stringify({
-  their_story: (callNotes as any).their_story,
-  ideal_customer: (callNotes as any).ideal_customer,
-  google_search_terms: (callNotes as any).google_search_terms,
-  website_goal: (callNotes as any).website_goal,
-  tone_of_voice: (callNotes as any).tone_of_voice,
-  tone_custom: (callNotes as any).tone_custom,
-  expert_additions: (callNotes as any).expert_additions,
-  expert_avoid: (callNotes as any).expert_avoid,
-  exact_phrases: (callNotes as any).exact_phrases,
-  vibe_notes: (callNotes as any).vibe_notes,
-  color_direction: (callNotes as any).color_direction,
-  final_notes: (callNotes as any).final_notes,
-}, null, 2) : "No call notes."}
-
-TONE: Match call notes tone. If not specified: trades = confident and direct, no corporate filler.
-BANNED PHRASES: "committed to excellence", "your satisfaction is our priority", "world-class", "seamless", "cutting-edge"
-NEVER INVENT: phone numbers, addresses, ratings, certifications, years in business if not provided. Never invent specific Google review counts if google_review_count was not provided — use a soft phrase like "hundreds of" instead of a fake number.
-${noTestimonials ? "IMPORTANT: Client has no testimonials. Set TESTIMONIAL_1/2/3_TEXT/NAME/LOCATION to empty string." : "Generate 3 realistic local testimonials referencing actual services in this city."}
-
-Return this exact JSON structure (every field required, no empty strings unless opted out):
-{
-  "META_DESCRIPTION": "155 char SEO meta description mentioning business name, main service, and city",
-  "HERO_BADGE": "3-5 word trust statement e.g. TRUSTED LOCAL EXPERTS or SERVING ${city.toUpperCase() || "OUR AREA"} SINCE ${yearsInBusiness || "2010"}",
-  "HERO_HEADLINE_LINE1": "2-4 words all caps. Start of a SHORT 3-part headline that combines as: LINE1 + HIGHLIGHT + LINE2 = one coherent grammatically complete phrase. Example: LINE1='PHOENIX'S PREMIER' HIGHLIGHT='TAX EXPERTS' LINE2='SINCE 2010'. NEVER end a line with a hanging preposition like 'FOR', 'WITH', 'AND'.",
-  "HERO_HEADLINE_HIGHLIGHT": "1-3 words all caps — the core noun rendered in italic accent color. Must fit naturally between LINE1 and LINE2.",
-  "HERO_HEADLINE_LINE2": "0-4 words all caps that grammatically COMPLETE the headline. Leave EMPTY STRING if LINE1+HIGHLIGHT already forms a complete phrase. NEVER a hanging preposition.",
-  "HERO_HEADLINE_LINE3": "Usually empty. Only fill if a 4-line headline reads naturally. 0-4 words all caps.",
-  "HERO_SUBHEADING": "1-2 sentences specific to this business, mention city and core service",
-  "ABOUT_HEADLINE_LINE1": "3-5 words for the About page hero (regular weight, white)",
-  "ABOUT_HEADLINE_LINE2": "3-5 words for the About page hero (italic, accent color) that completes the phrase from LINE1",
-  "SERVICES_SUBHEADING": "2-5 word italic accent phrase for the Services hero. NEVER a sentence. Example: 'Built To Last' or 'Trusted Locally'. Body copy goes in SERVICES_INTRO.",
-  "SERVICES_INTRO": "1-2 sentences introducing the services page, specific to this business",
-  "SERVE_HEADLINE": "3-5 words all caps for the Who We Serve section",
-  "SERVE_SUBHEADING": "2-4 words italic accent that completes SERVE_HEADLINE",
-  "SERVE_BODY": "1-2 sentences describing who this business serves",
-  "SERVE_1": "1-3 words — audience segment name (e.g. 'INDIVIDUALS', 'SMALL BUSINESSES', 'FAMILIES'). Title case or all caps, no sentences.",
-  "SERVE_2": "1-3 words — distinct audience segment",
-  "SERVE_3": "1-3 words — distinct audience segment",
-  "SERVE_4": "1-3 words — distinct audience segment",
-  "FOOTER_LEGAL_NOTE": "Short legal/regulatory disclaimer for THIS business type — NOT a copyright (copyright is rendered separately). Examples: 'Licensed CPA firm. Information on this site is general and not tax advice.' or 'Licensed and insured. Free estimates available.' Keep under 20 words.",
-  "TRUST_ITEM_3": "one trust badge e.g. FAMILY OWNED — pick one true to this business",
-  "ABOUT_HEADLINE": "5-8 word headline that feels personal to this owner",
-  "ABOUT_STORY": "3-4 paragraph about story. Use the owner's actual story from intake verbatim where possible. If minimal, expand it warmly and specifically based on what they did provide — owner name, years, city, services, what makes them different. Never generic.",
-  "ABOUT_POINT_1": "key differentiator specific to this business",
-  "ABOUT_POINT_2": "key differentiator specific to this business",
-  "ABOUT_POINT_3": "key differentiator specific to this business",
-  "ABOUT_POINT_4": "key differentiator specific to this business",
-  "STAT_1_NUMBER": "realistic stat for a ${businessType} business with ${yearsInBusiness || "several"} years experience. Never invent a specific Google review count if google_review_count was not provided.",
-  "STAT_1_LABEL": "e.g. JOBS COMPLETED — match the number",
-  "STAT_2_NUMBER": "realistic stat — use ${googleRating || "soft phrasing"} for rating if provided",
-  "STAT_2_LABEL": "e.g. GOOGLE RATING",
-  "STAT_3_NUMBER": "realistic stat for this business type",
-  "STAT_3_LABEL": "matching label",
-  "STAT_4_NUMBER": "realistic stat",
-  "STAT_4_LABEL": "matching label",
-  "SERVICES_HEADLINE": "3-5 words all caps",
-  "SERVICES_SUBTEXT": "1 sentence specific to this business",
-  "SERVICE_1_NAME": "${serviceNames[0] || `plausible primary service a typical ${businessType} business in ${city} would offer`}",
-  "SERVICE_1_DESC": "2 sentences specific to this service for a ${businessType} business in ${city}, ${state}",
-  "SERVICE_2_NAME": "${serviceNames[1] || `plausible additional service a typical ${businessType} business would offer`}",
-  "SERVICE_2_DESC": "2 sentences specific to this service for this business in this location",
-  "SERVICE_3_NAME": "${serviceNames[2] || `plausible additional service a typical ${businessType} business would offer`}",
-  "SERVICE_3_DESC": "2 sentences specific to this service for this business in this location",
-  "SERVICE_4_NAME": "${serviceNames[3] || `plausible additional service a typical ${businessType} business would offer`}",
-  "SERVICE_4_DESC": "2 sentences specific to this service for this business in this location",
-  "SERVICE_5_NAME": "${serviceNames[4] || `plausible additional service a typical ${businessType} business would offer`}",
-  "SERVICE_5_DESC": "2 sentences specific to this service for this business in this location",
-  "SERVICE_6_NAME": "${serviceNames[5] || `plausible additional service a typical ${businessType} business would offer`}",
-  "SERVICE_6_DESC": "2 sentences specific to this service for this business in this location",
-  "EMERGENCY_HEADLINE": "4-6 words all caps e.g. EMERGENCY? WE ARE ON THE WAY.",
-  "EMERGENCY_SUBTEXT": "1-2 sentences about availability — only claim 24/7 if it fits this business type",
-  "WHY_US_HEADLINE": "4-7 words",
-  "WHY_US_1_TITLE": "3-5 word reason customers choose THIS specific business, based on their story and services",
-  "WHY_US_1_DESC": "2 sentences specific to this business — reference their actual services or story",
-  "WHY_US_2_TITLE": "3-5 word reason customers choose THIS specific business, distinct from #1",
-  "WHY_US_2_DESC": "2 sentences specific to this business",
-  "WHY_US_3_TITLE": "3-5 word reason customers choose THIS specific business, distinct from #1 and #2",
-  "WHY_US_3_DESC": "2 sentences specific to this business",
-  "WHY_US_4_TITLE": "3-5 word reason customers choose THIS specific business, distinct from the others",
-  "WHY_US_4_DESC": "2 sentences specific to this business",
-  "HAPPY_CUSTOMERS": "realistic round number e.g. 500 — do not invent a specific number if google_review_count was not provided, use a soft round figure",
-  "REVIEW_PLATFORMS": "e.g. Google and Facebook",
-  "TESTIMONIAL_1_TEXT": "realistic 2-3 sentence testimonial referencing an actual service of this business",
-  "TESTIMONIAL_1_NAME": "local sounding full name",
-  "TESTIMONIAL_1_LOCATION": "${city}, ${state}",
-  "TESTIMONIAL_2_TEXT": "different testimonial referencing a different service",
-  "TESTIMONIAL_2_NAME": "different local name",
-  "TESTIMONIAL_2_LOCATION": "nearby area near ${city}, ${state}",
-  "TESTIMONIAL_3_TEXT": "third distinct testimonial",
-  "TESTIMONIAL_3_NAME": "different local name",
-  "TESTIMONIAL_3_LOCATION": "${city} area",
-  "FINANCING_HEADLINE": "financing headline appropriate to this business type",
-  "FINANCING_SUBTEXT": "financing offer details appropriate to this business type",
-  "SERVICE_AREAS_HEADLINE": "4-6 words all caps",
-  "AREA_1": "REAL city or town name — must be an actual place near ${city}, ${state}. NEVER generic phrases like 'Local Communities', 'Surrounding Areas', 'Rural Properties', 'Nearby Towns'. If the client provided service areas above, use those names verbatim FIRST in order; only generate additional ones once the client list is exhausted.",
-  "AREA_2": "REAL city or town name geographically near ${city}, ${state} (distinct). Research actual nearby cities — for example, in northern Utah real options include Salt Lake City, Provo, Ogden, West Valley City, Sandy, Layton, Orem, Draper. NEVER generic descriptions.",
-  "AREA_3": "REAL nearby city or town (distinct) — actual place name only, never a category.",
-  "AREA_4": "REAL nearby city or town (distinct) — actual place name only.",
-  "AREA_5": "REAL nearby city or town (distinct) — actual place name only.",
-  "AREA_6": "REAL nearby city or town (distinct) — actual place name only.",
-  "AREA_7": "REAL nearby city or town (distinct) — actual place name only.",
-  "AREA_8": "REAL nearby city or town (distinct) — actual place name only.",
-  "AWARD_1": "relevant industry certification, license, or recognition typical for a ${businessType} business",
-  "AWARD_2": "different relevant industry certification or recognition for a ${businessType} business",
-  "AWARD_3": "different relevant industry certification or recognition for a ${businessType} business",
-  "AWARD_4": "different relevant industry certification or recognition for a ${businessType} business",
-  "AWARD_5": "different relevant industry certification or recognition for a ${businessType} business",
-  "FAQ_1_Q": "real question a customer of THIS specific ${businessType} business in ${city} would actually ask",
-  "FAQ_1_A": "2-4 sentence answer specific to this business, referencing their actual services and location",
-  "FAQ_2_Q": "different real question a customer of this business would ask",
-  "FAQ_2_A": "2-4 sentence answer specific to this business",
-  "FAQ_3_Q": "different real question a customer of this business would ask",
-  "FAQ_3_A": "2-4 sentence answer specific to this business",
-  "FAQ_4_Q": "different real question a customer of this business would ask",
-  "FAQ_4_A": "2-4 sentence answer specific to this business",
-  "FAQ_5_Q": "different real question a customer of this business would ask",
-  "FAQ_5_A": "2-4 sentence answer specific to this business",
-  "FAQ_6_Q": "different real question a customer of this business would ask",
-  "FAQ_6_A": "2-4 sentence answer specific to this business",
-  "FINAL_CTA_HEADLINE": "5-8 words all caps",
-  "FINAL_CTA_SUBTEXT": "1-2 sentences urgency and reassurance specific to this business",
-  "FOOTER_TAGLINE": "short memorable tagline specific to this business — use their exact words if they provided a tagline (${tagline || "none provided"}), otherwise write a 5-8 word tagline that captures this business's character",
-  "FOOTER_NEWSLETTER_TEXT": "1 sentence inviting email signup for deals and tips, specific to this business"${templateId === "feminine-bold" ? `,
-  "_FEMININE_BOLD_FRAMING_RULES": "This template is used for personal brands, coaches, attorneys, consultants, designers, therapists, photographers, and other professional service providers. Do NOT assume the business is a coaching practice. Use the business_type (${businessType}), services, owner_title (${ownerTitle || "not provided"}), and owner story to determine the correct framing. Never default to coaching language ('coach', 'cohort', 'method', '12 weeks', 'session') unless the intake clearly indicates a coaching practice. Translate every field below into language native to THIS business (e.g. an attorney: 'Consultation' not 'Session'; a designer: 'Project' not 'Cohort'; a therapist: 'Practice' not 'Method').",
-  "OWNER_TITLE": "Full professional title for the owner — e.g. 'Attorney at Law', 'Brand Strategist', 'Family Therapist', 'Business Coach'. Match the actual profession. Use the provided owner_title if any; otherwise infer from business_type and services. 2-4 words.",
-  "ANNOUNCE_TEXT": "short announcement bar text appropriate to this business e.g. 'Now booking new clients — ${city || "local area"}'",
-  "ABOUT_STRIP_DROPCAP": "first letter of ABOUT_STRIP_LINE1 (single capital letter only)",
-  "ABOUT_STRIP_LINE1": "rest of first word in caps after the dropcap letter (e.g. if dropcap is H, this is ELPING)",
-  "ABOUT_STRIP_LINE2": "second line of the about strip — caps, specific to this business and its actual clients",
-  "ABOUT_STRIP_LINE3": "third line — caps",
-  "ABOUT_STRIP_LINE4": "fourth line — caps, ends with a period",
-  "ABOUT_STRIP_BODY": "1-2 sentences expanding on the about strip, specific to this business",
-  "ABOUT_INTRO_HEADLINE": "personal intro headline using the owner's real name and real title (NOT 'coach' unless they are a coach) e.g. 'Hi, I'm ${ownerName || "[name]"}'",
-  "ABOUT_INTRO_BODY": "2-3 sentences personal intro body specific to this business",
-  "TRANSFORMATION_HEADLINE": "Full 4-8 word headline for the transformation/before-after section, written in the voice of THIS business (attorneys: 'From Uncertainty to Confident Decisions.' / designers: 'From Concept to Considered Brand.'). One complete phrase. First letter will be styled as a decorative dropcap automatically — do NOT split or capitalize specially.",
-  "TRANSFORMATION_BODY": "1-2 sentences about the transformation/outcome journey, native to this business type",
-  "BA_1_BEFORE": "before state 1 — what the client struggles with now (use language native to this business)",
-  "BA_1_AFTER": "after state 1 — what they achieve after working together",
-  "BA_2_BEFORE": "before state 2",
-  "BA_2_AFTER": "after state 2",
-  "BA_3_BEFORE": "before state 3",
-  "BA_3_AFTER": "after state 3",
-  "PHILOSOPHY_HEADLINE": "Full 4-8 word headline for the philosophy/approach section, specific to this business (attorney: 'A Practice Built on Trust.' / therapist: 'Care Rooted in Presence.'). First letter is auto-styled as a decorative dropcap.",
-  "PILLAR_1_TITLE": "first philosophy pillar title (1-2 words, native to this business)",
-  "PILLAR_1_BODY": "2-3 sentences describing pillar 1",
-  "PILLAR_2_TITLE": "second philosophy pillar title",
-  "PILLAR_2_BODY": "2-3 sentences describing pillar 2",
-  "PILLAR_3_TITLE": "third philosophy pillar title",
-  "PILLAR_3_BODY": "2-3 sentences describing pillar 3",
-  "SERVICES_HEADLINE_FB": "Full 4-7 word headline for the services section (attorney: 'How We Can Help.' / designer: 'Ways We Work Together.'). First letter is auto-styled as a decorative dropcap.",
-  "METHODOLOGY_HEADLINE": "Full 3-7 word headline for the methodology/process section (attorney: 'A Considered Process.' / coach: 'A Four-Part Journey.'). First letter is auto-styled as a decorative dropcap.",
-  "METHODOLOGY_BODY": "1 sentence describing the process approach, native to this business",
-  "STEP_1_TITLE": "step 1 name — language native to this business (attorney: 'The Consultation' / designer: 'Discovery')",
-  "STEP_1_BODY": "2-3 sentences describing step 1",
-  "STEP_2_TITLE": "step 2 name",
-  "STEP_2_BODY": "2-3 sentences describing step 2",
-  "STEP_3_TITLE": "step 3 name",
-  "STEP_3_BODY": "2-3 sentences describing step 3",
-  "STEP_4_TITLE": "step 4 name",
-  "STEP_4_BODY": "2-3 sentences describing step 4",
-  "TESTIMONIALS_HEADLINE_FB": "Full 3-6 word headline for the testimonials section (e.g. 'Words From Our Clients.' / 'Quiet Wins, Loudly Earned.'). First letter is auto-styled as a decorative dropcap.",
-  "LEAD_MAGNET_TITLE": "Full 3-7 word title for a free guide/resource offer specific to this business (attorney: 'The ${businessName} Estate Planning Primer.' / designer: 'The Brand Clarity Workbook.'). First letter is auto-styled as a decorative dropcap.",
-  "LEAD_MAGNET_BODY": "1-2 sentences describing the free resource offer",
-  "FINAL_CTA_HEADLINE_FB": "Full 4-8 word warm closing headline (attorney: 'It Starts With a Conversation.' / designer: 'Let's Make Something Considered.'). First letter is auto-styled as a decorative dropcap.",
-  "SERVICE_1_DURATION_FB": "short duration/format label native to this business in CAPS (attorney: 'FLAT FEE' or 'HOURLY' / designer: '6 WEEKS' / therapist: '50 MIN' / coach: '12 WEEKS'). Leave empty string if no natural duration applies.",
-  "SERVICE_2_DURATION_FB": "short duration/format label native to this business in CAPS, or empty string",
-  "SERVICE_3_DURATION_FB": "short duration/format label native to this business in CAPS, or empty string",
-  "SERVICE_1_INCLUDE_1_FB": "what's included in service 1 — language native to this business (NOT '1:1 sessions' unless they are a coach/therapist)",
-  "SERVICE_1_INCLUDE_2_FB": "what's included in service 1 (distinct)",
-  "SERVICE_1_INCLUDE_3_FB": "what's included in service 1 (distinct)",
-  "SERVICE_2_INCLUDE_1_FB": "what's included in service 2 (native language)",
-  "SERVICE_2_INCLUDE_2_FB": "what's included in service 2",
-  "SERVICE_2_INCLUDE_3_FB": "what's included in service 2",
-  "SERVICE_3_INCLUDE_1_FB": "what's included in service 3 (native language)",
-  "SERVICE_3_INCLUDE_2_FB": "what's included in service 3",
-  "SERVICE_3_INCLUDE_3_FB": "what's included in service 3"` : ""}
-  "IMAGE_SEARCH_HERO": "specific descriptive Unsplash search query for the hero image — describe the SCENE not the business type (e.g. 'woman journaling warm light cozy room' NOT 'coaching'; 'modern kitchen renovation white marble' NOT 'plumber'; 'professional woman at desk warm office' NOT 'attorney'). 3-6 descriptive words.",
-  "IMAGE_SEARCH_ABOUT": "specific descriptive Unsplash search query for the about/team image — describe a scene showing the person or team at work (e.g. 'craftsman working with tools workshop' NOT 'trades'). 3-6 descriptive words.",
-  "IMAGE_SEARCH_WHYUS": "specific descriptive Unsplash search query for the why-us/portfolio image — describe the RESULT or environment (e.g. 'beautiful modern bathroom renovation completed' NOT 'plumber'). 3-6 descriptive words.",
-  "SECTIONS_TO_REMOVE": "comma-separated list of sections to REMOVE from this site because data is missing or irrelevant. Valid options: testimonials, service_areas, awards, financing, faq, emergency. Only remove sections where the data truly doesn't exist or doesn't apply to this business type. If the business has no testimonials/reviews, include 'testimonials'. If no city was provided, include 'service_areas'. Return empty string if all sections should stay."
-}`;
-
-    console.log("[generate] Calling Claude for copy...");
-    const copyResult = await callAI(ANTHROPIC_API_KEY, copyPrompt, "copy");
-
+    // Parse AI response
     let copy: any = {};
     try {
       let rawCopy = stripMarkdown(copyResult.text);
-      // ── JSON Repair: fix common Claude JSON mistakes ──
-      // Remove trailing commas before } or ]
+      // JSON repair: trailing commas, BOM, extract JSON object
       rawCopy = rawCopy.replace(/,\s*([}\]])/g, "$1");
-      // Fix unescaped newlines inside string values
       rawCopy = rawCopy.replace(/(["'])\s*\n\s*/g, "$1 ");
-      // Remove any BOM or zero-width chars
       rawCopy = rawCopy.replace(/[\u200B-\u200D\uFEFF]/g, "");
-      // Attempt to extract JSON if wrapped in extra text
       const jsonStart = rawCopy.indexOf("{");
       const jsonEnd = rawCopy.lastIndexOf("}");
-      if (jsonStart > 0 || jsonEnd < rawCopy.length - 1) {
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
         rawCopy = rawCopy.slice(jsonStart, jsonEnd + 1);
       }
       copy = JSON.parse(rawCopy);
     } catch (e) {
-      console.error("[generate] JSON parse failed after repair attempt:", e);
-      console.error("[generate] Raw:", copyResult.text.substring(0, 500));
-      // Last resort: try to extract key-value pairs with regex
+      console.error("[generate] JSON parse failed:", e);
+      // Regex fallback: extract key-value pairs
       try {
         const fallbackCopy: any = {};
         const kvMatches = copyResult.text.matchAll(/"([A-Z_0-9]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
@@ -650,53 +353,54 @@ Return this exact JSON structure (every field required, no empty strings unless 
           fallbackCopy[m[1]] = m[2].replace(/\\n/g, "\n").replace(/\\"/g, '"');
         }
         if (Object.keys(fallbackCopy).length > 10) {
-          console.warn("[generate] Used regex fallback to extract copy — got", Object.keys(fallbackCopy).length, "fields");
+          console.warn(`[generate] Regex fallback extracted ${Object.keys(fallbackCopy).length} fields`);
           copy = fallbackCopy;
         } else {
-          throw new Error("Claude returned invalid JSON for copy (repair failed)");
+          throw new Error("AI returned invalid JSON (all repair attempts failed)");
         }
       } catch (e2) {
-        throw new Error("Claude returned invalid JSON for copy (all repair attempts failed)");
+        throw new Error("AI returned invalid JSON (all repair attempts failed)");
       }
     }
+
+    console.log(`[generate] AI returned ${Object.keys(copy).length} fields (${copyResult.outputTokens} tokens)`);
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 5: VALIDATE & TRUNCATE COPY
+    // ═════════════════════════════════════════════════════════════════════════
 
     await supabase.from("sites").update({ generation_progress: "filling_template" } as any).eq("client_id", clientId);
 
-    // ── Validate & truncate copy fields to prevent overflow ─────────────
-    const textReplacer = createCommonReplacer();
-    const fieldsToValidate: Array<{ key: string; constraint: string }> = [
-      { key: "HERO_HEADLINE_LINE1", constraint: "HERO_HEADLINE_LINE1" },
-      { key: "HERO_HEADLINE_HIGHLIGHT", constraint: "HERO_HEADLINE_HIGHLIGHT" },
-      { key: "HERO_HEADLINE_LINE2", constraint: "HERO_HEADLINE_LINE2" },
-      { key: "HERO_SUBHEADING", constraint: "HERO_SUBHEADING" },
-      { key: "ABOUT_HEADLINE", constraint: "ABOUT_HEADLINE" },
-      { key: "SERVICE_1_NAME", constraint: "SERVICE_NAME" },
-      { key: "SERVICE_2_NAME", constraint: "SERVICE_NAME" },
-      { key: "SERVICE_3_NAME", constraint: "SERVICE_NAME" },
-      { key: "SERVICE_4_NAME", constraint: "SERVICE_NAME" },
-      { key: "SERVICE_5_NAME", constraint: "SERVICE_NAME" },
-      { key: "SERVICE_6_NAME", constraint: "SERVICE_NAME" },
-      { key: "SERVICE_1_DESC", constraint: "SERVICE_DESC" },
-      { key: "SERVICE_2_DESC", constraint: "SERVICE_DESC" },
-      { key: "SERVICE_3_DESC", constraint: "SERVICE_DESC" },
-      { key: "SERVICE_4_DESC", constraint: "SERVICE_DESC" },
-      { key: "SERVICE_5_DESC", constraint: "SERVICE_DESC" },
-      { key: "SERVICE_6_DESC", constraint: "SERVICE_DESC" },
-      { key: "TESTIMONIAL_1_TEXT", constraint: "TESTIMONIAL_QUOTE" },
-      { key: "TESTIMONIAL_2_TEXT", constraint: "TESTIMONIAL_QUOTE" },
-      { key: "TESTIMONIAL_3_TEXT", constraint: "TESTIMONIAL_QUOTE" },
-    ];
-    for (const { key, constraint } of fieldsToValidate) {
-      if (copy[key]) {
-        const result = textReplacer.replace(constraint, copy[key]);
-        if (result.replaced !== copy[key]) {
-          console.warn(`[generate] Truncated ${key}: ${copy[key].length} → ${result.replaced.length} chars`);
-          copy[key] = result.replaced;
-        }
+    // Truncate copy fields that exceed character limits
+    const charLimits: Record<string, number> = {
+      HERO_HEADLINE_LINE1: 30,
+      HERO_HEADLINE_HIGHLIGHT: 25,
+      HERO_HEADLINE_LINE2: 30,
+      HERO_SUBHEADING: 200,
+      ABOUT_HEADLINE: 45,
+      SERVICE_1_NAME: 30, SERVICE_2_NAME: 30, SERVICE_3_NAME: 30,
+      SERVICE_4_NAME: 30, SERVICE_5_NAME: 30, SERVICE_6_NAME: 30,
+      SERVICE_1_DESC: 200, SERVICE_2_DESC: 200, SERVICE_3_DESC: 200,
+      SERVICE_4_DESC: 200, SERVICE_5_DESC: 200, SERVICE_6_DESC: 200,
+      TESTIMONIAL_1_TEXT: 250, TESTIMONIAL_2_TEXT: 250, TESTIMONIAL_3_TEXT: 250,
+      WHY_US_1_TITLE: 30, WHY_US_2_TITLE: 30, WHY_US_3_TITLE: 30, WHY_US_4_TITLE: 30,
+      WHY_US_1_DESC: 200, WHY_US_2_DESC: 200, WHY_US_3_DESC: 200, WHY_US_4_DESC: 200,
+      STAT_1_NUMBER: 8, STAT_2_NUMBER: 8, STAT_3_NUMBER: 8, STAT_4_NUMBER: 8,
+      STAT_1_LABEL: 20, STAT_2_LABEL: 20, STAT_3_LABEL: 20, STAT_4_LABEL: 20,
+      FOOTER_TAGLINE: 50,
+      ABOUT_STORY: 600,
+    };
+    for (const [key, maxLen] of Object.entries(charLimits)) {
+      if (copy[key] && copy[key].length > maxLen) {
+        console.warn(`[generate] Truncated ${key}: ${copy[key].length} → ${maxLen}`);
+        copy[key] = copy[key].substring(0, maxLen - 3) + "...";
       }
     }
 
-    // ── AI-DRIVEN STOCK PHOTOS — fetch images using AI-suggested search terms ──
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 6: FETCH STOCK IMAGES (using AI's scene descriptions)
+    // ═════════════════════════════════════════════════════════════════════════
+
     if (allowStock) {
       const needed: Array<"hero" | "about" | "whyus"> = [];
       if (!heroImageUrl) needed.push("hero");
@@ -705,7 +409,6 @@ Return this exact JSON structure (every field required, no empty strings unless 
 
       if (needed.length > 0) {
         const stockResults = await Promise.all(needed.map((slot) => {
-          // Use AI-suggested search terms if available, fall back to generic
           let searchQuery: string;
           if (slot === "hero" && copy.IMAGE_SEARCH_HERO) {
             searchQuery = copy.IMAGE_SEARCH_HERO;
@@ -714,12 +417,12 @@ Return this exact JSON structure (every field required, no empty strings unless 
           } else if (slot === "whyus" && copy.IMAGE_SEARCH_WHYUS) {
             searchQuery = copy.IMAGE_SEARCH_WHYUS;
           } else {
-            // Fallback to generic terms
-            const variant = slot === "hero" ? "wide hero" : slot === "about" ? "team working" : "professional";
+            // Fallback: use business type + slot context
+            const variant = slot === "hero" ? "professional workspace" : slot === "about" ? "team working" : "quality results";
             searchQuery = `${businessType} ${variant}`;
           }
-          console.log(`[generate] Stock photo search for ${slot}: "${searchQuery}"`);
-          return fetchUnsplashPhotoUrl([searchQuery]);
+          console.log(`[generate] Stock search for ${slot}: "${searchQuery}"`);
+          return fetchUnsplashPhotoUrl([searchQuery, `${businessType} professional`]);
         }));
         needed.forEach((slot, i) => {
           const url = stockResults[i] || "";
@@ -731,21 +434,31 @@ Return this exact JSON structure (every field required, no empty strings unless 
     }
     console.log(`[generate] Final photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"}`);
 
-    // ── AI-DRIVEN SECTION REMOVAL — remove sections AI says don't apply ──
-    const sectionsToRemove = (copy.SECTIONS_TO_REMOVE || "").split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean);
-    // Also force-remove testimonials if noTestimonials flag is set
-    if (noTestimonials && !sectionsToRemove.includes("testimonials")) {
-      sectionsToRemove.push("testimonials");
-    }
-    console.log(`[generate] Sections to remove: ${sectionsToRemove.length > 0 ? sectionsToRemove.join(", ") : "none"}`);
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 7: DETERMINISTIC TEMPLATE EXECUTION
+    // ═════════════════════════════════════════════════════════════════════════
+    // AI never touches HTML. This phase is pure string replacement.
 
-    // ── Render conditional sections + repeating COUPONS block ────────────
     let html = templateHTML;
+
+    // ── 7a: Section removal ──────────────────────────────────────────────
+    const sectionsToRemove = parseSectionsToRemove(copy.SECTIONS_TO_REMOVE, {
+      noTestimonials,
+      noAddress: !address && !city,
+      noServiceAreas: serviceAreas.length === 0 && !city,
+    });
+    console.log(`[generate] Removing sections: ${sectionsToRemove.length > 0 ? sectionsToRemove.join(", ") : "none"}`);
+
+    for (const section of sectionsToRemove) {
+      html = removeSection(html, section);
+    }
+
+    // ── 7b: Conditional sections (Mustache-style) ────────────────────────
     html = applyConditional(html, "SHOW_FINANCING", showFinancing);
     html = applyConditional(html, "SHOW_AWARDS", showAwards);
     html = applyConditional(html, "SHOW_COUPONS", showCoupons);
 
-    // Render the {{#COUPONS}}...{{/COUPONS}} repeating block
+    // Render repeating COUPONS block
     if (showCoupons && coupons.length > 0) {
       html = renderMustacheSection(html, "COUPONS", coupons.map((c: any) => ({
         COUPON_AMOUNT: c.amount || c.COUPON_AMOUNT || "",
@@ -757,56 +470,32 @@ Return this exact JSON structure (every field required, no empty strings unless 
       html = renderMustacheSection(html, "COUPONS", []);
     }
 
-    // ── SMART SECTION REMOVAL — remove entire HTML sections when data is missing ──
-    for (const section of sectionsToRemove) {
-      // Build regex patterns for common section class naming conventions
-      const patterns = [
-        // <section class="...testimonial...">...</section>
-        new RegExp(`<section[^>]*class="[^"]*${section}[^"]*"[^>]*>[\\s\\S]*?<\\/section>`, 'gi'),
-        // <div class="...testimonial-section...">...</div> (followed by another major element)
-        new RegExp(`<div[^>]*class="[^"]*${section}[^"]*-section[^"]*"[^>]*>[\\s\\S]*?<\\/div>\\s*(?=<(?:section|div[^>]*class="[^"]*section|footer))`, 'gi'),
-        // <section id="testimonials">...</section>
-        new RegExp(`<section[^>]*id="[^"]*${section}[^"]*"[^>]*>[\\s\\S]*?<\\/section>`, 'gi'),
-        // data-section="testimonials"
-        new RegExp(`<[^>]*data-section="[^"]*${section}[^"]*"[^>]*>[\\s\\S]*?<\\/(?:section|div)>`, 'gi'),
-      ];
-      for (const pattern of patterns) {
-        const before = html.length;
-        html = html.replace(pattern, '');
-        if (html.length < before) {
-          console.log(`[generate] Removed section: ${section} (${before - html.length} chars)`);
-          break; // Only need one pattern to match
-        }
-      }
-    }
-
-    // ── Build LOGO_HTML and MAP_HTML ─────────────────────────────────────
-    // If logo exists, show ONLY the logo image (no business name text).
-    // If no logo, show business name text only (LOGO_HTML empty).
+    // ── 7c: Build fill map ───────────────────────────────────────────────
     const hasLogo = !!logoUrlResolved;
     const logoHTML = hasLogo
-      ? `<img src="${logoUrlResolved}" alt="${businessName} logo" class="logo-img" />`
+      ? `<img src="${logoUrlResolved}" alt="${escapeAttr(businessName)} logo" class="logo-img" />`
       : "";
-    const businessNameInHeader = hasLogo ? "" : businessName;
 
     const mapBuild = buildMapHTML({
       locationType: intake.location_type || intake.business_location_type || "",
       streetAddress: intake.street_address || intake.business_address || intake.address || "",
-      city,
-      state,
+      city, state,
       zip: intake.business_zip || intake.zip || intake.postal_code || intake.zip_code || "",
       serviceArea: intake.service_area || "",
     });
-    const mapHTML = mapBuild.html;
-    const mapEmbedUrl = mapBuild.url;
 
-    // ── Build SERVICE_OPTIONS for any contact-form selects ───────────────
     const serviceOptionsHTML = serviceNames.length
       ? serviceNames.map((s: string) => `<option value="${escapeAttr(s)}">${escapeHTML(s)}</option>`).join("\n")
       : `<option value="general">General Inquiry</option>`;
 
-    // ── Fill all flat placeholders ───────────────────────────────────────
+    // Social links — clean, no doubled URLs
+    const socialLinks = intake.social_links || {};
+    const instagramUrl = socialLinks.instagram
+      ? (socialLinks.instagram.startsWith("http") ? socialLinks.instagram : `https://instagram.com/${String(socialLinks.instagram).replace("@", "")}`)
+      : "";
+
     const fill: Record<string, string> = {
+      // ── Business basics ──
       "{{BUSINESS_NAME}}": businessName,
       "{{BUSINESS_PHONE}}": phone,
       "{{BUSINESS_PHONE_RAW}}": phoneRaw,
@@ -824,7 +513,8 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{HAPPY_CUSTOMERS}}": copy.HAPPY_CUSTOMERS || "500",
       "{{REVIEW_PLATFORMS}}": copy.REVIEW_PLATFORMS || "Google",
       "{{META_DESCRIPTION}}": copy.META_DESCRIPTION || `${businessName} — ${businessType} in ${city}, ${state}.`,
-      // Hero
+
+      // ── Hero ──
       "{{HERO_BADGE}}": copy.HERO_BADGE || "",
       "{{HERO_HEADLINE_LINE1}}": copy.HERO_HEADLINE_LINE1 || "",
       "{{HERO_HEADLINE_HIGHLIGHT}}": copy.HERO_HEADLINE_HIGHLIGHT || "",
@@ -833,14 +523,16 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{HERO_HEADLINE_COMMA}}": (copy.HERO_HEADLINE_LINE2 || copy.HERO_HEADLINE_LINE3) ? "," : "",
       "{{HERO_SUBHEADING}}": copy.HERO_SUBHEADING || "",
       "{{TRUST_ITEM_3}}": copy.TRUST_ITEM_3 || "FAMILY OWNED",
-      // About
+
+      // ── About ──
       "{{ABOUT_HEADLINE}}": copy.ABOUT_HEADLINE || "",
       "{{ABOUT_STORY}}": copy.ABOUT_STORY || "",
       "{{ABOUT_POINT_1}}": copy.ABOUT_POINT_1 || "",
       "{{ABOUT_POINT_2}}": copy.ABOUT_POINT_2 || "",
       "{{ABOUT_POINT_3}}": copy.ABOUT_POINT_3 || "",
       "{{ABOUT_POINT_4}}": copy.ABOUT_POINT_4 || "",
-      // Stats
+
+      // ── Stats ──
       "{{STAT_1_NUMBER}}": copy.STAT_1_NUMBER || "500+",
       "{{STAT_1_LABEL}}": copy.STAT_1_LABEL || "JOBS COMPLETED",
       "{{STAT_2_NUMBER}}": copy.STAT_2_NUMBER || (googleRating ? `${googleRating}★` : "4.9★"),
@@ -849,25 +541,12 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{STAT_3_LABEL}}": copy.STAT_3_LABEL || "EMERGENCY SERVICE",
       "{{STAT_4_NUMBER}}": copy.STAT_4_NUMBER || "100%",
       "{{STAT_4_LABEL}}": copy.STAT_4_LABEL || "SATISFACTION GUARANTEED",
-      // Services
+
+      // ── Services ──
       "{{SERVICES_HEADLINE}}": copy.SERVICES_HEADLINE || "OUR SERVICES",
       "{{SERVICES_SUBHEADING}}": copy.SERVICES_SUBHEADING || "",
       "{{SERVICES_INTRO}}": copy.SERVICES_INTRO || copy.SERVICES_SUBTEXT || "",
       "{{SERVICES_SUBTEXT}}": copy.SERVICES_SUBTEXT || copy.SERVICES_INTRO || "",
-      // About page hero (business-professional about.html)
-      "{{ABOUT_HEADLINE_LINE1}}": copy.ABOUT_HEADLINE_LINE1 || copy.ABOUT_HEADLINE || "",
-      "{{ABOUT_HEADLINE_LINE2}}": copy.ABOUT_HEADLINE_LINE2 || "",
-      "{{ABOUT_STORY_SHORT}}": (copy.ABOUT_STORY || "").split(/\n\n/)[0] || copy.ABOUT_STORY || "",
-      // Who We Serve (business-professional index)
-      "{{SERVE_HEADLINE}}": copy.SERVE_HEADLINE || "WHO WE SERVE",
-      "{{SERVE_SUBHEADING}}": copy.SERVE_SUBHEADING || "",
-      "{{SERVE_BODY}}": copy.SERVE_BODY || "",
-      "{{SERVE_1}}": copy.SERVE_1 || "",
-      "{{SERVE_2}}": copy.SERVE_2 || "",
-      "{{SERVE_3}}": copy.SERVE_3 || "",
-      "{{SERVE_4}}": copy.SERVE_4 || "",
-      // Footer legal disclaimer (NOT a copyright)
-      "{{FOOTER_LEGAL_NOTE}}": copy.FOOTER_LEGAL_NOTE || "",
       "{{SERVICE_1_NAME}}": copy.SERVICE_1_NAME || serviceNames[0] || "",
       "{{SERVICE_1_DESC}}": copy.SERVICE_1_DESC || "",
       "{{SERVICE_2_NAME}}": copy.SERVICE_2_NAME || serviceNames[1] || "",
@@ -881,10 +560,33 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{SERVICE_6_NAME}}": copy.SERVICE_6_NAME || serviceNames[5] || "",
       "{{SERVICE_6_DESC}}": copy.SERVICE_6_DESC || "",
       "{{SERVICE_OPTIONS}}": serviceOptionsHTML,
-      // Emergency
+
+      // ── About page hero (business-professional) ──
+      "{{ABOUT_HEADLINE_LINE1}}": copy.ABOUT_HEADLINE_LINE1 || copy.ABOUT_HEADLINE || "",
+      "{{ABOUT_HEADLINE_LINE2}}": copy.ABOUT_HEADLINE_LINE2 || "",
+      "{{ABOUT_STORY_SHORT}}": (copy.ABOUT_STORY || "").split(/\n\n/)[0] || copy.ABOUT_STORY || "",
+
+      // ── Who We Serve (business-professional) ──
+      "{{SERVE_HEADLINE}}": copy.SERVE_HEADLINE || "WHO WE SERVE",
+      "{{SERVE_SUBHEADING}}": copy.SERVE_SUBHEADING || "",
+      "{{SERVE_BODY}}": copy.SERVE_BODY || "",
+      "{{SERVE_1}}": copy.SERVE_1 || "",
+      "{{SERVE_2}}": copy.SERVE_2 || "",
+      "{{SERVE_3}}": copy.SERVE_3 || "",
+      "{{SERVE_4}}": copy.SERVE_4 || "",
+
+      // ── Footer ──
+      "{{FOOTER_LEGAL_NOTE}}": copy.FOOTER_LEGAL_NOTE || "",
+      "{{FOOTER_TAGLINE}}": copy.FOOTER_TAGLINE || tagline || "",
+      "{{FOOTER_NEWSLETTER_TEXT}}": copy.FOOTER_NEWSLETTER_TEXT || "Sign up for exclusive deals and expert tips.",
+      "{{BUSINESS_NAME_PART1}}": businessName,
+      "{{BUSINESS_NAME_PART2}}": "",
+
+      // ── Emergency ──
       "{{EMERGENCY_HEADLINE}}": copy.EMERGENCY_HEADLINE || "EMERGENCY? WE'RE ON THE WAY.",
       "{{EMERGENCY_SUBTEXT}}": copy.EMERGENCY_SUBTEXT || "",
-      // Why us
+
+      // ── Why Us ──
       "{{WHY_US_HEADLINE}}": copy.WHY_US_HEADLINE || "",
       "{{WHY_US_1_TITLE}}": copy.WHY_US_1_TITLE || "",
       "{{WHY_US_1_DESC}}": copy.WHY_US_1_DESC || "",
@@ -894,7 +596,8 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{WHY_US_3_DESC}}": copy.WHY_US_3_DESC || "",
       "{{WHY_US_4_TITLE}}": copy.WHY_US_4_TITLE || "",
       "{{WHY_US_4_DESC}}": copy.WHY_US_4_DESC || "",
-      // Testimonials
+
+      // ── Testimonials ──
       "{{TESTIMONIAL_1_TEXT}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_TEXT || ""),
       "{{TESTIMONIAL_1_NAME}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_NAME || ""),
       "{{TESTIMONIAL_1_LOCATION}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_LOCATION || city),
@@ -904,26 +607,30 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{TESTIMONIAL_3_TEXT}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_TEXT || ""),
       "{{TESTIMONIAL_3_NAME}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_NAME || ""),
       "{{TESTIMONIAL_3_LOCATION}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_LOCATION || city),
-      // Financing
+
+      // ── Financing ──
       "{{FINANCING_HEADLINE}}": showFinancing ? (copy.FINANCING_HEADLINE || "FLEXIBLE FINANCING AVAILABLE") : "",
       "{{FINANCING_SUBTEXT}}": showFinancing ? (copy.FINANCING_SUBTEXT || "") : "",
-      // Service areas
+
+      // ── Service Areas ──
       "{{SERVICE_AREAS_HEADLINE}}": copy.SERVICE_AREAS_HEADLINE || `SERVING ${(city || "OUR AREA").toUpperCase()} & BEYOND`,
-      "{{AREA_1}}": serviceAreas[0] ? (typeof serviceAreas[0] === "string" ? serviceAreas[0] : serviceAreas[0].name) : (copy.AREA_1 || city),
-      "{{AREA_2}}": serviceAreas[1] ? (typeof serviceAreas[1] === "string" ? serviceAreas[1] : serviceAreas[1].name) : (copy.AREA_2 || ""),
-      "{{AREA_3}}": serviceAreas[2] ? (typeof serviceAreas[2] === "string" ? serviceAreas[2] : serviceAreas[2].name) : (copy.AREA_3 || ""),
-      "{{AREA_4}}": serviceAreas[3] ? (typeof serviceAreas[3] === "string" ? serviceAreas[3] : serviceAreas[3].name) : (copy.AREA_4 || ""),
-      "{{AREA_5}}": serviceAreas[4] ? (typeof serviceAreas[4] === "string" ? serviceAreas[4] : serviceAreas[4].name) : (copy.AREA_5 || ""),
-      "{{AREA_6}}": serviceAreas[5] ? (typeof serviceAreas[5] === "string" ? serviceAreas[5] : serviceAreas[5].name) : (copy.AREA_6 || ""),
-      "{{AREA_7}}": serviceAreas[6] ? (typeof serviceAreas[6] === "string" ? serviceAreas[6] : serviceAreas[6].name) : (copy.AREA_7 || ""),
-      "{{AREA_8}}": serviceAreas[7] ? (typeof serviceAreas[7] === "string" ? serviceAreas[7] : serviceAreas[7].name) : (copy.AREA_8 || ""),
-      // Awards
+      "{{AREA_1}}": clientServiceAreaNames[0] || copy.AREA_1 || city || "",
+      "{{AREA_2}}": clientServiceAreaNames[1] || copy.AREA_2 || "",
+      "{{AREA_3}}": clientServiceAreaNames[2] || copy.AREA_3 || "",
+      "{{AREA_4}}": clientServiceAreaNames[3] || copy.AREA_4 || "",
+      "{{AREA_5}}": clientServiceAreaNames[4] || copy.AREA_5 || "",
+      "{{AREA_6}}": clientServiceAreaNames[5] || copy.AREA_6 || "",
+      "{{AREA_7}}": clientServiceAreaNames[6] || copy.AREA_7 || "",
+      "{{AREA_8}}": clientServiceAreaNames[7] || copy.AREA_8 || "",
+
+      // ── Awards ──
       "{{AWARD_1}}": showAwards ? (awards[0] ? (typeof awards[0] === "string" ? awards[0] : awards[0].name) : (copy.AWARD_1 || "")) : "",
       "{{AWARD_2}}": showAwards ? (awards[1] ? (typeof awards[1] === "string" ? awards[1] : awards[1].name) : (copy.AWARD_2 || "")) : "",
       "{{AWARD_3}}": showAwards ? (awards[2] ? (typeof awards[2] === "string" ? awards[2] : awards[2].name) : (copy.AWARD_3 || "")) : "",
       "{{AWARD_4}}": showAwards ? (awards[3] ? (typeof awards[3] === "string" ? awards[3] : awards[3].name) : (copy.AWARD_4 || "")) : "",
       "{{AWARD_5}}": showAwards ? (awards[4] ? (typeof awards[4] === "string" ? awards[4] : awards[4].name) : (copy.AWARD_5 || "")) : "",
-      // FAQ
+
+      // ── FAQ ──
       "{{FAQ_1_Q}}": faqItems[0]?.question || copy.FAQ_1_Q || "",
       "{{FAQ_1_A}}": faqItems[0]?.answer || copy.FAQ_1_A || "",
       "{{FAQ_2_Q}}": faqItems[1]?.question || copy.FAQ_2_Q || "",
@@ -936,20 +643,22 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{FAQ_5_A}}": faqItems[4]?.answer || copy.FAQ_5_A || "",
       "{{FAQ_6_Q}}": faqItems[5]?.question || copy.FAQ_6_Q || "",
       "{{FAQ_6_A}}": faqItems[5]?.answer || copy.FAQ_6_A || "",
-      // Final CTA
+
+      // ── Final CTA ──
       "{{FINAL_CTA_HEADLINE}}": copy.FINAL_CTA_HEADLINE || "READY TO GET STARTED?",
       "{{FINAL_CTA_SUBTEXT}}": copy.FINAL_CTA_SUBTEXT || "",
-      // Footer
-      "{{FOOTER_TAGLINE}}": copy.FOOTER_TAGLINE || tagline || "",
-      "{{FOOTER_NEWSLETTER_TEXT}}": copy.FOOTER_NEWSLETTER_TEXT || "Sign up for exclusive deals and expert tips.",
-      "{{BUSINESS_NAME_PART1}}": businessName,
-      "{{BUSINESS_NAME_PART2}}": "",
-      // Coupons fallback (when not in COUPONS block context)
+      "{{FINAL_CTA_EYEBROW}}": copy.FINAL_CTA_EYEBROW || "✦ YOUR NEXT STEP",
+      "{{FINAL_CTA_BODY}}": copy.FINAL_CTA_SUBTEXT || "",
+      "{{FINAL_CTA_BTN}}": copy.FINAL_CTA_BTN || TEMPLATE_DEFAULT_CTAS[templateId] || "GET STARTED",
+
+      // ── Coupons ──
       "{{COUPONS_NOTE}}": intake.coupons_note || "Print or show on phone. Cannot be combined with other offers.",
-      // Map
-      "{{MAP_HTML}}": mapHTML,
-      "{{MAP_EMBED_URL}}": mapEmbedUrl,
-      // Logos and images
+
+      // ── Map ──
+      "{{MAP_HTML}}": mapBuild.html,
+      "{{MAP_EMBED_URL}}": mapBuild.url,
+
+      // ── Logos and images ──
       "{{LOGO_HTML}}": logoHTML,
       "{{LOGO_URL}}": logoUrlResolved,
       "{{HERO_IMAGE_URL}}": heroImageUrl,
@@ -963,192 +672,59 @@ Return this exact JSON structure (every field required, no empty strings unless 
       "{{SERVICE_6_IMAGE_URL}}": pickServiceImage(5, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
       "{{TRANSFORMATION_IMAGE_URL}}": portfolioPhotos[3] || portfolioPhotos[0] || aboutImageUrl,
       "{{LEAD_MAGNET_IMAGE_URL}}": portfolioPhotos[4] || portfolioPhotos[0] || heroImageUrl,
-      // Misc
+
+      // ── Social links ──
+      "{{SOCIAL_INSTAGRAM_URL}}": instagramUrl,
+      "{{SOCIAL_FACEBOOK_URL}}": socialLinks.facebook || "",
+      "{{SOCIAL_LINKEDIN_URL}}": socialLinks.linkedin || "",
+      "{{SOCIAL_TIKTOK_URL}}": socialLinks.tiktok || "",
+      "{{SOCIAL_PINTEREST_URL}}": socialLinks.pinterest || "",
+      "{{SOCIAL_GOOGLE_URL}}": socialLinks.google_business || socialLinks.google || "",
+      "{{SOCIAL_SUBSTACK_URL}}": socialLinks.substack || "",
+      "{{SOCIAL_PODCAST_URL}}": socialLinks.podcast || "",
+      "{{SOCIAL_BLOG_URL}}": socialLinks.blog || "",
+
+      // ── Misc ──
       "{{DOMAIN}}": intake.domain || `staging.sitequeen.ai/${clientId}`,
       "{{CLIENT_ID}}": clientId,
       "{{SUPABASE_URL}}": supabaseUrl,
 
-      // ── feminine-bold template extras ───────────────────────────────────
-      // Helper: split a single source string into {drop, rest} so the
-      // template's two-span dropcap pattern can never duplicate or mismatch
-      // the first letter. Both halves ALWAYS come from the same source.
-      ...(() => {
-        const splitDrop = (raw: string): { drop: string; rest: string } => {
-          const s = (raw || "").trim();
-          if (!s) return { drop: "", rest: "" };
-          return { drop: s.charAt(0).toUpperCase(), rest: s.slice(1) };
-        };
-
-        // Resolve every dropcap headline from one full-headline source.
-        // Preference order: explicit full headline from Claude → legacy
-        // dropcap+rest combined → safe generic default (NEVER coaching-specific).
-        const owner = splitDrop(copy.OWNER_TITLE || intake.owner_title || ownerTitle || "");
-        const transformation = splitDrop(copy.TRANSFORMATION_HEADLINE || "");
-        const philosophy = splitDrop(copy.PHILOSOPHY_HEADLINE || "");
-        const servicesH = splitDrop(copy.SERVICES_HEADLINE_FB || copy.SERVICES_HEADLINE || "");
-        const testimonialsH = splitDrop(copy.TESTIMONIALS_HEADLINE_FB || copy.TESTIMONIALS_HEADLINE || "");
-        const methodology = splitDrop(copy.METHODOLOGY_HEADLINE || "");
-        const leadMagnet = splitDrop(copy.LEAD_MAGNET_TITLE || "");
-        const faq = splitDrop("Frequently Asked Questions");
-        const finalCta = splitDrop(copy.FINAL_CTA_HEADLINE_FB || copy.FINAL_CTA_HEADLINE || "");
-        const heroName = splitDrop(ownerName || businessName || "");
-        return {
-          "{{HERO_NAME_FIRST_LETTER}}": heroName.drop,
-          "{{HERO_NAME_REST}}": heroName.rest,
-          "{{OWNER_TITLE_DROPCAP}}": owner.drop,
-          "{{OWNER_TITLE_REST}}": owner.rest,
-          "{{TRANSFORMATION_DROPCAP}}": transformation.drop,
-          "{{TRANSFORMATION_HEADLINE_REST}}": transformation.rest,
-          "{{PHILOSOPHY_DROPCAP}}": philosophy.drop,
-          "{{PHILOSOPHY_HEADLINE_REST}}": philosophy.rest,
-          "{{SERVICES_DROPCAP}}": servicesH.drop,
-          "{{SERVICES_HEADLINE_REST}}": servicesH.rest,
-          "{{TESTIMONIALS_DROPCAP}}": testimonialsH.drop,
-          "{{TESTIMONIALS_HEADLINE_REST}}": testimonialsH.rest,
-          "{{METHODOLOGY_DROPCAP}}": methodology.drop,
-          "{{METHODOLOGY_HEADLINE_REST}}": methodology.rest,
-          "{{LEAD_MAGNET_DROPCAP}}": leadMagnet.drop,
-          "{{LEAD_MAGNET_TITLE_REST}}": leadMagnet.rest,
-          "{{FAQ_DROPCAP}}": faq.drop,
-          "{{FAQ_HEADLINE_REST}}": faq.rest,
-          "{{FINAL_CTA_DROPCAP}}": finalCta.drop,
-          "{{FINAL_CTA_HEADLINE_REST}}": finalCta.rest,
-        };
-      })(),
-
-      // Business basics
-      "{{BUSINESS_NAME_SHORT}}": businessName.split(" ")[0],
-      "{{ANNOUNCE_TEXT}}": copy.ANNOUNCE_TEXT || `Now booking new clients — ${city || "local area"}`,
-      "{{NAV_CTA}}": copy.NAV_CTA || TEMPLATE_DEFAULT_CTAS[templateId] || "",
-
-      // Hero CTAs (hero name dropcap handled above)
-      "{{HERO_CTA_PRIMARY}}": copy.HERO_CTA_PRIMARY || TEMPLATE_DEFAULT_CTAS[templateId] || "",
+      // ── Nav/Hero CTAs ──
+      "{{NAV_CTA}}": copy.NAV_CTA || TEMPLATE_DEFAULT_CTAS[templateId] || "GET STARTED",
+      "{{HERO_CTA_PRIMARY}}": copy.HERO_CTA_PRIMARY || TEMPLATE_DEFAULT_CTAS[templateId] || "GET STARTED",
       "{{HERO_CTA_SECONDARY}}": copy.HERO_CTA_SECONDARY || "EXPLORE SERVICES",
 
-      // About strip — NO hardcoded "H"/"ELPING" coaching fallback. If Claude
-      // returns nothing, the slot renders empty rather than leaking defaults.
-      "{{ABOUT_STRIP_DROPCAP}}": (copy.ABOUT_STRIP_DROPCAP || copy.ABOUT_STRIP_LINE1 || "").charAt(0).toUpperCase() || "",
-      "{{ABOUT_STRIP_LINE1}}": copy.ABOUT_STRIP_LINE1 || "",
-      "{{ABOUT_STRIP_LINE2}}": copy.ABOUT_STRIP_LINE2 || (businessType || "").toUpperCase(),
-      "{{ABOUT_STRIP_LINE3}}": copy.ABOUT_STRIP_LINE3 || "",
-      "{{ABOUT_STRIP_LINE4}}": copy.ABOUT_STRIP_LINE4 || "",
-      "{{ABOUT_STRIP_BODY}}": copy.ABOUT_STRIP_BODY || copy.ABOUT_STORY || "",
-      "{{ABOUT_EYEBROW}}": copy.ABOUT_EYEBROW || "ABOUT",
-      "{{ABOUT_INTRO_HEADLINE}}": copy.ABOUT_INTRO_HEADLINE || (ownerName ? `Hi, I'm ${ownerName}` : `About ${businessName}`),
-      "{{ABOUT_INTRO_BODY}}": copy.ABOUT_INTRO_BODY || copy.ABOUT_STORY || "",
-      "{{ABOUT_CTA}}": copy.ABOUT_CTA || TEMPLATE_DEFAULT_CTAS[templateId] || "",
-
-      // Transformation (before/after) — headline handled above
-      "{{TRANSFORMATION_EYEBROW}}": copy.TRANSFORMATION_EYEBROW || "✦ THE TRANSFORMATION",
-      "{{TRANSFORMATION_BODY}}": copy.TRANSFORMATION_BODY || "",
-      "{{BA_1_BEFORE}}": copy.BA_1_BEFORE || "",
-      "{{BA_1_AFTER}}": copy.BA_1_AFTER || "",
-      "{{BA_2_BEFORE}}": copy.BA_2_BEFORE || "",
-      "{{BA_2_AFTER}}": copy.BA_2_AFTER || "",
-      "{{BA_3_BEFORE}}": copy.BA_3_BEFORE || "",
-      "{{BA_3_AFTER}}": copy.BA_3_AFTER || "",
-
-      // Philosophy pillars — headline handled above
-      "{{PHILOSOPHY_EYEBROW}}": copy.PHILOSOPHY_EYEBROW || "✦ THE APPROACH",
-      "{{PILLAR_1_TITLE}}": copy.PILLAR_1_TITLE || copy.WHY_US_1_TITLE || "",
-      "{{PILLAR_1_BODY}}": copy.PILLAR_1_BODY || copy.WHY_US_1_DESC || "",
-      "{{PILLAR_2_TITLE}}": copy.PILLAR_2_TITLE || copy.WHY_US_2_TITLE || "",
-      "{{PILLAR_2_BODY}}": copy.PILLAR_2_BODY || copy.WHY_US_2_DESC || "",
-      "{{PILLAR_3_TITLE}}": copy.PILLAR_3_TITLE || copy.WHY_US_3_TITLE || "",
-      "{{PILLAR_3_BODY}}": copy.PILLAR_3_BODY || copy.WHY_US_3_DESC || "",
-
-      // Services — feminine-bold tags/prices/duration/includes
-      // NOTE: no coaching-specific defaults. Empty string when unknown so the
-      // template degrades gracefully instead of showing "12 WEEKS" / "Weekly 1:1 sessions"
-      // on attorneys, designers, therapists, etc.
-      "{{SERVICES_EYEBROW}}": copy.SERVICES_EYEBROW || "✦ WAYS TO WORK TOGETHER",
-      "{{SERVICES_INTRO}}": copy.SERVICES_SUBTEXT || copy.SERVICES_INTRO || "",
-      "{{SERVICE_1_TAG}}": copy.SERVICE_1_TAG || "SIGNATURE",
-      "{{SERVICE_1_PRICE}}": services[0]?.price_value || services[0]?.price || copy.SERVICE_1_PRICE || "Contact for pricing",
-      "{{SERVICE_1_DURATION}}": copy.SERVICE_1_DURATION_FB || copy.SERVICE_1_DURATION || "",
-      "{{SERVICE_1_INCLUDE_1}}": copy.SERVICE_1_INCLUDE_1_FB || copy.SERVICE_1_INCLUDE_1 || "",
-      "{{SERVICE_1_INCLUDE_2}}": copy.SERVICE_1_INCLUDE_2_FB || copy.SERVICE_1_INCLUDE_2 || "",
-      "{{SERVICE_1_INCLUDE_3}}": copy.SERVICE_1_INCLUDE_3_FB || copy.SERVICE_1_INCLUDE_3 || "",
-      "{{SERVICE_2_TAG}}": copy.SERVICE_2_TAG || "",
-      "{{SERVICE_2_PRICE}}": services[1]?.price_value || services[1]?.price || copy.SERVICE_2_PRICE || "Contact for pricing",
-      "{{SERVICE_2_DURATION}}": copy.SERVICE_2_DURATION_FB || copy.SERVICE_2_DURATION || "",
-      "{{SERVICE_2_INCLUDE_1}}": copy.SERVICE_2_INCLUDE_1_FB || copy.SERVICE_2_INCLUDE_1 || "",
-      "{{SERVICE_2_INCLUDE_2}}": copy.SERVICE_2_INCLUDE_2_FB || copy.SERVICE_2_INCLUDE_2 || "",
-      "{{SERVICE_2_INCLUDE_3}}": copy.SERVICE_2_INCLUDE_3_FB || copy.SERVICE_2_INCLUDE_3 || "",
-      "{{SERVICE_3_TAG}}": copy.SERVICE_3_TAG || "",
-      "{{SERVICE_3_PRICE}}": services[2]?.price_value || services[2]?.price || copy.SERVICE_3_PRICE || "Contact for pricing",
-      "{{SERVICE_3_DURATION}}": copy.SERVICE_3_DURATION_FB || copy.SERVICE_3_DURATION || "",
-      "{{SERVICE_3_INCLUDE_1}}": copy.SERVICE_3_INCLUDE_1_FB || copy.SERVICE_3_INCLUDE_1 || "",
-      "{{SERVICE_3_INCLUDE_2}}": copy.SERVICE_3_INCLUDE_2_FB || copy.SERVICE_3_INCLUDE_2 || "",
-      "{{SERVICE_3_INCLUDE_3}}": copy.SERVICE_3_INCLUDE_3_FB || copy.SERVICE_3_INCLUDE_3 || "",
-
-      // Testimonials — feminine-bold uses TITLE instead of LOCATION
-      "{{TESTIMONIAL_1_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_LOCATION || copy.TESTIMONIAL_1_TITLE || ""),
-      "{{TESTIMONIAL_2_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_2_LOCATION || copy.TESTIMONIAL_2_TITLE || ""),
-      "{{TESTIMONIAL_3_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_LOCATION || copy.TESTIMONIAL_3_TITLE || ""),
-      "{{TESTIMONIAL_1_AVATAR_URL}}": teamPhotos[0] || intake.owner_photo_url || "",
-      "{{TESTIMONIAL_2_AVATAR_URL}}": portfolioPhotos[0] || "",
-      "{{TESTIMONIAL_3_AVATAR_URL}}": portfolioPhotos[1] || "",
-      "{{TESTIMONIALS_EYEBROW}}": copy.TESTIMONIALS_EYEBROW || "✦ WORDS FROM CLIENTS",
-
-      // Methodology — headline handled above
-      "{{METHODOLOGY_EYEBROW}}": copy.METHODOLOGY_EYEBROW || "✦ THE PROCESS",
-      "{{METHODOLOGY_BODY}}": copy.METHODOLOGY_BODY || "",
-      "{{STEP_1_TITLE}}": copy.STEP_1_TITLE || "",
-      "{{STEP_1_BODY}}": copy.STEP_1_BODY || "",
-      "{{STEP_2_TITLE}}": copy.STEP_2_TITLE || "",
-      "{{STEP_2_BODY}}": copy.STEP_2_BODY || "",
-      "{{STEP_3_TITLE}}": copy.STEP_3_TITLE || "",
-      "{{STEP_3_BODY}}": copy.STEP_3_BODY || "",
-      "{{STEP_4_TITLE}}": copy.STEP_4_TITLE || "",
-      "{{STEP_4_BODY}}": copy.STEP_4_BODY || "",
-
-      // Marquee
+      // ── Marquee ──
       "{{MARQUEE_1}}": copy.MARQUEE_1 || copy.PILLAR_1_TITLE || "",
       "{{MARQUEE_2}}": copy.MARQUEE_2 || copy.PILLAR_2_TITLE || "",
       "{{MARQUEE_3}}": copy.MARQUEE_3 || copy.PILLAR_3_TITLE || "",
       "{{MARQUEE_4}}": copy.MARQUEE_4 || "",
 
-      // Lead magnet — title handled above
+      // ── Lead Magnet ──
       "{{LEAD_MAGNET_EYEBROW}}": copy.LEAD_MAGNET_EYEBROW || "✦ A FREE GUIDE",
       "{{LEAD_MAGNET_BODY}}": copy.LEAD_MAGNET_BODY || copy.FOOTER_NEWSLETTER_TEXT || "",
       "{{LEAD_MAGNET_BTN}}": copy.LEAD_MAGNET_BTN || "GET ACCESS",
       "{{LEAD_MAGNET_NOTE}}": "No spam, ever. Unsubscribe anytime.",
 
-      // FAQ + Final CTA eyebrows (headlines handled above)
+      // ── FAQ eyebrow ──
       "{{FAQ_EYEBROW}}": "✦ COMMON QUESTIONS",
-      "{{FINAL_CTA_EYEBROW}}": copy.FINAL_CTA_EYEBROW || "✦ YOUR NEXT STEP",
-      "{{FINAL_CTA_BODY}}": copy.FINAL_CTA_SUBTEXT || "",
-      "{{FINAL_CTA_BTN}}": copy.FINAL_CTA_BTN || TEMPLATE_DEFAULT_CTAS[templateId] || "",
 
-      // Social links
-      // Social links — empty string when missing (NOT "#"). Footer template
-      // / runtime hides empty links rather than rendering broken hrefs.
-      "{{SOCIAL_INSTAGRAM_URL}}": (intake.social_links as any)?.instagram
-        ? `https://instagram.com/${String((intake.social_links as any).instagram).replace("@", "")}`
-        : "",
-      "{{SOCIAL_FACEBOOK_URL}}": (intake.social_links as any)?.facebook || "",
-      "{{SOCIAL_LINKEDIN_URL}}": (intake.social_links as any)?.linkedin || "",
-      "{{SOCIAL_TIKTOK_URL}}": (intake.social_links as any)?.tiktok || "",
-      "{{SOCIAL_PINTEREST_URL}}": (intake.social_links as any)?.pinterest || "",
-      "{{SOCIAL_GOOGLE_URL}}": (intake.social_links as any)?.google_business || (intake.social_links as any)?.google || "",
-      "{{SOCIAL_SUBSTACK_URL}}": (intake.social_links as any)?.substack || "",
-      "{{SOCIAL_PODCAST_URL}}": (intake.social_links as any)?.podcast || "",
-      "{{SOCIAL_BLOG_URL}}": (intake.social_links as any)?.blog || "",
+      // ── feminine-bold template extras ──
+      ...buildFeminineBoldFill(templateId, copy, intake, ownerName, ownerTitle, businessName, businessType, services, portfolioPhotos, teamPhotos, city, noTestimonials, aboutImageUrl, heroImageUrl),
     };
 
-    // Pre-fill header logo block: logo XOR business name (never both).
-    // Matches the template pattern: {{LOGO_HTML}}<span class="logo-text">{{BUSINESS_NAME}}</span>
+    // ── 7d: Logo block pre-fill ──────────────────────────────────────────
     const headerLogoBlockRe = /\{\{LOGO_HTML\}\}\s*<span class="logo-text">\s*\{\{BUSINESS_NAME\}\}\s*<\/span>/g;
     html = html.replace(headerLogoBlockRe, hasLogo
       ? logoHTML
       : `<span class="logo-text">${escapeHTML(businessName)}</span>`);
 
+    // ── 7e: Apply fill map ───────────────────────────────────────────────
     for (const [key, value] of Object.entries(fill)) {
       html = html.split(key).join(value);
     }
 
-    // Inline the template CSS in place of the external stylesheet link
+    // ── 7f: Inline CSS ───────────────────────────────────────────────────
     if (templateCSS) {
       html = html.replace(
         /<link\s+rel=["']stylesheet["']\s+href=["']styles?\.css["']\s*\/?>/i,
@@ -1156,50 +732,31 @@ Return this exact JSON structure (every field required, no empty strings unless 
       );
     }
 
-    // ── Deterministic fallback: strip remaining placeholders cleanly ─────
-    // Instead of calling a second AI (which introduces garbage text), we log
-    // any unfilled placeholders for debugging and then remove them. The main
-    // Claude copy call should have filled everything — if it didn't, it's
-    // better to show nothing than random AI filler that breaks the design.
-    await logUnfilledPlaceholders(supabase, clientId, templateId, "index", html);
+    // ── 7g: Strip remaining placeholders ─────────────────────────────────
+    await logUnfilledPlaceholders(supabase as any, clientId, templateId, "index", html);
     const remainingPlaceholders = html.match(/\{\{[^}]+\}\}/g) || [];
     if (remainingPlaceholders.length > 0) {
-      console.warn(`[generate] ${remainingPlaceholders.length} unfilled placeholders being stripped:`, remainingPlaceholders.slice(0, 10).join(", "));
+      console.warn(`[generate] ${remainingPlaceholders.length} unfilled placeholders stripped:`, remainingPlaceholders.slice(0, 10).join(", "));
     }
     html = html.replace(/\{\{[^}]+\}\}/g, "");
 
-    // ── Clean up empty data artifacts in footer/address ─────────────────
+    // ── 7h: Footer/address cleanup ───────────────────────────────────────
     const hasAddress = !!(intake.street_address || intake.business_address || intake.address);
     if (!hasAddress) {
-      // Remove ", 90210" or standalone zip codes when no street address exists
-      html = html.replace(/,\s*\d{5}(?:-\d{4})?/g, '');
-      // Remove elements that only contain a comma or whitespace
-      html = html.replace(/<(?:span|p|div)[^>]*>\s*,?\s*<\/(?:span|p|div)>/g, '');
-      // Remove "City, ST" pattern if city is also empty
+      html = html.replace(/,\s*\d{5}(?:-\d{4})?/g, "");
+      html = html.replace(/<(?:span|p|div)[^>]*>\s*,?\s*<\/(?:span|p|div)>/g, "");
       if (!city) {
-        html = html.replace(/<(?:span|p|div|a)[^>]*>\s*,\s*<\/(?:span|p|div|a)>/g, '');
+        html = html.replace(/<(?:span|p|div|a)[^>]*>\s*,\s*<\/(?:span|p|div|a)>/g, "");
       }
     }
-    // Remove doubled URLs in social links (e.g., https://instagram.com/https://www.instagram.com/...)
-    html = html.replace(/https?:\/\/[a-z]+\.com\/(https?:\/\/)/gi, '$1');
+    // Remove doubled URLs in social links
+    html = html.replace(/https?:\/\/[a-z]+\.com\/(https?:\/\/)/gi, "$1");
 
-    // ── CALL 2 REMOVED ─────────────────────────────────────────────────────
-    // The "customization" call previously gave Claude the full HTML and asked
-    // it to modify it based on call notes. This was the #1 source of layout
-    // corruption — Claude would rewrite sections, break CSS classes, and
-    // destroy the Figma design fidelity.
-    //
-    // Call notes (expert_additions, exact_phrases, vibe_notes, etc.) are now
-    // incorporated directly into CALL 1's copy prompt, so the AI generates
-    // the right copy from the start rather than trying to retrofit it after.
-    // If you need to re-enable customization in the future, use the revision
-    // system (change-request-apply) instead, which targets specific fields.
-    // ─────────────────────────────────────────────────────────────────────────
-    if (callNotes && ((callNotes as any).expert_additions || (callNotes as any).exact_phrases)) {
-      console.log("[generate] Call notes with special instructions detected — incorporated into copy prompt (CALL 2 disabled)");
-    }
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 8: POST-PROCESSING (forms, analytics, favicon, validation)
+    // ═════════════════════════════════════════════════════════════════════════
 
-    // ── Safety net: force animate-on-scroll visible ──────────────────────
+    // Safety net: force animate-on-scroll visible
     const safetyNet = `
 <script>
 (function(){
@@ -1220,15 +777,10 @@ Return this exact JSON structure (every field required, no empty strings unless 
 `;
     html = html.replace("</body>", safetyNet + "\n</body>");
 
-    // ── Tag interactive elements + milestones for v3 analytics ───────────
+    // Analytics tags
     html = addAnalyticsTags(html, "home");
 
-    // ── Inject hosted-tracker loader snippet before </body> (tracker-v5) ─
-    // Tracker JS lives at the tracker-v5 edge function (full cache-header
-    // control, immutable per version). DO NOT inline tracker logic here.
-    // To roll out a new tracker version: deploy tracker-v4 edge function,
-    // bump the URL below. Existing sites keep loading tracker-v4 safely.
-    // Maps clients.plan -> tracker tier vocabulary. Only 'pro' enables Premium events.
+    // Tracker script
     const planToTrackerTier = (plan: string | null | undefined): string =>
       plan === "pro" ? "premium" : "growth";
     const clientTier = planToTrackerTier((clientData as any)?.plan);
@@ -1241,11 +793,10 @@ Return this exact JSON structure (every field required, no empty strings unless 
   data-tier="${clientTier}"></script>`;
     html = html.replace("</body>", analyticsScript + "\n</body>");
 
-
-    // ── Wire any <form> on the page to handle-contact-form ───────────────
+    // Wire contact forms
     html = wireContactForms(html, clientId, supabaseUrl);
 
-    // ── Inject favicon (uploaded → logo → generated SVG initial) ─────────
+    // Favicon
     const faviconTag = buildFaviconHTML({
       faviconUrl: intake.favicon_url || "",
       logoUrl: logoUrlResolved,
@@ -1254,32 +805,32 @@ Return this exact JSON structure (every field required, no empty strings unless 
     });
     html = injectFavicon(html, faviconTag);
 
-    // ── Pre-Upload Validation ────────────────────────────────────────────
+    // Pre-upload validation
     const finalValidator = new HTMLValidator(html);
     const validationReport = finalValidator.validate();
-    console.log(`[generate] Pre-upload fidelity score: ${validationReport.fidelityScore}/100`);
+    console.log(`[generate] Fidelity score: ${validationReport.fidelityScore}/100`);
     if (validationReport.issues.length > 0) {
-      const criticalIssues = validationReport.issues.filter(i => i.severity === "critical");
-      const highIssues = validationReport.issues.filter(i => i.severity === "high");
-      if (criticalIssues.length > 0) {
-        console.warn(`[generate] ${criticalIssues.length} CRITICAL issues found:`, criticalIssues.map(i => i.message).join("; "));
-      }
-      if (highIssues.length > 0) {
-        console.warn(`[generate] ${highIssues.length} HIGH issues found:`, highIssues.map(i => i.message).join("; "));
-      }
+      const critical = validationReport.issues.filter(i => i.severity === "critical");
+      const high = validationReport.issues.filter(i => i.severity === "high");
+      if (critical.length > 0) console.warn(`[generate] ${critical.length} CRITICAL:`, critical.map(i => i.message).join("; "));
+      if (high.length > 0) console.warn(`[generate] ${high.length} HIGH:`, high.map(i => i.message).join("; "));
     }
-    // Log validation report to generation_logs for debugging
-    await supabase.from("generation_logs").insert({
-      client_id: clientId,
-      template_id: templateId,
-      status: "validation_complete",
-      generation_notes: `Fidelity: ${validationReport.fidelityScore}/100. Issues: ${validationReport.issues.length} (${validationReport.issues.filter(i => i.severity === "critical").length} critical). Metrics: ${JSON.stringify(validationReport.metrics)}`,
-    } as any).catch((e: any) => console.warn("[generate] Failed to log validation:", e.message));
+    try {
+      await supabase.from("generation_logs").insert({
+        client_id: clientId,
+        template_id: templateId,
+        status: "validation_complete",
+        generation_notes: `Fidelity: ${validationReport.fidelityScore}/100. Issues: ${validationReport.issues.length}. Unfilled stripped: ${remainingPlaceholders.length}.`,
+      } as any);
+    } catch (e: any) { console.warn("[generate] Log failed:", e.message); }
 
-    // ── Upload to Hostinger staging ──────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 9: UPLOAD TO HOSTINGER + SUPABASE BACKUPS
+    // ═════════════════════════════════════════════════════════════════════════
+
     await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
 
-    // Inject prospect-banner script (no-op for non-prospects; renders banner dynamically when active)
+    // Prospect banner injection
     const projectRefForBanner = (Deno.env.get("SUPABASE_URL") || "").replace("https://", "").split(".")[0];
     const prospectBannerTag = `<script async src="https://${projectRefForBanner}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
     const htmlWithBanner = html.includes("</body>")
@@ -1294,20 +845,21 @@ Return this exact JSON structure (every field required, no empty strings unless 
       throw new Error(`Hostinger staging upload failed: ${e.message}`);
     }
 
-    // Backup the un-noindexed version to storage
+    // Backup clean version (no noindex) to Supabase storage
     const { error: backupErr } = await supabase.storage
       .from("generated-sites")
       .upload(`${clientId}/deploy/index.html`, new Blob([html], { type: "text/html" }), { upsert: true, contentType: "text/html; charset=utf-8" });
     if (backupErr) throw new Error(`Failed to save deploy backup: ${backupErr.message}`);
 
-    // ── Persist copy-data.json so generate-extra-pages can reuse decisions ─
+    // ── Persist copy-data.json (used by generate-extra-pages) ────────────
     const copyDataPayload = {
       businessName, businessType, city, state, phone, phoneRaw, email, address,
       yearsInBusiness, googleRating, googleReviewCount, tagline, ownerName, ownerTitle,
       logoUrl: logoUrlResolved, faviconUrl: intake.favicon_url || "", serviceNames, noTestimonials,
       portfolioPhotos, teamPhotos,
       heroImageUrl, aboutImageUrl, whyUsImageUrl,
-      stockTerms, allowStock,
+      stockTerms: buildStockSearchTerms(businessType, serviceNames[0] || "", tagline, businessName),
+      allowStock,
       primaryColor: primaryColorResolved,
       accentColor: accentColorResolved,
       copy,
@@ -1318,7 +870,7 @@ Return this exact JSON structure (every field required, no empty strings unless 
       { upsert: true, contentType: "application/json" }
     );
 
-    // ── Persist site-meta.json (brand tokens + class list for extra-pages) ─
+    // ── Persist site-meta.json ───────────────────────────────────────────
     const classNames = [...new Set(
       [...templateCSS.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[{,]/g)].map(m => m[1])
     )].filter(c => c.length > 1).slice(0, 200);
@@ -1354,14 +906,15 @@ Return this exact JSON structure (every field required, no empty strings unless 
       template_id: templateId,
       status: "homepage_complete",
       tokens_used: copyResult.outputTokens,
-      generation_notes: `Homepage generated. Template: ${templateId}. Copy tokens: ${copyResult.outputTokens}.`,
+      generation_notes: `Homepage generated. Template: ${templateId}. Tokens: ${copyResult.outputTokens}. Fidelity: ${validationReport.fidelityScore}/100.`,
     } as any);
 
-    console.log(`[generate] ✓ Homepage complete for ${clientId} → ${stagingURL}`);
+    console.log(`[generate] ✓ Homepage complete → ${stagingURL}`);
 
-    // ── feminine-bold: also build about.html + services.html from templates ─
-    // These templates already have inline CSS and use the same fill map as
-    // the homepage, so no Claude calls are needed — just load, replace, push.
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 10: FEMININE-BOLD SUBPAGES (about.html + services.html)
+    // ═════════════════════════════════════════════════════════════════════════
+
     if (templateId === "feminine-bold") {
       const extraPages: Array<{ slug: string; storagePath: string }> = [
         { slug: "about", storagePath: `${templateId}/about.html` },
@@ -1379,7 +932,7 @@ Return this exact JSON structure (every field required, no empty strings unless 
           }
           let pageHtml = await pageFile.text();
 
-          // Apply brand colors via canonical color system (same as homepage)
+          // Apply brand colors + fonts
           pageHtml = applyBrandColorsToHTML(pageHtml, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId).html;
           if (headingFontResolved || bodyFontResolved) {
             pageHtml = injectFontTokensIntoRoot(pageHtml, {
@@ -1389,35 +942,27 @@ Return this exact JSON structure (every field required, no empty strings unless 
             pageHtml = injectGoogleFontsLink(pageHtml, headingFontResolved, bodyFontResolved);
           }
 
-
-          // Same header logo block pre-fill as homepage
+          // Logo block
           pageHtml = pageHtml.replace(headerLogoBlockRe, hasLogo
             ? logoHTML
             : `<span class="logo-text">${escapeHTML(businessName)}</span>`);
 
-          // Apply the full fill map
+          // Apply fill map
           for (const [key, value] of Object.entries(fill)) {
             pageHtml = pageHtml.split(key).join(value);
           }
 
-          // CSS is inline in these templates, so no stylesheet swap needed.
-          // Auto-fill leftover placeholders, then strip anything still missing.
-          const autoFilledPage = await autoFillPlaceholders(
-            pageHtml,
-            { businessName, businessType, city: intake.business_city || intake.city || "", services: services.map((s: any) => typeof s === "string" ? s : s?.name || s?.title).filter(Boolean).join(", "), notes: tagline },
-            stockTerms,
-          );
-          pageHtml = autoFilledPage.html;
-          await logUnfilledPlaceholders(supabase, clientId, templateId, page.slug, pageHtml);
+          // Strip leftover placeholders
+          await logUnfilledPlaceholders(supabase as any, clientId, templateId, page.slug, pageHtml);
           pageHtml = pageHtml.replace(/\{\{[^}]+\}\}/g, "");
 
-          // Same safety net + analytics + form wiring + favicon as homepage
+          // Post-processing
           pageHtml = pageHtml.replace("</body>", safetyNet + "\n</body>");
           pageHtml = pageHtml.replace("</body>", analyticsScript + "\n</body>");
           pageHtml = wireContactForms(pageHtml, clientId, supabaseUrl);
           pageHtml = injectFavicon(pageHtml, faviconTag);
 
-          // Upload to Hostinger staging (with noindex)
+          // Upload
           const stagingPageHTML = injectNoindex(pageHtml);
           await uploadFileToHostingerFtp(
             `${STAGING_FOLDER_ROOT}/${clientId}/${page.slug}.html`,
@@ -1425,24 +970,24 @@ Return this exact JSON structure (every field required, no empty strings unless 
           );
           console.log(`[generate] ✓ ${page.slug}.html → Hostinger staging`);
 
-          // Backup clean (no noindex) version to deploy/
-          const { error: pageBackupErr } = await supabase.storage
+          // Backup
+          await supabase.storage
             .from("generated-sites")
             .upload(
               `${clientId}/deploy/${page.slug}.html`,
               new Blob([pageHtml], { type: "text/html" }),
               { upsert: true, contentType: "text/html; charset=utf-8" },
             );
-          if (pageBackupErr) {
-            console.warn(`[generate] feminine-bold: deploy backup failed for ${page.slug}.html: ${pageBackupErr.message}`);
-          }
         } catch (e: any) {
-          console.error(`[generate] feminine-bold: failed to build ${page.slug}.html:`, e?.message || e);
+          console.error(`[generate] feminine-bold: failed ${page.slug}.html:`, e?.message || e);
         }
       }
     }
 
-    // ── Fire generate-extra-pages ────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════════
+    // PHASE 11: DISPATCH EXTRA PAGES
+    // ═════════════════════════════════════════════════════════════════════════
+
     fetch(`${supabaseUrl}/functions/v1/generate-extra-pages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
@@ -1464,7 +1009,597 @@ Return this exact JSON structure (every field required, no empty strings unless 
   }
 });
 
-// ── Helper functions ───────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROMPT BUILDER — Constructs the single AI call prompt
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface PromptContext {
+  templateId: string;
+  mode: "full" | "lite";
+  businessName: string;
+  businessType: string;
+  city: string;
+  state: string;
+  phone: string;
+  email: string;
+  address: string;
+  yearsInBusiness: string;
+  googleRating: string;
+  googleReviewCount: string;
+  aboutStory: string;
+  ownerName: string;
+  ownerTitle: string;
+  tagline: string;
+  serviceNames: string[];
+  clientServiceAreaNames: string[];
+  noTestimonials: boolean;
+  showFinancing: boolean;
+  showAwards: boolean;
+  showCoupons: boolean;
+  intake: any;
+  callNotes: any;
+}
+
+function buildCopyPrompt(ctx: PromptContext): string {
+  const {
+    templateId, mode, businessName, businessType, city, state, phone, email,
+    address, yearsInBusiness, googleRating, googleReviewCount, aboutStory,
+    ownerName, ownerTitle, tagline, serviceNames, clientServiceAreaNames,
+    noTestimonials, showFinancing, showAwards, showCoupons,
+    intake, callNotes,
+  } = ctx;
+
+  const clientServiceAreaList = clientServiceAreaNames.length
+    ? clientServiceAreaNames.map((n, i) => `  ${i + 1}. ${n}`).join("\n")
+    : "(none provided — generate 8 real nearby cities/towns)";
+
+  // ── Build the prompt ───────────────────────────────────────────────────
+  let prompt = `You are a premium website copywriter. Generate all text content for a ${businessType} business website.
+
+RETURN ONLY VALID JSON — no markdown, no explanation, no code blocks. Start with { and end with }.
+
+═══════════════════════════════════════════════════════════
+CHARACTER LIMITS — NON-NEGOTIABLE
+═══════════════════════════════════════════════════════════
+The website uses fixed-width Figma containers. Exceeding these limits BREAKS the layout.
+
+| Field Pattern              | Max Chars |
+|----------------------------|-----------|
+| *_HEADLINE_LINE1/2/3       | 30        |
+| *_HEADLINE_HIGHLIGHT       | 25        |
+| *_HEADLINE (single)        | 45        |
+| *_BADGE / *_EYEBROW        | 25        |
+| HERO_SUBHEADING            | 150       |
+| SERVICE_*_NAME             | 30        |
+| SERVICE_*_DESC             | 200       |
+| WHY_US_*_TITLE             | 30        |
+| WHY_US_*_DESC              | 200       |
+| STAT_*_NUMBER              | 8         |
+| STAT_*_LABEL               | 20        |
+| TESTIMONIAL_*_TEXT         | 250       |
+| TESTIMONIAL_*_NAME         | 25        |
+| FAQ_*_Q                    | 80        |
+| FAQ_*_A                    | 300       |
+| AREA_*                     | 25        |
+| AWARD_*                    | 35        |
+| FOOTER_TAGLINE             | 50        |
+| ABOUT_STORY                | 600       |
+| *_SUBTEXT / *_INTRO        | 200       |
+
+When in doubt, write SHORTER. Premium brands use restraint.
+═══════════════════════════════════════════════════════════
+
+`;
+
+  // Template-specific rules
+  if (templateId === "business-professional") {
+    prompt += `═══════════════════════════════════════════════════════════
+TEMPLATE RULES (business-professional)
+═══════════════════════════════════════════════════════════
+
+MULTI-SLOT HEADLINES: The hero has LINE1 + HIGHLIGHT + LINE2 that render as ONE continuous headline.
+They MUST form a complete, grammatical phrase when read together.
+- GOOD: LINE1="PHOENIX'S PREMIER" / HIGHLIGHT="TAX & ACCOUNTING" / LINE2="PARTNERS"
+- BAD: LINE1="EXPERT" / HIGHLIGHT="SOLUTIONS FOR" / LINE2="" (hanging preposition)
+
+Each line: 2-5 words, max 30 chars. Never end with a preposition.
+
+FOOTER_LEGAL_NOTE: A short disclaimer (NOT a copyright — copyright is added automatically).
+Example: "Information provided is general and not legal advice."
+═══════════════════════════════════════════════════════════
+
+`;
+  }
+
+  if (templateId === "feminine-bold") {
+    prompt += `═══════════════════════════════════════════════════════════
+TEMPLATE RULES (feminine-bold — personal brand)
+═══════════════════════════════════════════════════════════
+
+This template is for personal brands: coaches, attorneys, consultants, designers, therapists, photographers.
+Do NOT assume coaching. Use the business_type (${businessType}) and owner_title (${ownerTitle}) to determine framing.
+- Attorney → "Consultation" not "Session", "Practice" not "Method"
+- Designer → "Project" not "Cohort", "Studio" not "Space"
+- Therapist → "Practice" not "Program", "Session" not "Module"
+
+DROPCAP HEADLINES: Several sections use a decorative first-letter. Provide the FULL headline text —
+the system splits the first letter automatically. Never split it yourself.
+
+ABOUT_STRIP: 4 lines of text that form a poetic/punchy statement about the business.
+Line 1 starts after a large dropcap letter. All lines should be ALL CAPS, 2-4 words each.
+═══════════════════════════════════════════════════════════
+
+`;
+  }
+
+  // Mode-specific instructions
+  if (mode === "lite") {
+    prompt += `═══════════════════════════════════════════════════════════
+LITE MODE — GBP Prospect (minimal data)
+═══════════════════════════════════════════════════════════
+This site is generated from Google Business Profile data only.
+Infer realistic content based on business type and location:
+- Infer 4-6 realistic services
+- Write a credible about story
+- Use soft stats ("500+" not exact counts)
+- Do NOT invent certifications or specific credentials
+- Write testimonials that reference inferred services naturally
+═══════════════════════════════════════════════════════════
+
+`;
+  }
+
+  // Business data
+  prompt += `═══════════════════════════════════════════════════════════
+BUSINESS DATA
+═══════════════════════════════════════════════════════════
+Name: ${businessName}
+Type: ${businessType}
+City: ${city}, ${state}
+Phone: ${phone || "not provided"}
+Years in business: ${yearsInBusiness || "not provided"}
+Owner: ${ownerName || "not provided"} (${ownerTitle})
+Story: ${aboutStory || "not provided"}
+What makes them different: ${intake.story_different || "not provided"}
+How they started: ${intake.story_started || "not provided"}
+Ideal customer: ${intake.story_ideal_customer || "not provided"}
+Google rating: ${googleRating || "not provided"}
+Google reviews: ${googleReviewCount || "not provided"}
+Services: ${serviceNames.join(", ") || "not provided — infer from business type"}
+Tagline: ${tagline || "not provided"}
+
+Service areas (use these FIRST, then generate nearby real cities):
+${clientServiceAreaList}
+═══════════════════════════════════════════════════════════
+
+`;
+
+  // Call notes (expert instructions)
+  if (callNotes) {
+    prompt += `═══════════════════════════════════════════════════════════
+EXPERT CALL NOTES (highest priority — follow exactly)
+═══════════════════════════════════════════════════════════
+${JSON.stringify({
+  their_story: (callNotes as any).their_story,
+  ideal_customer: (callNotes as any).ideal_customer,
+  google_search_terms: (callNotes as any).google_search_terms,
+  website_goal: (callNotes as any).website_goal,
+  tone_of_voice: (callNotes as any).tone_of_voice,
+  tone_custom: (callNotes as any).tone_custom,
+  expert_additions: (callNotes as any).expert_additions,
+  expert_avoid: (callNotes as any).expert_avoid,
+  exact_phrases: (callNotes as any).exact_phrases,
+  vibe_notes: (callNotes as any).vibe_notes,
+  final_notes: (callNotes as any).final_notes,
+}, null, 2)}
+═══════════════════════════════════════════════════════════
+
+`;
+  }
+
+  // Rules
+  prompt += `═══════════════════════════════════════════════════════════
+RULES
+═══════════════════════════════════════════════════════════
+1. Every field MUST be filled (no empty strings) unless the section is opted out.
+2. Use client's exact words/phrases verbatim where provided.
+3. When data is missing, generate specific content for THIS business type in THIS city.
+4. BANNED: "committed to excellence", "your satisfaction is our priority", "world-class", "seamless", "cutting-edge", "one-size-fits-all"
+5. NEVER invent: phone numbers, addresses, ratings, certifications not provided.
+6. All AREA_* values must be REAL cities/towns near ${city}, ${state}. Never generic phrases.
+7. AREA_1 should be "${city || "the home city"}" itself.
+${noTestimonials ? "8. NO TESTIMONIALS — set all TESTIMONIAL_* fields to empty string." : "8. Generate 3 realistic local testimonials referencing actual services."}
+9. SECTIONS_TO_REMOVE: List sections to hide because data is missing/irrelevant.
+   Valid: testimonials, service_areas, awards, financing, faq, emergency
+   ${noTestimonials ? "MUST include 'testimonials'." : ""}
+   ${!showFinancing ? "MUST include 'financing'." : ""}
+10. IMAGE_SEARCH_*: Describe the SCENE, not the business type.
+    GOOD: "woman journaling warm light cozy room" / "modern kitchen white marble renovation"
+    BAD: "coaching" / "plumber" / "business"
+═══════════════════════════════════════════════════════════
+
+`;
+
+  // JSON schema
+  prompt += `Return this exact JSON structure:
+{
+  "META_DESCRIPTION": "155 char SEO meta description",
+  "HERO_BADGE": "3-5 word trust badge e.g. TRUSTED SINCE ${yearsInBusiness || "2010"}",
+  "HERO_HEADLINE_LINE1": "2-4 words ALL CAPS — start of 3-part headline",
+  "HERO_HEADLINE_HIGHLIGHT": "1-3 words ALL CAPS — core noun (italic accent)",
+  "HERO_HEADLINE_LINE2": "0-4 words ALL CAPS — completes the headline grammatically",
+  "HERO_HEADLINE_LINE3": "Usually empty. Only if 4-line headline reads naturally.",
+  "HERO_SUBHEADING": "1-2 sentences, mention city and core service",
+  "ABOUT_HEADLINE_LINE1": "3-5 words (business-professional about hero)",
+  "ABOUT_HEADLINE_LINE2": "3-5 words (italic accent, completes LINE1)",
+  "SERVICES_SUBHEADING": "2-5 word italic phrase. NOT a sentence.",
+  "SERVICES_INTRO": "1-2 sentences introducing services",
+  "SERVE_HEADLINE": "3-5 words ALL CAPS",
+  "SERVE_SUBHEADING": "2-4 words italic",
+  "SERVE_BODY": "1-2 sentences",
+  "SERVE_1": "1-3 words audience segment",
+  "SERVE_2": "1-3 words audience segment",
+  "SERVE_3": "1-3 words audience segment",
+  "SERVE_4": "1-3 words audience segment",
+  "FOOTER_LEGAL_NOTE": "Short disclaimer (NOT copyright). Under 20 words.",
+  "TRUST_ITEM_3": "one trust badge e.g. FAMILY OWNED",
+  "ABOUT_HEADLINE": "5-8 word headline",
+  "ABOUT_STORY": "3-4 paragraphs. Use owner's actual story verbatim where possible.",
+  "ABOUT_POINT_1": "key differentiator",
+  "ABOUT_POINT_2": "key differentiator",
+  "ABOUT_POINT_3": "key differentiator",
+  "ABOUT_POINT_4": "key differentiator",
+  "STAT_1_NUMBER": "e.g. 500+",
+  "STAT_1_LABEL": "e.g. JOBS COMPLETED",
+  "STAT_2_NUMBER": "${googleRating || "4.9"}★",
+  "STAT_2_LABEL": "GOOGLE RATING",
+  "STAT_3_NUMBER": "e.g. 24/7",
+  "STAT_3_LABEL": "matching label",
+  "STAT_4_NUMBER": "e.g. 100%",
+  "STAT_4_LABEL": "matching label",
+  "SERVICES_HEADLINE": "3-5 words ALL CAPS",
+  "SERVICES_SUBTEXT": "1 sentence",
+  "SERVICE_1_NAME": "${serviceNames[0] || "primary service for this business type"}",
+  "SERVICE_1_DESC": "2 sentences specific to this service in ${city}",
+  "SERVICE_2_NAME": "${serviceNames[1] || "second service"}",
+  "SERVICE_2_DESC": "2 sentences",
+  "SERVICE_3_NAME": "${serviceNames[2] || "third service"}",
+  "SERVICE_3_DESC": "2 sentences",
+  "SERVICE_4_NAME": "${serviceNames[3] || "fourth service"}",
+  "SERVICE_4_DESC": "2 sentences",
+  "SERVICE_5_NAME": "${serviceNames[4] || "fifth service"}",
+  "SERVICE_5_DESC": "2 sentences",
+  "SERVICE_6_NAME": "${serviceNames[5] || "sixth service"}",
+  "SERVICE_6_DESC": "2 sentences",
+  "EMERGENCY_HEADLINE": "4-6 words ALL CAPS",
+  "EMERGENCY_SUBTEXT": "1-2 sentences about availability",
+  "WHY_US_HEADLINE": "4-7 words",
+  "WHY_US_1_TITLE": "3-5 words specific to THIS business",
+  "WHY_US_1_DESC": "2 sentences",
+  "WHY_US_2_TITLE": "3-5 words distinct",
+  "WHY_US_2_DESC": "2 sentences",
+  "WHY_US_3_TITLE": "3-5 words distinct",
+  "WHY_US_3_DESC": "2 sentences",
+  "WHY_US_4_TITLE": "3-5 words distinct",
+  "WHY_US_4_DESC": "2 sentences",
+  "HAPPY_CUSTOMERS": "round number e.g. 500",
+  "REVIEW_PLATFORMS": "e.g. Google and Facebook",
+  "TESTIMONIAL_1_TEXT": "${noTestimonials ? "" : "2-3 sentence testimonial referencing a service"}",
+  "TESTIMONIAL_1_NAME": "${noTestimonials ? "" : "local name"}",
+  "TESTIMONIAL_1_LOCATION": "${noTestimonials ? "" : city}",
+  "TESTIMONIAL_2_TEXT": "${noTestimonials ? "" : "different testimonial"}",
+  "TESTIMONIAL_2_NAME": "${noTestimonials ? "" : "different name"}",
+  "TESTIMONIAL_2_LOCATION": "${noTestimonials ? "" : "nearby area"}",
+  "TESTIMONIAL_3_TEXT": "${noTestimonials ? "" : "third testimonial"}",
+  "TESTIMONIAL_3_NAME": "${noTestimonials ? "" : "different name"}",
+  "TESTIMONIAL_3_LOCATION": "${noTestimonials ? "" : city + " area"}",
+  "FINANCING_HEADLINE": "${showFinancing ? "financing headline" : ""}",
+  "FINANCING_SUBTEXT": "${showFinancing ? "financing details" : ""}",
+  "SERVICE_AREAS_HEADLINE": "4-6 words ALL CAPS",
+  "AREA_1": "REAL city near ${city}, ${state}",
+  "AREA_2": "REAL nearby city",
+  "AREA_3": "REAL nearby city",
+  "AREA_4": "REAL nearby city",
+  "AREA_5": "REAL nearby city",
+  "AREA_6": "REAL nearby city",
+  "AREA_7": "REAL nearby city",
+  "AREA_8": "REAL nearby city",
+  "AWARD_1": "industry certification for ${businessType}",
+  "AWARD_2": "different certification",
+  "AWARD_3": "different certification",
+  "AWARD_4": "different certification",
+  "AWARD_5": "different certification",
+  "FAQ_1_Q": "real question a ${businessType} customer would ask",
+  "FAQ_1_A": "2-4 sentence answer",
+  "FAQ_2_Q": "different question",
+  "FAQ_2_A": "2-4 sentence answer",
+  "FAQ_3_Q": "different question",
+  "FAQ_3_A": "2-4 sentence answer",
+  "FAQ_4_Q": "different question",
+  "FAQ_4_A": "2-4 sentence answer",
+  "FAQ_5_Q": "different question",
+  "FAQ_5_A": "2-4 sentence answer",
+  "FAQ_6_Q": "different question",
+  "FAQ_6_A": "2-4 sentence answer",
+  "FINAL_CTA_HEADLINE": "5-8 words ALL CAPS",
+  "FINAL_CTA_SUBTEXT": "1-2 sentences",
+  "FOOTER_TAGLINE": "${tagline || "5-8 word tagline for this business"}",
+  "FOOTER_NEWSLETTER_TEXT": "1 sentence inviting email signup",
+  "IMAGE_SEARCH_HERO": "3-6 descriptive words for Unsplash hero image SCENE",
+  "IMAGE_SEARCH_ABOUT": "3-6 descriptive words for about/team image SCENE",
+  "IMAGE_SEARCH_WHYUS": "3-6 descriptive words for portfolio/results image SCENE",
+  "SECTIONS_TO_REMOVE": "comma-separated list or empty string"`;
+
+  // Add feminine-bold specific fields
+  if (templateId === "feminine-bold") {
+    prompt += `,
+  "OWNER_TITLE": "Professional title for ${ownerName || "the owner"} (2-4 words)",
+  "ANNOUNCE_TEXT": "short announcement bar text",
+  "ABOUT_STRIP_LINE1": "first word (after dropcap) in ALL CAPS",
+  "ABOUT_STRIP_LINE2": "second line ALL CAPS 2-4 words",
+  "ABOUT_STRIP_LINE3": "third line ALL CAPS 2-4 words",
+  "ABOUT_STRIP_LINE4": "fourth line ALL CAPS 2-4 words, ends with period",
+  "ABOUT_STRIP_BODY": "1-2 sentences expanding on the strip",
+  "ABOUT_INTRO_HEADLINE": "personal intro e.g. Hi, I'm ${ownerName || "[name]"}",
+  "ABOUT_INTRO_BODY": "2-3 sentences personal intro",
+  "TRANSFORMATION_HEADLINE": "4-8 word headline for before/after section",
+  "TRANSFORMATION_BODY": "1-2 sentences about the transformation journey",
+  "BA_1_BEFORE": "before state 1",
+  "BA_1_AFTER": "after state 1",
+  "BA_2_BEFORE": "before state 2",
+  "BA_2_AFTER": "after state 2",
+  "BA_3_BEFORE": "before state 3",
+  "BA_3_AFTER": "after state 3",
+  "PHILOSOPHY_HEADLINE": "4-8 word headline for approach section",
+  "PILLAR_1_TITLE": "1-2 word pillar title",
+  "PILLAR_1_BODY": "2-3 sentences",
+  "PILLAR_2_TITLE": "1-2 word pillar title",
+  "PILLAR_2_BODY": "2-3 sentences",
+  "PILLAR_3_TITLE": "1-2 word pillar title",
+  "PILLAR_3_BODY": "2-3 sentences",
+  "SERVICES_HEADLINE_FB": "4-7 word services headline",
+  "METHODOLOGY_HEADLINE": "3-7 word process headline",
+  "METHODOLOGY_BODY": "1 sentence about the process",
+  "STEP_1_TITLE": "step 1 name",
+  "STEP_1_BODY": "2-3 sentences",
+  "STEP_2_TITLE": "step 2 name",
+  "STEP_2_BODY": "2-3 sentences",
+  "STEP_3_TITLE": "step 3 name",
+  "STEP_3_BODY": "2-3 sentences",
+  "STEP_4_TITLE": "step 4 name",
+  "STEP_4_BODY": "2-3 sentences",
+  "TESTIMONIALS_HEADLINE_FB": "3-6 word testimonials headline",
+  "LEAD_MAGNET_TITLE": "3-7 word free resource title",
+  "LEAD_MAGNET_BODY": "1-2 sentences describing the resource",
+  "FINAL_CTA_HEADLINE_FB": "4-8 word warm closing headline",
+  "SERVICE_1_DURATION_FB": "short duration in CAPS or empty",
+  "SERVICE_2_DURATION_FB": "short duration in CAPS or empty",
+  "SERVICE_3_DURATION_FB": "short duration in CAPS or empty",
+  "SERVICE_1_INCLUDE_1_FB": "what's included",
+  "SERVICE_1_INCLUDE_2_FB": "what's included",
+  "SERVICE_1_INCLUDE_3_FB": "what's included",
+  "SERVICE_2_INCLUDE_1_FB": "what's included",
+  "SERVICE_2_INCLUDE_2_FB": "what's included",
+  "SERVICE_2_INCLUDE_3_FB": "what's included",
+  "SERVICE_3_INCLUDE_1_FB": "what's included",
+  "SERVICE_3_INCLUDE_2_FB": "what's included",
+  "SERVICE_3_INCLUDE_3_FB": "what's included"`;
+  }
+
+  prompt += `
+}`;
+
+  return prompt;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEMININE-BOLD FILL MAP BUILDER
+// ═══════════════════════════════════════════════════════════════════════════
+
+function buildFeminineBoldFill(
+  templateId: string,
+  copy: any,
+  intake: any,
+  ownerName: string,
+  ownerTitle: string,
+  businessName: string,
+  businessType: string,
+  services: any[],
+  portfolioPhotos: string[],
+  teamPhotos: string[],
+  city: string,
+  noTestimonials: boolean,
+  aboutImageUrl: string,
+  heroImageUrl: string,
+): Record<string, string> {
+  if (templateId !== "feminine-bold") return {};
+
+  // Helper: split a headline into dropcap + rest
+  const splitDrop = (raw: string): { drop: string; rest: string } => {
+    const s = (raw || "").trim();
+    if (!s) return { drop: "", rest: "" };
+    return { drop: s.charAt(0).toUpperCase(), rest: s.slice(1) };
+  };
+
+  const owner = splitDrop(copy.OWNER_TITLE || intake.owner_title || ownerTitle || "");
+  const transformation = splitDrop(copy.TRANSFORMATION_HEADLINE || "");
+  const philosophy = splitDrop(copy.PHILOSOPHY_HEADLINE || "");
+  const servicesH = splitDrop(copy.SERVICES_HEADLINE_FB || copy.SERVICES_HEADLINE || "");
+  const testimonialsH = splitDrop(copy.TESTIMONIALS_HEADLINE_FB || copy.TESTIMONIALS_HEADLINE || "");
+  const methodology = splitDrop(copy.METHODOLOGY_HEADLINE || "");
+  const leadMagnet = splitDrop(copy.LEAD_MAGNET_TITLE || "");
+  const faq = splitDrop("Frequently Asked Questions");
+  const finalCta = splitDrop(copy.FINAL_CTA_HEADLINE_FB || copy.FINAL_CTA_HEADLINE || "");
+  const heroName = splitDrop(ownerName || businessName || "");
+
+  return {
+    // Dropcap splits
+    "{{HERO_NAME_FIRST_LETTER}}": heroName.drop,
+    "{{HERO_NAME_REST}}": heroName.rest,
+    "{{OWNER_TITLE_DROPCAP}}": owner.drop,
+    "{{OWNER_TITLE_REST}}": owner.rest,
+    "{{TRANSFORMATION_DROPCAP}}": transformation.drop,
+    "{{TRANSFORMATION_HEADLINE_REST}}": transformation.rest,
+    "{{PHILOSOPHY_DROPCAP}}": philosophy.drop,
+    "{{PHILOSOPHY_HEADLINE_REST}}": philosophy.rest,
+    "{{SERVICES_DROPCAP}}": servicesH.drop,
+    "{{SERVICES_HEADLINE_REST}}": servicesH.rest,
+    "{{TESTIMONIALS_DROPCAP}}": testimonialsH.drop,
+    "{{TESTIMONIALS_HEADLINE_REST}}": testimonialsH.rest,
+    "{{METHODOLOGY_DROPCAP}}": methodology.drop,
+    "{{METHODOLOGY_HEADLINE_REST}}": methodology.rest,
+    "{{LEAD_MAGNET_DROPCAP}}": leadMagnet.drop,
+    "{{LEAD_MAGNET_TITLE_REST}}": leadMagnet.rest,
+    "{{FAQ_DROPCAP}}": faq.drop,
+    "{{FAQ_HEADLINE_REST}}": faq.rest,
+    "{{FINAL_CTA_DROPCAP}}": finalCta.drop,
+    "{{FINAL_CTA_HEADLINE_REST}}": finalCta.rest,
+
+    // Business basics
+    "{{BUSINESS_NAME_SHORT}}": businessName.split(" ")[0],
+    "{{ANNOUNCE_TEXT}}": copy.ANNOUNCE_TEXT || `Now booking new clients — ${city || "local area"}`,
+
+    // About strip
+    "{{ABOUT_STRIP_DROPCAP}}": (copy.ABOUT_STRIP_LINE1 || "").charAt(0).toUpperCase() || "",
+    "{{ABOUT_STRIP_LINE1}}": copy.ABOUT_STRIP_LINE1 || "",
+    "{{ABOUT_STRIP_LINE2}}": copy.ABOUT_STRIP_LINE2 || (businessType || "").toUpperCase(),
+    "{{ABOUT_STRIP_LINE3}}": copy.ABOUT_STRIP_LINE3 || "",
+    "{{ABOUT_STRIP_LINE4}}": copy.ABOUT_STRIP_LINE4 || "",
+    "{{ABOUT_STRIP_BODY}}": copy.ABOUT_STRIP_BODY || copy.ABOUT_STORY || "",
+    "{{ABOUT_EYEBROW}}": copy.ABOUT_EYEBROW || "ABOUT",
+    "{{ABOUT_INTRO_HEADLINE}}": copy.ABOUT_INTRO_HEADLINE || (ownerName ? `Hi, I'm ${ownerName}` : `About ${businessName}`),
+    "{{ABOUT_INTRO_BODY}}": copy.ABOUT_INTRO_BODY || copy.ABOUT_STORY || "",
+    "{{ABOUT_CTA}}": copy.ABOUT_CTA || "LEARN MORE",
+
+    // Transformation
+    "{{TRANSFORMATION_EYEBROW}}": copy.TRANSFORMATION_EYEBROW || "✦ THE TRANSFORMATION",
+    "{{TRANSFORMATION_BODY}}": copy.TRANSFORMATION_BODY || "",
+    "{{BA_1_BEFORE}}": copy.BA_1_BEFORE || "",
+    "{{BA_1_AFTER}}": copy.BA_1_AFTER || "",
+    "{{BA_2_BEFORE}}": copy.BA_2_BEFORE || "",
+    "{{BA_2_AFTER}}": copy.BA_2_AFTER || "",
+    "{{BA_3_BEFORE}}": copy.BA_3_BEFORE || "",
+    "{{BA_3_AFTER}}": copy.BA_3_AFTER || "",
+
+    // Philosophy pillars
+    "{{PHILOSOPHY_EYEBROW}}": copy.PHILOSOPHY_EYEBROW || "✦ THE APPROACH",
+    "{{PILLAR_1_TITLE}}": copy.PILLAR_1_TITLE || copy.WHY_US_1_TITLE || "",
+    "{{PILLAR_1_BODY}}": copy.PILLAR_1_BODY || copy.WHY_US_1_DESC || "",
+    "{{PILLAR_2_TITLE}}": copy.PILLAR_2_TITLE || copy.WHY_US_2_TITLE || "",
+    "{{PILLAR_2_BODY}}": copy.PILLAR_2_BODY || copy.WHY_US_2_DESC || "",
+    "{{PILLAR_3_TITLE}}": copy.PILLAR_3_TITLE || copy.WHY_US_3_TITLE || "",
+    "{{PILLAR_3_BODY}}": copy.PILLAR_3_BODY || copy.WHY_US_3_DESC || "",
+
+    // Services — feminine-bold specific
+    "{{SERVICES_EYEBROW}}": copy.SERVICES_EYEBROW || "✦ WAYS TO WORK TOGETHER",
+    "{{SERVICE_1_TAG}}": copy.SERVICE_1_TAG || "SIGNATURE",
+    "{{SERVICE_1_PRICE}}": services[0]?.price_value || services[0]?.price || copy.SERVICE_1_PRICE || "Contact for pricing",
+    "{{SERVICE_1_DURATION}}": copy.SERVICE_1_DURATION_FB || copy.SERVICE_1_DURATION || "",
+    "{{SERVICE_1_INCLUDE_1}}": copy.SERVICE_1_INCLUDE_1_FB || copy.SERVICE_1_INCLUDE_1 || "",
+    "{{SERVICE_1_INCLUDE_2}}": copy.SERVICE_1_INCLUDE_2_FB || copy.SERVICE_1_INCLUDE_2 || "",
+    "{{SERVICE_1_INCLUDE_3}}": copy.SERVICE_1_INCLUDE_3_FB || copy.SERVICE_1_INCLUDE_3 || "",
+    "{{SERVICE_2_TAG}}": copy.SERVICE_2_TAG || "",
+    "{{SERVICE_2_PRICE}}": services[1]?.price_value || services[1]?.price || copy.SERVICE_2_PRICE || "Contact for pricing",
+    "{{SERVICE_2_DURATION}}": copy.SERVICE_2_DURATION_FB || copy.SERVICE_2_DURATION || "",
+    "{{SERVICE_2_INCLUDE_1}}": copy.SERVICE_2_INCLUDE_1_FB || copy.SERVICE_2_INCLUDE_1 || "",
+    "{{SERVICE_2_INCLUDE_2}}": copy.SERVICE_2_INCLUDE_2_FB || copy.SERVICE_2_INCLUDE_2 || "",
+    "{{SERVICE_2_INCLUDE_3}}": copy.SERVICE_2_INCLUDE_3_FB || copy.SERVICE_2_INCLUDE_3 || "",
+    "{{SERVICE_3_TAG}}": copy.SERVICE_3_TAG || "",
+    "{{SERVICE_3_PRICE}}": services[2]?.price_value || services[2]?.price || copy.SERVICE_3_PRICE || "Contact for pricing",
+    "{{SERVICE_3_DURATION}}": copy.SERVICE_3_DURATION_FB || copy.SERVICE_3_DURATION || "",
+    "{{SERVICE_3_INCLUDE_1}}": copy.SERVICE_3_INCLUDE_1_FB || copy.SERVICE_3_INCLUDE_1 || "",
+    "{{SERVICE_3_INCLUDE_2}}": copy.SERVICE_3_INCLUDE_2_FB || copy.SERVICE_3_INCLUDE_2 || "",
+    "{{SERVICE_3_INCLUDE_3}}": copy.SERVICE_3_INCLUDE_3_FB || copy.SERVICE_3_INCLUDE_3 || "",
+
+    // Testimonials — feminine-bold uses TITLE instead of LOCATION
+    "{{TESTIMONIAL_1_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_LOCATION || copy.TESTIMONIAL_1_TITLE || ""),
+    "{{TESTIMONIAL_2_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_2_LOCATION || copy.TESTIMONIAL_2_TITLE || ""),
+    "{{TESTIMONIAL_3_TITLE}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_LOCATION || copy.TESTIMONIAL_3_TITLE || ""),
+    "{{TESTIMONIAL_1_AVATAR_URL}}": teamPhotos[0] || intake.owner_photo_url || "",
+    "{{TESTIMONIAL_2_AVATAR_URL}}": portfolioPhotos[0] || "",
+    "{{TESTIMONIAL_3_AVATAR_URL}}": portfolioPhotos[1] || "",
+    "{{TESTIMONIALS_EYEBROW}}": copy.TESTIMONIALS_EYEBROW || "✦ WORDS FROM CLIENTS",
+
+    // Methodology
+    "{{METHODOLOGY_EYEBROW}}": copy.METHODOLOGY_EYEBROW || "✦ THE PROCESS",
+    "{{METHODOLOGY_BODY}}": copy.METHODOLOGY_BODY || "",
+    "{{STEP_1_TITLE}}": copy.STEP_1_TITLE || "",
+    "{{STEP_1_BODY}}": copy.STEP_1_BODY || "",
+    "{{STEP_2_TITLE}}": copy.STEP_2_TITLE || "",
+    "{{STEP_2_BODY}}": copy.STEP_2_BODY || "",
+    "{{STEP_3_TITLE}}": copy.STEP_3_TITLE || "",
+    "{{STEP_3_BODY}}": copy.STEP_3_BODY || "",
+    "{{STEP_4_TITLE}}": copy.STEP_4_TITLE || "",
+    "{{STEP_4_BODY}}": copy.STEP_4_BODY || "",
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION REMOVAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function parseSectionsToRemove(
+  aiResponse: string | undefined,
+  flags: { noTestimonials: boolean; noAddress: boolean; noServiceAreas: boolean },
+): string[] {
+  const sections = (aiResponse || "")
+    .split(",")
+    .map((s: string) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  // Force-add sections that must be removed based on data flags
+  if (flags.noTestimonials && !sections.includes("testimonials")) {
+    sections.push("testimonials");
+  }
+  if (flags.noAddress && !sections.includes("service_areas") && flags.noServiceAreas) {
+    sections.push("service_areas");
+  }
+
+  return [...new Set(sections)];
+}
+
+function removeSection(html: string, sectionName: string): string {
+  // Multiple pattern strategies for robust section removal
+  const patterns = [
+    // <section class="...testimonial...">...</section>
+    new RegExp(`<section[^>]*class="[^"]*${sectionName}[^"]*"[^>]*>[\\s\\S]*?<\\/section>`, "gi"),
+    // <section id="testimonials">...</section>
+    new RegExp(`<section[^>]*id="[^"]*${sectionName}[^"]*"[^>]*>[\\s\\S]*?<\\/section>`, "gi"),
+    // data-section="testimonials"
+    new RegExp(`<[^>]*data-section="[^"]*${sectionName}[^"]*"[^>]*>[\\s\\S]*?<\\/(?:section|div)>`, "gi"),
+    // <div class="...testimonial-section...">...</div> (greedy but bounded)
+    new RegExp(`<div[^>]*class="[^"]*${sectionName}[^"]*-section[^"]*"[^>]*>[\\s\\S]*?<\\/div>\\s*(?=<(?:section|div[^>]*class="[^"]*section|footer))`, "gi"),
+  ];
+
+  for (const pattern of patterns) {
+    const before = html.length;
+    html = html.replace(pattern, "");
+    if (html.length < before) {
+      console.log(`[generate] Removed section: ${sectionName} (${before - html.length} chars)`);
+      return html;
+    }
+  }
+
+  // Fallback: try singular/plural variants
+  const variants = sectionName.endsWith("s") ? [sectionName.slice(0, -1)] : [sectionName + "s"];
+  for (const variant of variants) {
+    const pattern = new RegExp(`<section[^>]*class="[^"]*${variant}[^"]*"[^>]*>[\\s\\S]*?<\\/section>`, "gi");
+    const before = html.length;
+    html = html.replace(pattern, "");
+    if (html.length < before) {
+      console.log(`[generate] Removed section (variant): ${variant} (${before - html.length} chars)`);
+      return html;
+    }
+  }
+
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TEMPLATE HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
 
 function applyConditional(html: string, key: string, show: boolean): string {
   const re = new RegExp(`\\{\\{#${key}\\}\\}([\\s\\S]*?)\\{\\{\\/${key}\\}\\}`, "gi");
@@ -1473,9 +1608,6 @@ function applyConditional(html: string, key: string, show: boolean): string {
     : html.replace(re, "");
 }
 
-// Mustache-style {{#KEY}}inner{{/KEY}} renderer.
-// For each item in `items`, the inner block is duplicated with {{FIELD}}
-// placeholders inside it replaced by the item's named values, then joined.
 function renderMustacheSection(html: string, key: string, items: any[]): string {
   const re = new RegExp(`\\{\\{#${key}\\}\\}([\\s\\S]*?)\\{\\{\\/${key}\\}\\}`, "gi");
   return html.replace(re, (_m, inner: string) => {
@@ -1500,9 +1632,10 @@ function injectNoindex(html: string): string {
   return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
 }
 
-// ── business-professional template: font-only swap ────────────────────
-// Colors are handled by the canonical color-system module. This helper only
-// swaps the --font-serif token + Google Fonts URL based on intake.font_preference.
+// ═══════════════════════════════════════════════════════════════════════════
+// FONT HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
 function applyBusinessProfessionalFonts(html: string, intake: any): string {
   if (!intake?.font_preference) return html;
   const fontMap: Record<string, { serif: string; url: string }> = {
@@ -1518,53 +1651,6 @@ function applyBusinessProfessionalFonts(html: string, intake: any): string {
   return out;
 }
 
-// Resolves a client-provided color to a clean #rrggbb / #rgb string,
-// or returns the provided fallback (template default) when missing/invalid.
-function resolveBrandColor(input: unknown, fallback: string): string {
-  if (typeof input !== "string") return fallback;
-  const raw = input.trim();
-  if (!raw) return fallback;
-  if (/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw)) return raw;
-  if (/^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(raw)) return `#${raw}`;
-  if (/^(hsl|rgb)a?\s*\(/i.test(raw)) return raw;
-  return fallback;
-}
-
-// Font-only :root mutator. Color mutations live exclusively in _shared/color-system.ts.
-function injectFontTokensIntoRoot(html: string, tokens: { headingFont?: string; bodyFont?: string }): string {
-  return html.replace(/:root\s*\{([\s\S]*?)\}/, (_m, body: string) => {
-    let out = body;
-    const replace = (name: string, value: string) => {
-      const re = new RegExp(`(${name.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
-      if (re.test(out)) out = out.replace(re, `$1${value}$3`);
-    };
-    if (tokens.headingFont) replace("--font-heading", `'${tokens.headingFont}', serif`);
-    if (tokens.bodyFont) replace("--font-body", `'${tokens.bodyFont}', sans-serif`);
-    return `:root {${out}}`;
-  });
-}
-
-
-
-// Inject a Google Fonts <link> for the chosen heading/body fonts.
-function injectGoogleFontsLink(html: string, headingFont: string, bodyFont: string): string {
-  const fonts = [headingFont, bodyFont].filter(Boolean);
-  if (fonts.length === 0) return html;
-  const families = [...new Set(fonts)]
-    .map((f) => `family=${encodeURIComponent(f).replace(/%20/g, "+")}:wght@400;500;600;700;800`)
-    .join("&");
-  const href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
-  if (html.includes(href)) return html;
-  const tag = `\n  <link rel="preconnect" href="https://fonts.googleapis.com" />\n  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n  <link href="${href}" rel="stylesheet" />`;
-  if (/<meta\s+charset=["']?[^>"']+["']?\s*\/?>/i.test(html)) {
-    return html.replace(/(<meta\s+charset=["']?[^>"']+["']?\s*\/?>)/i, `$1${tag}`);
-  }
-  return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
-}
-
-// Map a free-text font preference / heading_font / body_font to a real
-// Google Fonts family name. Falls back to the input itself when the input
-// already looks like a font name.
 function resolveFontName(input: unknown): string {
   if (typeof input !== "string") return "";
   const raw = input.trim();
@@ -1588,7 +1674,38 @@ function resolveFontName(input: unknown): string {
   return map[key] || raw;
 }
 
-// Priority: 1) intake.favicon_url, 2) intake.logo_url, 3) generated SVG initial.
+function injectFontTokensIntoRoot(html: string, tokens: { headingFont?: string; bodyFont?: string }): string {
+  return html.replace(/:root\s*\{([\s\S]*?)\}/, (_m, body: string) => {
+    let out = body;
+    const replace = (name: string, value: string) => {
+      const re = new RegExp(`(${name.replace(/-/g, "\\-")}\\s*:\\s*)([^;]+)(;)`, "i");
+      if (re.test(out)) out = out.replace(re, `$1${value}$3`);
+    };
+    if (tokens.headingFont) replace("--font-heading", `'${tokens.headingFont}', serif`);
+    if (tokens.bodyFont) replace("--font-body", `'${tokens.bodyFont}', sans-serif`);
+    return `:root {${out}}`;
+  });
+}
+
+function injectGoogleFontsLink(html: string, headingFont: string, bodyFont: string): string {
+  const fonts = [headingFont, bodyFont].filter(Boolean);
+  if (fonts.length === 0) return html;
+  const families = [...new Set(fonts)]
+    .map((f) => `family=${encodeURIComponent(f).replace(/%20/g, "+")}:wght@400;500;600;700;800`)
+    .join("&");
+  const href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+  if (html.includes(href)) return html;
+  const tag = `\n  <link rel="preconnect" href="https://fonts.googleapis.com" />\n  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n  <link href="${href}" rel="stylesheet" />`;
+  if (/<meta\s+charset=["']?[^>"']+["']?\s*\/?>/i.test(html)) {
+    return html.replace(/(<meta\s+charset=["']?[^>"']+["']?\s*\/?>)/i, `$1${tag}`);
+  }
+  return html.replace(/(<head[^>]*>)/i, `$1${tag}`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FAVICON
+// ═══════════════════════════════════════════════════════════════════════════
+
 export function buildFaviconHTML(opts: {
   faviconUrl?: string;
   logoUrl?: string;
@@ -1596,19 +1713,14 @@ export function buildFaviconHTML(opts: {
   primaryColor?: string;
 }): string {
   const fav = (opts.faviconUrl || "").trim();
-  if (fav) {
-    return `<link rel="icon" href="${fav}" />`;
-  }
+  if (fav) return `<link rel="icon" href="${fav}" />`;
   const logo = (opts.logoUrl || "").trim();
-  if (logo) {
-    return `<link rel="icon" href="${logo}" />`;
-  }
+  if (logo) return `<link rel="icon" href="${logo}" />`;
   const initial = ((opts.businessName || "").trim().charAt(0) || "S").toUpperCase();
   const rawColor = (opts.primaryColor || "").trim() || "#534AB7";
   const color = /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(rawColor)
     ? (rawColor.startsWith("#") ? rawColor : `#${rawColor}`)
     : "#534AB7";
-  // Build the SVG; URL-encode # and a few other chars so it works inside an href.
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='${color}'/><text y='.9em' font-size='75' font-family='Arial,sans-serif' font-weight='bold' fill='white' text-anchor='middle' x='50' dominant-baseline='middle' dy='5'>${escapeHTML(initial)}</text></svg>`;
   const href = `data:image/svg+xml,${svg.replace(/#/g, "%23").replace(/"/g, "%22")}`;
   return `<link rel="icon" type="image/svg+xml" href="${href}" />`;
@@ -1616,7 +1728,6 @@ export function buildFaviconHTML(opts: {
 
 export function injectFavicon(html: string, faviconTag: string): string {
   if (!faviconTag) return html;
-  // Remove any existing favicon link tags so ours wins.
   let out = html.replace(/<link[^>]+rel=["'](?:shortcut\s+)?icon["'][^>]*\/?>/gi, "");
   const tag = `\n  ${faviconTag}`;
   if (/<meta\s+charset=["']?[^>"']+["']?\s*\/?>/i.test(out)) {
@@ -1625,12 +1736,15 @@ export function injectFavicon(html: string, faviconTag: string): string {
   return out.replace(/(<head[^>]*>)/i, `$1${tag}`);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AI CALL WRAPPERS
+// ═══════════════════════════════════════════════════════════════════════════
 
 async function callAI(apiKey: string, content: string, label: string): Promise<{ text: string; outputTokens: number }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!apiKey) {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-    console.warn(`[${label}] Anthropic key unavailable — using Lovable AI fallback.`);
+    console.warn(`[${label}] No Anthropic key — using Lovable AI fallback.`);
     return callLovableAI(LOVABLE_API_KEY, content, label);
   }
 
@@ -1661,12 +1775,11 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
           await new Promise((res) => setTimeout(res, 3000 * attempt));
           continue;
         }
-        const message = `Claude ${label} failed: ${r.status} — ${errText.substring(0, 300)}`;
         if (LOVABLE_API_KEY && (isAnthropicCreditError(r.status, errText) || isAnthropicModelUnavailable(r.status, errText))) {
           console.warn(`[${label}] Anthropic unavailable — using Lovable AI fallback.`);
           return callLovableAI(LOVABLE_API_KEY, content, label);
         }
-        throw new Error(message);
+        throw new Error(`Claude ${label} failed: ${r.status} — ${errText.substring(0, 300)}`);
       }
       const data = await r.json();
       const text = Array.isArray(data.content)
@@ -1721,14 +1834,12 @@ async function callLovableAI(apiKey: string, content: string, label: string): Pr
       }),
     });
     clearTimeout(timeout);
-
     if (!r.ok) {
       const errText = await r.text();
-      if (r.status === 429) throw new Error(`Lovable AI rate limit reached while generating ${label}. Please try again in a minute.`);
-      if (r.status === 402) throw new Error(`Lovable AI credits are exhausted while generating ${label}. Please add AI balance in Lovable.`);
+      if (r.status === 429) throw new Error(`Lovable AI rate limit for ${label}. Try again in a minute.`);
+      if (r.status === 402) throw new Error(`Lovable AI credits exhausted for ${label}.`);
       throw new Error(`Lovable AI ${label} failed: ${r.status} — ${errText.substring(0, 300)}`);
     }
-
     const data = await r.json();
     const text = data.choices?.[0]?.message?.content || "";
     return { text, outputTokens: data.usage?.completion_tokens || data.usage?.output_tokens || 0 };
@@ -1739,6 +1850,10 @@ async function callLovableAI(apiKey: string, content: string, label: string): Pr
       : err;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UTILITY HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
 
 function stripMarkdown(s: string): string {
   return s.replace(/^```(?:html|json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
@@ -1767,7 +1882,10 @@ function escapeAttr(s: string): string {
   return escapeHTML(s);
 }
 
-// ── Map helper — free Google Maps iframe embed (no API key required) ──
+// ═══════════════════════════════════════════════════════════════════════════
+// MAP HELPER
+// ═══════════════════════════════════════════════════════════════════════════
+
 type MapInput = {
   locationType?: string;
   streetAddress?: string;
@@ -1776,6 +1894,7 @@ type MapInput = {
   zip?: string;
   serviceArea?: string;
 };
+
 function buildMapHTML(input: MapInput): { html: string; url: string } {
   const type = (input.locationType || "").toLowerCase().trim();
   const city = (input.city || "").trim();
@@ -1783,25 +1902,17 @@ function buildMapHTML(input: MapInput): { html: string; url: string } {
   const street = (input.streetAddress || "").trim();
   const zip = (input.zip || "").trim();
 
-  // Online (or other "no map" types) → hide map entirely
   if (type === "online" || type === "remote" || type === "virtual" || type === "none") {
     return { html: "", url: "" };
   }
 
-  // A fixed-location business: storefront / physical / hybrid → pin the address
-  const isFixedLocation =
-    type === "storefront" || type === "physical" || type === "hybrid";
+  const isFixedLocation = type === "storefront" || type === "physical" || type === "hybrid";
 
   let url = "";
   if (isFixedLocation && (street || city)) {
     const q = [street, city, state, zip].filter(Boolean).join(", ");
     url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`;
-  } else if ((type === "mobile" || !type) && (city || state)) {
-    // Mobile / service-area / unknown → city+state with a wider zoom
-    const q = [city, state].filter(Boolean).join(", ");
-    url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
   } else if (city || state) {
-    // Final safety fallback for any other type — still render a map
     const q = [city, state].filter(Boolean).join(", ");
     url = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=9&output=embed`;
   }
@@ -1817,20 +1928,16 @@ function buildMapHTML(input: MapInput): { html: string; url: string } {
   return { html, url };
 }
 
-// ── Photo helpers ─────────────────────────────────────────────────────
-// Build specific Unsplash search terms based on the client's business type,
-// first service, tagline, and business name — so stock photos are always
-// relevant to what the business actually does (e.g. a business coach gets
-// "coaching women business" instead of a random landscape).
+// ═══════════════════════════════════════════════════════════════════════════
+// PHOTO HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
 function buildStockSearchTerms(
   businessType: string,
   firstService: string,
   tagline = "",
   businessName = "",
 ): string[] {
-  // Always lead with a client-specific query: service[0].name + tagline +
-  // businessType, capped at 50 chars. Strips the business name itself so
-  // we don't search Unsplash for the company brand.
   const stripWords = (businessName || "")
     .toLowerCase()
     .split(/\s+/)
@@ -1881,15 +1988,11 @@ function buildStockSearchTerms(
   ];
   for (const { match, terms } of map) {
     if (match.test(ctx)) {
-      // Prefer the client-specific query when it adds real signal beyond
-      // the business type alone, otherwise stick with the curated terms.
       return clientQuery && clientQuery.length > (businessType?.length || 0) + 2
         ? [clientQuery, ...terms]
         : terms;
     }
   }
-  // No category match — rely on the client-specific query first, then
-  // safe generic fallbacks so we never end up with totally random images.
   const safe = clientQuery || `professional ${businessType || "small business"}`;
   return [safe, `${safe} professional`, `professional ${businessType || "small business"} service`];
 }
@@ -1914,28 +2017,23 @@ async function fetchUnsplashPhotoUrl(searchTerms: string[]): Promise<string> {
   return "";
 }
 
-// Service image picker — cycles through portfolio photos for slot N. Falls back to other resolved images so slots aren't empty.
 function pickServiceImage(index: number, portfolioPhotos: string[], fallbacks: string[]): string {
   if (portfolioPhotos[index]) return portfolioPhotos[index];
   if (portfolioPhotos.length > 0) return portfolioPhotos[index % portfolioPhotos.length];
   return fallbacks.find((u) => !!u) || "";
 }
 
-// ── Contact form wiring ────────────────────────────────────────────────
-// Post-processes generated HTML so every <form> element on the page submits
-// to the handle-contact-form edge function with a hidden client_id and a
-// honeypot field, plus a small JS handler that AJAX-submits and shows a
-// success / error message in place of the form.
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTACT FORM WIRING
+// ═══════════════════════════════════════════════════════════════════════════
+
 export function wireContactForms(html: string, clientId: string, supabaseUrl: string): string {
   const endpoint = `${supabaseUrl}/functions/v1/handle-contact-form`;
 
-  // For every <form ...> opening tag: set action, set method="post", inject hidden inputs.
   const out = html.replace(/<form\b([^>]*)>/gi, (_match, attrs: string) => {
     let a = attrs;
-    // Strip existing action and method to avoid duplicates
     a = a.replace(/\s+action\s*=\s*("[^"]*"|'[^']*')/gi, "");
     a = a.replace(/\s+method\s*=\s*("[^"]*"|'[^']*')/gi, "");
-    // Tag the form so our JS can find it
     if (!/data-sq-contact-form/i.test(a)) {
       a += ` data-sq-contact-form="1"`;
     }
@@ -1945,7 +2043,6 @@ export function wireContactForms(html: string, clientId: string, supabaseUrl: st
     return `<form action="${endpoint}" method="post"${a}>${hidden}`;
   });
 
-  // Inject the submit handler script just before </body>.
   const handlerScript = `
 <script>
 (function(){
@@ -2002,15 +2099,15 @@ export function wireContactForms(html: string, clientId: string, supabaseUrl: st
   return out.replace("</body>", handlerScript + "\n</body>");
 }
 
-// ── Analytics tagging helpers (v3) ─────────────────────────────────────
-// Adds data-sq-track to CTAs and data-sq-milestone to key sections so the
-// tracker fires click/element_visible events with friendly names.
-// Idempotent: skipped if data-sq-track already present.
+// ═══════════════════════════════════════════════════════════════════════════
+// ANALYTICS TAGGING (v3)
+// ═══════════════════════════════════════════════════════════════════════════
+
 function addAnalyticsTags(html: string, pageName: string): string {
   if (/\bdata-sq-track=/.test(html)) return html;
 
   let firstQuoteTagged = false;
-  // 1. Quote buttons/anchors → quote_click (+ milestone on first home-page match)
+  // Quote buttons
   html = html.replace(
     /(<(a|button)\b[^>]*?)(>[\s\S]{0,200}?(?:get\s+a\s+|request\s+a\s+|free\s+)?quote[\s\S]{0,200}?<\/\2>)/gi,
     (_m, open, _tag, rest) => {
@@ -2023,7 +2120,7 @@ function addAnalyticsTags(html: string, pageName: string): string {
     },
   );
 
-  // 2. Hero CTA fallback: if no quote button on this page, tag the first .btn-primary / .cta
+  // Hero CTA fallback
   if (!firstQuoteTagged) {
     html = html.replace(
       /(<a\b[^>]*class=["'][^"']*(?:btn-primary|cta-primary|hero-cta)[^"']*["'][^>]*?)(>)/i,
@@ -2031,26 +2128,26 @@ function addAnalyticsTags(html: string, pageName: string): string {
     );
   }
 
-  // 3. Learn More links
+  // Learn More links
   html = html.replace(
     /(<(a|button)\b[^>]*?)(>[\s\S]{0,100}?learn\s+more[\s\S]{0,100}?<\/\2>)/gi,
     (_m, open, _tag, rest) => `${open} data-sq-track="learn_more_${pageName}"${rest}`,
   );
 
-  // 4. PDF download anchors
+  // PDF download
   html = html.replace(
     /(<a\b[^>]*?\bhref=["'][^"']*\.pdf[^"'#?]*[^"']*["'][^>]*?)(>)/gi,
     (_m, open, close) => `${open} data-sq-track="pdf_download"${close}`,
   );
 
-  // 5. Footer milestone (every page)
+  // Footer milestone
   html = html.replace(
     /(<footer\b)([^>]*?)(>)/i,
     (_m, tag, attrs, close) =>
       attrs.includes("data-sq-milestone") ? _m : `${tag}${attrs} data-sq-milestone="footer"${close}`,
   );
 
-  // 6. Page-specific milestones
+  // Page-specific milestones
   if (pageName === "contact") {
     html = html.replace(
       /(<form\b)([^>]*?)(>)/i,
