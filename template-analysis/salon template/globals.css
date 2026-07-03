@@ -1,0 +1,32 @@
+@import url("https://cdnjs.cloudflare.com/ajax/libs/meyer-reset/2.0/reset.min.css");
+@import url("https://fonts.googleapis.com/css?family=Inter:300,400"); /* @FONTWARNING[{"type": "restricted", "family": "Georgia-Regular", "weight": "400", "style": "normal", "allowsCrossOrigin": true}] */
+* {
+  -webkit-font-smoothing: antialiased;
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0px;
+  height: 100%;
+}
+/* a blue color as a generic focus style */
+button:focus-visible {
+  outline: 2px solid #4a90e2 !important;
+  outline: -webkit-focus-ring-color auto 5px !important;
+}
+a {
+  text-decoration: none;
+}
+
+@font-face {
+  font-family: "Georgia-Regular";
+  src: url("https://anima-uploads.s3.amazonaws.com/projects/65d0ee3b60dd0a5025dec57c/fonts/georgia.ttf")
+    format("truetype");
+}
+/* @FONTWARNING[{"type": "restricted", "family": "Georgia-Italic", "weight": "400", "style": "italic", "allowsCrossOrigin": true}] */
+
+@font-face {
+  font-family: "Georgia-Italic";
+  src: url("https://anima-uploads.s3.amazonaws.com/projects/60a4e27754ed7caeb29d86c5/fonts/georgia-italic.ttf")
+    format("truetype");
+}

@@ -1,0 +1,1342 @@
+{
+  "feminine services template": {
+    "template_name": "feminine services template",
+    "template_dir": "/home/ubuntu/site-queen-backend/template-analysis/feminine services template",
+    "replaceable_nodes": [
+      {
+        "id": "text_node_13",
+        "text": "As a business coach, I am committed to empowering my clients by sharing the strategies and skills I ",
+        "char_count": 316,
+        "classes": [
+          "text-wrapper-10"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 316 chars"
+      },
+      {
+        "id": "text_node_62",
+        "text": "I built Maison Luna because I needed it first. A space where ambition and softness couldsit at the s",
+        "char_count": 206,
+        "classes": [
+          "text-wrapper-32"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 206 chars"
+      },
+      {
+        "id": "text_node_9",
+        "text": "I help you stop losing money in your business, raise your rates with confidence, and master sales so",
+        "char_count": 171,
+        "classes": [
+          "text-wrapper-7"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 171 chars"
+      },
+      {
+        "id": "text_node_63",
+        "text": "Every client I work with is, in some quiet way, the woman I needed when I was beginning.That is not ",
+        "char_count": 156,
+        "classes": [
+          "text-wrapper-32"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 156 chars"
+      },
+      {
+        "id": "text_node_4",
+        "text": "A decade of building quietly powerful brands \u2014 and a deep belief that the best business decisions ar",
+        "char_count": 129,
+        "classes": [
+          "p"
+        ],
+        "tag": "p",
+        "font_size": "24px",
+        "estimated_max_chars": 90,
+        "replaceable": true,
+        "constraint": "P element with 129 chars"
+      },
+      {
+        "id": "text_node_80",
+        "text": "Luna helped me build thebusiness I'd been quietlydesigning in my journal foryears. It's mine now \u2014 e",
+        "char_count": 115,
+        "classes": [
+          "text-wrapper-40"
+        ],
+        "tag": "p",
+        "font_size": "24px",
+        "estimated_max_chars": 90,
+        "replaceable": true,
+        "constraint": "P element with 115 chars"
+      },
+      {
+        "id": "text_node_83",
+        "text": "I came in burnt out andbracing for anotherframework. I left with a self Iactually recognized \u2014 andre",
+        "char_count": 115,
+        "classes": [
+          "text-wrapper-40"
+        ],
+        "tag": "p",
+        "font_size": "24px",
+        "estimated_max_chars": 90,
+        "replaceable": true,
+        "constraint": "P element with 115 chars"
+      },
+      {
+        "id": "text_node_86",
+        "text": "Six months in, I'm chargingtriple what I used toand saying no withouta single apology. Quiet,devasta",
+        "char_count": 111,
+        "classes": [
+          "text-wrapper-40"
+        ],
+        "tag": "p",
+        "font_size": "24px",
+        "estimated_max_chars": 90,
+        "replaceable": true,
+        "constraint": "P element with 111 chars"
+      },
+      {
+        "id": "text_node_30",
+        "text": "Left a corporate marketing role to coach my first private clients from a Brooklyn brownstone kitchen",
+        "char_count": 107,
+        "classes": [
+          "text-wrapper-21"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 107 chars"
+      },
+      {
+        "id": "text_node_34",
+        "text": "Opened the doors to The Studio \u2014 a self-paced library of editorialframeworks now used by over 500 fo",
+        "char_count": 107,
+        "classes": [
+          "text-wrapper-22"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 107 chars"
+      },
+      {
+        "id": "text_node_45",
+        "text": "This isn't a six-week sprint. It's the work of becoming \u2014 slow, deliberate, and impossibly worth it.",
+        "char_count": 100,
+        "classes": [
+          "this-isn-t-a-six"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 100 chars"
+      },
+      {
+        "id": "text_node_42",
+        "text": "First small-circle Maison Immersion in Paris. Long lunches. Deep work. Lives quietly rearranged.",
+        "char_count": 96,
+        "classes": [
+          "text-wrapper-21"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 96 chars"
+      },
+      {
+        "id": "text_node_21",
+        "text": "Every word, every page, every offer heldto the standard of a Vogue spread, not asales script.",
+        "char_count": 93,
+        "classes": [
+          "text-wrapper-16"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 93 chars"
+      },
+      {
+        "id": "text_node_18",
+        "text": "We do not shout. We do the work, refine themessage, and let the results carry the room.",
+        "char_count": 87,
+        "classes": [
+          "text-wrapper-16"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 87 chars"
+      },
+      {
+        "id": "text_node_24",
+        "text": "Sustainable scale over hustle. Decisions madefrom rest, ambition rooted in self-trust.",
+        "char_count": 86,
+        "classes": [
+          "sustainable-scale"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 86 chars"
+      },
+      {
+        "id": "text_node_38",
+        "text": "Launched the Maison Luna Podcast \u2014 quietly crossing two milliondownloads and counting.",
+        "char_count": 86,
+        "classes": [
+          "text-wrapper-22"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 86 chars"
+      },
+      {
+        "id": "text_node_94",
+        "text": "Editorial coaching for the woman becoming. Brooklyn \u00b7 Paris \u00b7 everywhere in between.",
+        "char_count": 84,
+        "classes": [
+          "text-wrapper-47"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 84 chars"
+      },
+      {
+        "id": "text_node_91",
+        "text": "A complimentary 30-minute discovery call \u2014 quiet, focused, andentirely about you.",
+        "char_count": 81,
+        "classes": [
+          "a-complimentary"
+        ],
+        "tag": "p",
+        "font_size": "20px",
+        "estimated_max_chars": 108,
+        "replaceable": true,
+        "constraint": "P element with 81 chars"
+      },
+      {
+        "id": "text_node_57",
+        "text": "Offers, rhythms, and revenue that feel asgood as they perform",
+        "char_count": 61,
+        "classes": [
+          "text-wrapper-26"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 61 chars"
+      },
+      {
+        "id": "text_node_49",
+        "text": "A single, soul-aligned vision with thesteps to walk it out",
+        "char_count": 58,
+        "classes": [
+          "text-wrapper-26"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 58 chars"
+      }
+    ],
+    "total_text_nodes": 107,
+    "total_replaceable": 90
+  },
+  "food template": {
+    "template_name": "food template",
+    "template_dir": "/home/ubuntu/site-queen-backend/template-analysis/food template",
+    "replaceable_nodes": [
+      {
+        "id": "text_node_12",
+        "text": "We work with a single regenerative ranch in upstate New York. Oneherd, one feed program, one consist",
+        "char_count": 175,
+        "classes": [
+          "p"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 175 chars"
+      },
+      {
+        "id": "text_node_15",
+        "text": "Our brioche starts with stone-milled heritage wheat from a familyfarm in Pennsylvania. Slow ferment,",
+        "char_count": 173,
+        "classes": [
+          "p"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 173 chars"
+      },
+      {
+        "id": "text_node_18",
+        "text": "Twelve years later, we still grind our own beef every morning, bake our brioche before sunrise, and ",
+        "char_count": 169,
+        "classes": [
+          "text-wrapper-12"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 169 chars"
+      },
+      {
+        "id": "text_node_17",
+        "text": "Ember & Bun started in a small backyard with one cast-iron skillet and an obsession. We wanted to kn",
+        "char_count": 165,
+        "classes": [
+          "text-wrapper-12"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 165 chars"
+      },
+      {
+        "id": "text_node_3",
+        "text": "One backyard. One cast-iron skillet. One question \u2014 how good can aburger really be when nothing is o",
+        "char_count": 110,
+        "classes": [
+          "one-backyard-one"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 110 chars"
+      },
+      {
+        "id": "text_node_77",
+        "text": "Hand-crafted burgers, born from fire. Open sevendays. Loud music, low light, hot grill.",
+        "char_count": 87,
+        "classes": [
+          "hand-crafted-burgers"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 87 chars"
+      },
+      {
+        "id": "text_node_25",
+        "text": "Fifteen years on the line. Believes the onlyseasoning that matters is fire.",
+        "char_count": 75,
+        "classes": [
+          "text-wrapper-18"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 75 chars"
+      },
+      {
+        "id": "text_node_28",
+        "text": "Bakes 400 brioche before sunrise. Will fight youover hydration ratios.",
+        "char_count": 70,
+        "classes": [
+          "text-wrapper-18"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 70 chars"
+      },
+      {
+        "id": "text_node_31",
+        "text": "Reads the grill like a book. Knows when a pattyis done by sound.",
+        "char_count": 64,
+        "classes": [
+          "text-wrapper-18"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 64 chars"
+      },
+      {
+        "id": "text_node_51",
+        "text": "\"Ember & Bun isn't a restaurantit's a temple to flame and beef.\"",
+        "char_count": 64,
+        "classes": [
+          "text-wrapper-25"
+        ],
+        "tag": "p",
+        "font_size": "20px",
+        "estimated_max_chars": 108,
+        "replaceable": true,
+        "constraint": "P element with 64 chars"
+      },
+      {
+        "id": "text_node_47",
+        "text": "\"The best burger I've eaten in adecade. The crust on that patty",
+        "char_count": 63,
+        "classes": [
+          "text-wrapper-25"
+        ],
+        "tag": "p",
+        "font_size": "20px",
+        "estimated_max_chars": 108,
+        "replaceable": true,
+        "constraint": "P element with 63 chars"
+      },
+      {
+        "id": "text_node_55",
+        "text": "\"Every detail considered. Bun,sauce, pickle, char. Perfection.\"",
+        "char_count": 63,
+        "classes": [
+          "text-wrapper-25"
+        ],
+        "tag": "p",
+        "font_size": "20px",
+        "estimated_max_chars": 108,
+        "replaceable": true,
+        "constraint": "P element with 63 chars"
+      },
+      {
+        "id": "text_node_35",
+        "text": "Every patty seared over liveflame for a crust you can hear.",
+        "char_count": 59,
+        "classes": [
+          "text-wrapper-21"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 59 chars"
+      },
+      {
+        "id": "text_node_41",
+        "text": "We move at the speed of flavour.Not the speed of fast food.",
+        "char_count": 59,
+        "classes": [
+          "text-wrapper-21"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 59 chars"
+      },
+      {
+        "id": "text_node_22",
+        "text": "The people behind every patty. Crew first, kitchen always.",
+        "char_count": 58,
+        "classes": [
+          "text-wrapper-14"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 58 chars"
+      },
+      {
+        "id": "text_node_39",
+        "text": "Buns baked daily. Sauces,pickles & blends from scratch.",
+        "char_count": 55,
+        "classes": [
+          "text-wrapper-21"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 55 chars"
+      },
+      {
+        "id": "text_node_37",
+        "text": "28-day aged single-originchuck. No shortcuts, ever.",
+        "char_count": 51,
+        "classes": [
+          "text-wrapper-21"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 51 chars"
+      },
+      {
+        "id": "text_node_94",
+        "text": "Friday Just Got Tastier30% Off Every Bite",
+        "char_count": 41,
+        "classes": [
+          "text-wrapper-11"
+        ],
+        "tag": "p",
+        "font_size": "60px",
+        "estimated_max_chars": 36,
+        "replaceable": true,
+        "constraint": "P element with 41 chars"
+      },
+      {
+        "id": "text_node_33",
+        "text": "Built DifferentTastes Different",
+        "char_count": 31,
+        "classes": [
+          "built-different"
+        ],
+        "tag": "div",
+        "font_size": "72px",
+        "estimated_max_chars": 30,
+        "replaceable": true,
+        "constraint": "DIV element with 31 chars"
+      },
+      {
+        "id": "text_node_49",
+        "text": "Food Critic, The Daily Plate",
+        "char_count": 28,
+        "classes": [
+          "text-wrapper-27"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 28 chars"
+      }
+    ],
+    "total_text_nodes": 96,
+    "total_replaceable": 81
+  },
+  "professional services template": {
+    "template_name": "professional services template",
+    "template_dir": "/home/ubuntu/site-queen-backend/template-analysis/professional services template",
+    "replaceable_nodes": [
+      {
+        "id": "text_node_9",
+        "text": "For seven decades, Blackwood Legal hasrepresented the matters that define industries \u2014and the indivi",
+        "char_count": 264,
+        "classes": [
+          "for-seven-decades"
+        ],
+        "tag": "p",
+        "font_size": "15px",
+        "estimated_max_chars": 144,
+        "replaceable": true,
+        "constraint": "P element with 264 chars"
+      },
+      {
+        "id": "text_node_10",
+        "text": "We do not chase volume. We pursue outcomes.Our partners take cases personally, structurestrategy bes",
+        "char_count": 205,
+        "classes": [
+          "we-do-not-chase"
+        ],
+        "tag": "p",
+        "font_size": "15px",
+        "estimated_max_chars": 144,
+        "replaceable": true,
+        "constraint": "P element with 205 chars"
+      },
+      {
+        "id": "text_node_105",
+        "text": "\"when The Matter Required Absolute Precision And Discretion, Blackwood's Counsel Was The Only Call W",
+        "char_count": 165,
+        "classes": [
+          "when-the-matter"
+        ],
+        "tag": "p",
+        "font_size": "48px",
+        "estimated_max_chars": 45,
+        "replaceable": true,
+        "constraint": "P element with 165 chars"
+      },
+      {
+        "id": "text_node_45",
+        "text": "From founder disputes to growth-stage capital matters, we counsel principals through the legalarchit",
+        "char_count": 159,
+        "classes": [
+          "from-founder"
+        ],
+        "tag": "p",
+        "font_size": "15px",
+        "estimated_max_chars": 144,
+        "replaceable": true,
+        "constraint": "P element with 159 chars"
+      },
+      {
+        "id": "text_node_81",
+        "text": "Seventy years of corporate litigation and counsel for those whorequire both gravitas and resolve.",
+        "char_count": 97,
+        "classes": [
+          "seventy-years-of"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 97 chars"
+      },
+      {
+        "id": "text_node_19",
+        "text": "Six core practice domains, each led by senior counselwith three decades of category experience.",
+        "char_count": 95,
+        "classes": [
+          "six-core-practice"
+        ],
+        "tag": "p",
+        "font_size": "15px",
+        "estimated_max_chars": 144,
+        "replaceable": true,
+        "constraint": "P element with 95 chars"
+      },
+      {
+        "id": "text_node_112",
+        "text": "Seventy years of corporate litigationand counsel. Sophisticated, deliberate,unwavering.",
+        "char_count": 87,
+        "classes": [
+          "seventy-years-of-2"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 87 chars"
+      },
+      {
+        "id": "text_node_94",
+        "text": "Thirty-two years of bet-the-companydefense. Past Chair of the ABA LitigationSection.",
+        "char_count": 84,
+        "classes": [
+          "text-wrapper-18"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 84 chars"
+      },
+      {
+        "id": "text_node_97",
+        "text": "Lead counsel on more than $40B incompleted transactions across fourjurisdictions.",
+        "char_count": 81,
+        "classes": [
+          "text-wrapper-18"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 81 chars"
+      },
+      {
+        "id": "text_node_29",
+        "text": "Transactional rigor across acquisitions, leases, andcorporate structuring.",
+        "char_count": 74,
+        "classes": [
+          "text-wrapper-6"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 74 chars"
+      },
+      {
+        "id": "text_node_21",
+        "text": "Discreet defense in complex matters of corporateand individual exposure.",
+        "char_count": 72,
+        "classes": [
+          "text-wrapper-6"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 72 chars"
+      },
+      {
+        "id": "text_node_31",
+        "text": "Internal inquiries, regulatory response, andreputational protection.",
+        "char_count": 68,
+        "classes": [
+          "text-wrapper-6"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 68 chars"
+      },
+      {
+        "id": "text_node_25",
+        "text": "Stewardship of generational wealth, trusts, andsuccession planning.",
+        "char_count": 67,
+        "classes": [
+          "text-wrapper-6"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 67 chars"
+      },
+      {
+        "id": "text_node_27",
+        "text": "Decisive counsel in contract, partnership, andshareholder disputes.",
+        "char_count": 67,
+        "classes": [
+          "text-wrapper-6"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 67 chars"
+      },
+      {
+        "id": "text_node_23",
+        "text": "Confidential representation in high-net-worthmatrimonial disputes.",
+        "char_count": 66,
+        "classes": [
+          "text-wrapper-6"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 66 chars"
+      },
+      {
+        "id": "text_node_103",
+        "text": "ICC, LCIA, and ICSID counsel; tribunalsacross five continents.",
+        "char_count": 62,
+        "classes": [
+          "text-wrapper-18"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 62 chars"
+      },
+      {
+        "id": "text_node_100",
+        "text": "Former Assistant US Attorney, SouthernDistrict of New York.",
+        "char_count": 59,
+        "classes": [
+          "text-wrapper-18"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 59 chars"
+      },
+      {
+        "id": "text_node_43",
+        "text": "Counsel For Those Who Requireboth Gravitas And Resolve.",
+        "char_count": 55,
+        "classes": [
+          "counsel-for-those"
+        ],
+        "tag": "p",
+        "font_size": "48px",
+        "estimated_max_chars": 45,
+        "replaceable": true,
+        "constraint": "P element with 55 chars"
+      },
+      {
+        "id": "text_node_33",
+        "text": "70 Years Of Fighting For Thepeople Who Need It Most.",
+        "char_count": 52,
+        "classes": [
+          "element-years-of-fighting"
+        ],
+        "tag": "p",
+        "font_size": "60px",
+        "estimated_max_chars": 36,
+        "replaceable": true,
+        "constraint": "P element with 52 chars"
+      },
+      {
+        "id": "text_node_13",
+        "text": "Senior partners with 20+ years in their domains.",
+        "char_count": 48,
+        "classes": [
+          "p"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 48 chars"
+      }
+    ],
+    "total_text_nodes": 132,
+    "total_replaceable": 119
+  },
+  "salon template": {
+    "template_name": "salon template",
+    "template_dir": "/home/ubuntu/site-queen-backend/template-analysis/salon template",
+    "replaceable_nodes": [
+      {
+        "id": "text_node_11",
+        "text": "Maren trained in Lisbon, refined her practice across boutique houses inParis and Copenhagen, and ret",
+        "char_count": 236,
+        "classes": [
+          "maren-trained-in"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 236 chars"
+      },
+      {
+        "id": "text_node_12",
+        "text": "Today she leads a small team of CIDESCO and ITEC-certifiedestheticians, each chosen as much for thei",
+        "char_count": 214,
+        "classes": [
+          "today-she-leads-a"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 214 chars"
+      },
+      {
+        "id": "text_node_17",
+        "text": "Four private treatment rooms set inside a 19th-centuryapartment \u2014 soundproofed walls, dimmable light",
+        "char_count": 191,
+        "classes": [
+          "four-private"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 191 chars"
+      },
+      {
+        "id": "text_node_2",
+        "text": "Six years ago we opened a single quiet door in Pr\u00edncipe Real, with one treatment room and a single b",
+        "char_count": 171,
+        "classes": [
+          "p"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 171 chars"
+      },
+      {
+        "id": "text_node_63",
+        "text": "A boutique luxury spa in Lisbon \u2014 facials, massage,advanced skincare, and beauty rituals, performed ",
+        "char_count": 140,
+        "classes": [
+          "a-boutique-luxury"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 140 chars"
+      },
+      {
+        "id": "text_node_4",
+        "text": "Beauty is not a performance. It is thequiet result of being well cared for \u2014 skinthat breathes, a bo",
+        "char_count": 128,
+        "classes": [
+          "span"
+        ],
+        "tag": "span",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "SPAN element with 128 chars"
+      },
+      {
+        "id": "text_node_47",
+        "text": "Every detail considered \u2014 thelinen, the tea, the light. Thetreatment is wonderful. The houraround it",
+        "char_count": 117,
+        "classes": [
+          "text-wrapper-17"
+        ],
+        "tag": "p",
+        "font_size": "24px",
+        "estimated_max_chars": 90,
+        "replaceable": true,
+        "constraint": "P element with 117 chars"
+      },
+      {
+        "id": "text_node_44",
+        "text": "Maren reads skin the waysommeliers read wine. After threesessions my skin looked youngerthan it had ",
+        "char_count": 112,
+        "classes": [
+          "text-wrapper-17"
+        ],
+        "tag": "p",
+        "font_size": "24px",
+        "estimated_max_chars": 90,
+        "replaceable": true,
+        "constraint": "P element with 112 chars"
+      },
+      {
+        "id": "text_node_80",
+        "text": "New guests receive a complimentary skin consultation with their firstappointment. Limited slots open",
+        "char_count": 111,
+        "classes": [
+          "new-guests-receive-a"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 111 chars"
+      },
+      {
+        "id": "text_node_41",
+        "text": "There is a hush to this place that Ihave not found anywhere else inthe city. I leave feeling like a ",
+        "char_count": 110,
+        "classes": [
+          "text-wrapper-17"
+        ],
+        "tag": "p",
+        "font_size": "24px",
+        "estimated_max_chars": 90,
+        "replaceable": true,
+        "constraint": "P element with 110 chars"
+      },
+      {
+        "id": "text_node_13",
+        "text": "\u201cI wanted to build the room I always wishedexisted \u2014 clinically precise, deeply calm, andnever, ever",
+        "char_count": 109,
+        "classes": [
+          "i-wanted-to-build"
+        ],
+        "tag": "p",
+        "font_size": "30px",
+        "estimated_max_chars": 72,
+        "replaceable": true,
+        "constraint": "P element with 109 chars"
+      },
+      {
+        "id": "text_node_52",
+        "text": "Tucked into a quiet corner of Pr\u00edncipe Real, twominutes from the metro. Walk-ins welcome betweenappo",
+        "char_count": 109,
+        "classes": [
+          "tucked-into-a-quiet"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 109 chars"
+      },
+      {
+        "id": "text_node_24",
+        "text": "Six commitments we made to ourselves the day weopened \u2014 and have kept, quietly, every day since.",
+        "char_count": 96,
+        "classes": [
+          "six-commitments-we"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 96 chars"
+      },
+      {
+        "id": "text_node_37",
+        "text": "Guest privacy is total. We don't repost, retag, or share without explicitpermission.",
+        "char_count": 84,
+        "classes": [
+          "guest-privacy-is"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 84 chars"
+      },
+      {
+        "id": "text_node_26",
+        "text": "CIDESCO & ITEC trained, with continuing education in advancedclinical skincare.",
+        "char_count": 79,
+        "classes": [
+          "text-wrapper-11"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 79 chars"
+      },
+      {
+        "id": "text_node_28",
+        "text": "Cruelty-free, EU-formulated lines selected for performance \u2014 never fortrend.",
+        "char_count": 76,
+        "classes": [
+          "cruelty-free-EU"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 76 chars"
+      },
+      {
+        "id": "text_node_31",
+        "text": "Four soundproofed rooms with linen sheets, dimmable light, andcurated scent.",
+        "char_count": 76,
+        "classes": [
+          "text-wrapper-11"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 76 chars"
+      },
+      {
+        "id": "text_node_33",
+        "text": "Transparent menu, no upsells. Members enjoy 15% off all servicesyear-round.",
+        "char_count": 75,
+        "classes": [
+          "text-wrapper-11"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 75 chars"
+      },
+      {
+        "id": "text_node_35",
+        "text": "Treatments begin and end on time. Your hour is yours \u2014 no overlaps,no rush.",
+        "char_count": 75,
+        "classes": [
+          "treatments-begin-and"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 75 chars"
+      },
+      {
+        "id": "text_node_54",
+        "text": "Maren & Bloom SpaRua das Flores 24, 2\u00ba1200-194 Lisbon, Portugal",
+        "char_count": 63,
+        "classes": [
+          "maren-bloom-spa-rua"
+        ],
+        "tag": "p",
+        "font_size": "27.2px",
+        "estimated_max_chars": 80,
+        "replaceable": true,
+        "constraint": "P element with 63 chars"
+      }
+    ],
+    "total_text_nodes": 86,
+    "total_replaceable": 80
+  },
+  "trades template": {
+    "template_name": "trades template",
+    "template_dir": "/home/ubuntu/site-queen-backend/template-analysis/trades template",
+    "replaceable_nodes": [
+      {
+        "id": "text_node_47",
+        "text": "From burst pipes in Fishtown to full HVAC swaps in Bala Cynwyd, our crewhas done it all. We treat yo",
+        "char_count": 160,
+        "classes": [
+          "from-burst-pipes-in"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 160 chars"
+      },
+      {
+        "id": "text_node_15",
+        "text": "Licensed, insured, and ready 24/7. Honest upfront pricing, same-dayappointments, and 25+ years keepi",
+        "char_count": 136,
+        "classes": [
+          "subheading"
+        ],
+        "tag": "p",
+        "font_size": "20px",
+        "estimated_max_chars": 108,
+        "replaceable": true,
+        "constraint": "P element with 136 chars"
+      },
+      {
+        "id": "text_node_118",
+        "text": "\"Called at 7am with a flooded basement. Tech wasout by 9 and had it fixed before lunch. Honestpricin",
+        "char_count": 130,
+        "classes": [
+          "text-wrapper-41"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 130 chars"
+      },
+      {
+        "id": "text_node_121",
+        "text": "\"Replaced our entire HVAC system in one day. Crewwas respectful, clean, and walked us through everys",
+        "char_count": 123,
+        "classes": [
+          "text-wrapper-41"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 123 chars"
+      },
+      {
+        "id": "text_node_124",
+        "text": "\"Panel upgrade and EV charger install. Pulled thepermits, passed inspection first try. These guys ar",
+        "char_count": 116,
+        "classes": [
+          "text-wrapper-41"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 116 chars"
+      },
+      {
+        "id": "text_node_62",
+        "text": "One trusted team for every system in your home. Same-day service across the Greater Philadelphia are",
+        "char_count": 102,
+        "classes": [
+          "text-wrapper-23"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 102 chars"
+      },
+      {
+        "id": "text_node_159",
+        "text": "One call, one trusted crew, every job. Same-day appointmentsavailable across Greater Philly.",
+        "char_count": 92,
+        "classes": [
+          "one-call-one-trusted"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 92 chars"
+      },
+      {
+        "id": "text_node_77",
+        "text": "Print, screenshot, or just mention the code when you call. One coupon per service.",
+        "char_count": 82,
+        "classes": [
+          "text-wrapper-27"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 82 chars"
+      },
+      {
+        "id": "text_node_165",
+        "text": "Philadelphia's trusted plumbing, electrical &HVAC pros. Family-owned since 1999.",
+        "char_count": 80,
+        "classes": [
+          "philadelphia-s"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 80 chars"
+      },
+      {
+        "id": "text_node_101",
+        "text": "Burst pipe, no heat, dead panel \u2014 call now and a licensed pro is on the way.",
+        "char_count": 76,
+        "classes": [
+          "text-wrapper-34"
+        ],
+        "tag": "p",
+        "font_size": "18px",
+        "estimated_max_chars": 120,
+        "replaceable": true,
+        "constraint": "P element with 76 chars"
+      },
+      {
+        "id": "text_node_106",
+        "text": "Flat-rate quotes before any work begins. No clock-watching, no surprises.",
+        "char_count": 73,
+        "classes": [
+          "text-wrapper-38"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 73 chars"
+      },
+      {
+        "id": "text_node_64",
+        "text": "Leaks, repairs, repipes, fixtures and more \u2014 fixed rightthe first time.",
+        "char_count": 71,
+        "classes": [
+          "text-wrapper-25"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 71 chars"
+      },
+      {
+        "id": "text_node_66",
+        "text": "Panel upgrades, wiring, lighting, EV chargers and full codeinspections.",
+        "char_count": 71,
+        "classes": [
+          "text-wrapper-25"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 71 chars"
+      },
+      {
+        "id": "text_node_72",
+        "text": "Tank, tankless and hybrid \u2014 same-day install andemergency replacement.",
+        "char_count": 70,
+        "classes": [
+          "text-wrapper-25"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 70 chars"
+      },
+      {
+        "id": "text_node_108",
+        "text": "Background-checked, drug-tested, factory-trained pros in every truck.",
+        "char_count": 69,
+        "classes": [
+          "text-wrapper-38"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 69 chars"
+      },
+      {
+        "id": "text_node_155",
+        "text": "Talk to a real person \u2014 no robots, no menus. We're standing by24/7.",
+        "char_count": 67,
+        "classes": [
+          "talk-to-a-real"
+        ],
+        "tag": "p",
+        "font_size": "16px",
+        "estimated_max_chars": 135,
+        "replaceable": true,
+        "constraint": "P element with 67 chars"
+      },
+      {
+        "id": "text_node_68",
+        "text": "Heating & cooling install, repair, tune-ups and indoor airquality.",
+        "char_count": 66,
+        "classes": [
+          "text-wrapper-25"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 66 chars"
+      },
+      {
+        "id": "text_node_70",
+        "text": "Hydro jetting, camera inspections and trenchless sewerline repair.",
+        "char_count": 66,
+        "classes": [
+          "text-wrapper-25"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 66 chars"
+      },
+      {
+        "id": "text_node_74",
+        "text": "Bath & kitchen remodels, additions and full mechanicalrough-ins.",
+        "char_count": 64,
+        "classes": [
+          "text-wrapper-25"
+        ],
+        "tag": "p",
+        "font_size": "14px",
+        "estimated_max_chars": 154,
+        "replaceable": true,
+        "constraint": "P element with 64 chars"
+      },
+      {
+        "id": "text_node_27",
+        "text": "No obligation \u2022 Licensed & insured \u2022 Response in 15 min",
+        "char_count": 55,
+        "classes": [
+          "form-note"
+        ],
+        "tag": "p",
+        "font_size": "12px",
+        "estimated_max_chars": 180,
+        "replaceable": true,
+        "constraint": "P element with 55 chars"
+      }
+    ],
+    "total_text_nodes": 186,
+    "total_replaceable": 163
+  }
+}
