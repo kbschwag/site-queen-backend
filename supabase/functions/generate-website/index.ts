@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { uploadFileToHostingerFtp } from "../_shared/hostinger-ftp.ts";
 import { logUnfilledPlaceholders } from "../_shared/diagnostics.ts";
-import { autoFillPlaceholders } from "../_shared/autofill.ts";
+// import { autoFillPlaceholders } from "../_shared/autofill.ts"; // REMOVED — deterministic fallback used instead
 import { generateRestaurantSite, RESTAURANT_TEMPLATE_ID } from "../_shared/restaurant-generator.ts";
 import { applyBrandColorsToHTML, logColorApplication, type ColorPlacement, type SkippedBrandColor } from "../_shared/color-system.ts";
 import { SmartTextReplacer, COMMON_CONSTRAINTS, createCommonReplacer } from "../_shared/smart-text-replacer.ts";
@@ -61,9 +61,11 @@ serve(async (req) => {
   }
 
   let clientId = "";
+  let mode: "full" | "lite" = "full"; // "full" = intake form client, "lite" = GBP prospect (minimal data)
   try {
     const body = await req.json();
     clientId = body.client_id;
+    if (body.mode === "lite") mode = "lite";
   } catch {
     return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400, headers: corsHeaders });
   }
@@ -215,6 +217,7 @@ serve(async (req) => {
 
 
     // ── Business data shortcuts ──────────────────────────────────────────
+    console.log(`[generate] Mode: ${mode} | Client: ${clientId}`);
     const businessName = (clientData as any)?.business_name || intake.business_name || "Business";
     const businessType = (clientData as any)?.business_type || "Service Business";
     const city = intake.business_city || intake.city || "";
@@ -229,7 +232,7 @@ serve(async (req) => {
     const aboutStory = intake.about_story || intake.owner_bio_raw || intake.story_started || "";
     const ownerName = intake.owner_name || "";
     const ownerTitle = intake.owner_title || "Owner";
-    const noTestimonials = !!intake.no_testimonials;
+    const noTestimonials = !!intake.no_testimonials || (mode === "lite" && !googleReviewCount);
     const tagline = intake.tagline || "";
 
     const portfolioPhotos: string[] = (Array.isArray(intake.portfolio_photos) ? intake.portfolio_photos : []).filter(Boolean);
@@ -310,6 +313,39 @@ serve(async (req) => {
 
     const copyPrompt = `You are a professional copywriter for SiteQueen. Generate website copy for a ${businessType} business. Return ONLY valid JSON — no markdown, no explanation, no code blocks. Start with { and end with }.
 
+═══════════════════════════════════════════════════════════
+HARD CHARACTER LIMITS — THESE ARE NON-NEGOTIABLE (ALL TEMPLATES)
+═══════════════════════════════════════════════════════════
+The website uses fixed-width Figma containers. Text that exceeds these limits
+will OVERFLOW and BREAK the layout. Count your characters carefully.
+
+| Field Pattern              | Max Chars | Example Length |
+|----------------------------|-----------|----------------|
+| *_HEADLINE_LINE1/2/3       | 30        | "PHOENIX'S PREMIER" (18) |
+| *_HEADLINE_HIGHLIGHT       | 25        | "TAX & ACCOUNTING" (17) |
+| *_HEADLINE (single)        | 45        | "WHY HOMEOWNERS CHOOSE US" (25) |
+| *_BADGE / *_EYEBROW        | 25        | "TRUSTED SINCE 2005" (19) |
+| HERO_SUBHEADING            | 150       | 1-2 sentences max |
+| SERVICE_*_NAME             | 30        | "Drain Cleaning" (15) |
+| SERVICE_*_DESC             | 200       | 2 short sentences |
+| WHY_US_*_TITLE             | 30        | "Licensed & Insured" (19) |
+| WHY_US_*_DESC              | 200       | 2 short sentences |
+| STAT_*_NUMBER              | 8         | "500+" or "4.9★" |
+| STAT_*_LABEL               | 20        | "JOBS COMPLETED" (14) |
+| TESTIMONIAL_*_TEXT         | 250       | 2-3 sentences |
+| TESTIMONIAL_*_NAME         | 25        | "Sarah M." (9) |
+| FAQ_*_Q                    | 80        | Short question |
+| FAQ_*_A                    | 300       | 2-4 sentences |
+| AREA_*                     | 25        | "West Valley City" (16) |
+| AWARD_*                    | 35        | "EPA Lead-Safe Certified" (24) |
+| FOOTER_TAGLINE             | 50        | Short memorable phrase |
+| ABOUT_STORY                | 600       | 3-5 sentences |
+| *_SUBTEXT / *_INTRO        | 200       | 1-2 sentences |
+
+IF YOUR TEXT EXCEEDS THESE LIMITS, THE SITE WILL LOOK BROKEN.
+When in doubt, write SHORTER. Premium brands use restraint.
+═══════════════════════════════════════════════════════════
+
 ${templateId === "business-professional" ? `═══════════════════════════════════════════════════════════
 CRITICAL CONTENT RULES — FOLLOW THESE EXACTLY (business-professional template)
 ═══════════════════════════════════════════════════════════
@@ -365,6 +401,25 @@ FIELD-FILLING RULES:
 2. Client didn't provide data → generate something specific and credible based on the business type (${businessType}), services (${serviceNames.join(", ") || "n/a"}), city (${city}, ${state}), owner story, and tone. Never generic filler.
 3. Client explicitly opted out → return empty string ONLY for those specific fields. Currently opted out: ${[noTestimonials ? "TESTIMONIAL_1/2/3_*" : null].filter(Boolean).join(", ") || "none"}.
 
+${mode === "lite" ? `═══════════════════════════════════════════════════════════
+LITE MODE — MINIMAL DATA (GBP Prospect)
+═══════════════════════════════════════════════════════════
+This is a prospect site generated from Google Business Profile data only.
+You have very limited information. Your job is to INFER realistic, credible
+content based on the business type and location. Write as if you researched
+this business — use industry-specific language, mention common services for
+this type of business in this area, and create a professional impression.
+
+RULES FOR LITE MODE:
+- Infer 4-6 realistic services based on the business type
+- Write a credible about story based on the type and location
+- Generate realistic stats (use soft numbers like "500+" not exact counts)
+- Do NOT invent specific certifications, awards, or credentials
+- Do NOT claim specific years in business unless provided
+- Use the Google rating if provided, otherwise omit rating references
+- Write testimonials that reference the inferred services naturally
+═══════════════════════════════════════════════════════════
+` : ""}
 BUSINESS INFO:
 - Name: ${businessName}
 - Type: ${businessType}
@@ -379,7 +434,7 @@ BUSINESS INFO:
 - Ideal customer: ${intake.story_ideal_customer || "not provided"}
 - Google rating: ${googleRating || "not provided"}
 - Google review count: ${googleReviewCount || "not provided"}
-- Services: ${serviceNames.join(", ") || "not provided"}
+- Services: ${serviceNames.join(", ") || "not provided — infer from business type"}
 - Tagline: ${tagline || "not provided"}
 - Client-provided service areas (use these exact names FIRST for AREA_1..N before generating more):
 ${clientServiceAreaList}
@@ -1048,80 +1103,32 @@ Return this exact JSON structure (every field required, no empty strings unless 
       );
     }
 
-    // Auto-fill any remaining placeholders with AI text + Unsplash images
-    const autoFilled = await autoFillPlaceholders(
-      html,
-      { businessName, businessType, city: intake.business_city || intake.city || "", services: services.map((s: any) => typeof s === "string" ? s : s?.name || s?.title).filter(Boolean).join(", "), notes: tagline },
-      stockTerms,
-    );
-    html = autoFilled.html;
+    // ── Deterministic fallback: strip remaining placeholders cleanly ─────
+    // Instead of calling a second AI (which introduces garbage text), we log
+    // any unfilled placeholders for debugging and then remove them. The main
+    // Claude copy call should have filled everything — if it didn't, it's
+    // better to show nothing than random AI filler that breaks the design.
     await logUnfilledPlaceholders(supabase, clientId, templateId, "index", html);
+    const remainingPlaceholders = html.match(/\{\{[^}]+\}\}/g) || [];
+    if (remainingPlaceholders.length > 0) {
+      console.warn(`[generate] ${remainingPlaceholders.length} unfilled placeholders being stripped:`, remainingPlaceholders.slice(0, 10).join(", "));
+    }
     html = html.replace(/\{\{[^}]+\}\}/g, "");
 
-    // ── CALL 2: Apply call notes special instructions (only if needed) ───
-    const hasSpecialInstructions = callNotes && (
-      (callNotes as any).expert_additions ||
-      (callNotes as any).expert_avoid ||
-      (callNotes as any).color_direction ||
-      (callNotes as any).vibe_notes
-    );
-
-    if (hasSpecialInstructions) {
-      await supabase.from("sites").update({ generation_progress: "applying_customizations" } as any).eq("client_id", clientId);
-
-      const customizePrompt = `You are a web developer applying specific operator instructions to a completed website. The HTML is already built and looks great. Your job is to apply ONLY the specific instructions listed below — nothing else.
-
-OPERATOR INSTRUCTIONS (apply all of these):
-${JSON.stringify({
-  expert_additions: (callNotes as any).expert_additions,
-  expert_avoid: (callNotes as any).expert_avoid,
-  color_direction: (callNotes as any).color_direction,
-  vibe_notes: (callNotes as any).vibe_notes,
-  exact_phrases: (callNotes as any).exact_phrases,
-  final_notes: (callNotes as any).final_notes,
-}, null, 2)}
-
-RULES:
-- Apply only what is explicitly listed in the operator instructions above.
-- Do not redesign anything. Do not rewrite sections that are already good.
-- If instructed to remove a section → delete it entirely, no empty divs.
-- If instructed to add a section → add it matching the existing design system exactly (same fonts, colors, spacing).
-- If instructed to change colors → update the CSS custom properties in :root only.
-- If instructed to use exact phrases → find the relevant sections and apply them.
-- Do not change any class names.
-- Do not add external libraries.
-- Return the complete HTML with your changes applied.
-
-CURRENT HTML:
-${html}
-
-CRITICAL: Return ONLY the complete raw HTML. No markdown, no explanation, no code blocks. Start with <!DOCTYPE html> and end with </html>.`;
-
-      try {
-        console.log("[generate] Calling Claude for customizations...");
-        const preCustomizeHTML = html; // Save backup before customization
-        const customizeResult = await callAI(ANTHROPIC_API_KEY, customizePrompt, "customizations");
-        const customized = stripMarkdown(customizeResult.text);
-        if (customized.includes("</html>") && customized.includes("<!DOCTYPE")) {
-          // Validate customized HTML before accepting it
-          const customValidator = new HTMLValidator(customized);
-          const customReport = customValidator.validate();
-          const preValidator = new HTMLValidator(preCustomizeHTML);
-          const preReport = preValidator.validate();
-          // Only accept if customization didn't degrade fidelity significantly
-          if (customReport.fidelityScore >= preReport.fidelityScore - 15) {
-            html = customized;
-            console.log(`[generate] Customization accepted (fidelity: ${customReport.fidelityScore} vs pre: ${preReport.fidelityScore})`);
-          } else {
-            console.warn(`[generate] Customization REJECTED — fidelity dropped from ${preReport.fidelityScore} to ${customReport.fidelityScore}. Using pre-customization HTML.`);
-            html = preCustomizeHTML;
-          }
-        } else {
-          console.warn("[generate] Customization call returned unexpected output — using pre-customization HTML");
-        }
-      } catch (e: any) {
-        console.warn("[generate] Customization call failed (non-fatal):", e.message);
-      }
+    // ── CALL 2 REMOVED ─────────────────────────────────────────────────────
+    // The "customization" call previously gave Claude the full HTML and asked
+    // it to modify it based on call notes. This was the #1 source of layout
+    // corruption — Claude would rewrite sections, break CSS classes, and
+    // destroy the Figma design fidelity.
+    //
+    // Call notes (expert_additions, exact_phrases, vibe_notes, etc.) are now
+    // incorporated directly into CALL 1's copy prompt, so the AI generates
+    // the right copy from the start rather than trying to retrofit it after.
+    // If you need to re-enable customization in the future, use the revision
+    // system (change-request-apply) instead, which targets specific fields.
+    // ─────────────────────────────────────────────────────────────────────────
+    if (callNotes && ((callNotes as any).expert_additions || (callNotes as any).exact_phrases)) {
+      console.log("[generate] Call notes with special instructions detected — incorporated into copy prompt (CALL 2 disabled)");
     }
 
     // ── Safety net: force animate-on-scroll visible ──────────────────────
