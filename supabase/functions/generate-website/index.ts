@@ -266,25 +266,8 @@ serve(async (req) => {
     let aboutImageUrl = aboutCandidates[0] || "";
     let whyUsImageUrl = whyUsCandidates[0] || "";
 
-    if (allowStock) {
-      const needed: Array<"hero" | "about" | "whyus"> = [];
-      if (!heroImageUrl) needed.push("hero");
-      if (!aboutImageUrl) needed.push("about");
-      if (!whyUsImageUrl) needed.push("whyus");
-
-      if (needed.length > 0) {
-        const stockResults = await Promise.all(needed.map((slot) => {
-          const variant = slot === "hero" ? "wide hero" : slot === "about" ? "team working" : "professional";
-          return fetchUnsplashPhotoUrl(stockTerms.map((t) => `${t} ${variant}`));
-        }));
-        needed.forEach((slot, i) => {
-          const url = stockResults[i] || "";
-          if (slot === "hero") heroImageUrl = url;
-          else if (slot === "about") aboutImageUrl = url;
-          else if (slot === "whyus") whyUsImageUrl = url;
-        });
-      }
-    }
+    // NOTE: Stock photo fetching moved to AFTER AI call so we can use AI-suggested search terms
+    // See "AI-DRIVEN STOCK PHOTOS" section below
 
     const logoUrlResolved = intake.logo_url || ""; // never replaced with stock
     console.log(`[generate] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} logo:${logoUrlResolved ? "✓" : "✗"} (hero_upload=${!!intake.hero_photo_url}, portfolio=${portfolioPhotos.length}, team=${teamPhotos.length}, allowStock=${allowStock})`);
@@ -630,6 +613,10 @@ Return this exact JSON structure (every field required, no empty strings unless 
   "SERVICE_3_INCLUDE_1_FB": "what's included in service 3 (native language)",
   "SERVICE_3_INCLUDE_2_FB": "what's included in service 3",
   "SERVICE_3_INCLUDE_3_FB": "what's included in service 3"` : ""}
+  "IMAGE_SEARCH_HERO": "specific descriptive Unsplash search query for the hero image — describe the SCENE not the business type (e.g. 'woman journaling warm light cozy room' NOT 'coaching'; 'modern kitchen renovation white marble' NOT 'plumber'; 'professional woman at desk warm office' NOT 'attorney'). 3-6 descriptive words.",
+  "IMAGE_SEARCH_ABOUT": "specific descriptive Unsplash search query for the about/team image — describe a scene showing the person or team at work (e.g. 'craftsman working with tools workshop' NOT 'trades'). 3-6 descriptive words.",
+  "IMAGE_SEARCH_WHYUS": "specific descriptive Unsplash search query for the why-us/portfolio image — describe the RESULT or environment (e.g. 'beautiful modern bathroom renovation completed' NOT 'plumber'). 3-6 descriptive words.",
+  "SECTIONS_TO_REMOVE": "comma-separated list of sections to REMOVE from this site because data is missing or irrelevant. Valid options: testimonials, service_areas, awards, financing, faq, emergency. Only remove sections where the data truly doesn't exist or doesn't apply to this business type. If the business has no testimonials/reviews, include 'testimonials'. If no city was provided, include 'service_areas'. Return empty string if all sections should stay."
 }`;
 
     console.log("[generate] Calling Claude for copy...");
@@ -709,6 +696,49 @@ Return this exact JSON structure (every field required, no empty strings unless 
       }
     }
 
+    // ── AI-DRIVEN STOCK PHOTOS — fetch images using AI-suggested search terms ──
+    if (allowStock) {
+      const needed: Array<"hero" | "about" | "whyus"> = [];
+      if (!heroImageUrl) needed.push("hero");
+      if (!aboutImageUrl) needed.push("about");
+      if (!whyUsImageUrl) needed.push("whyus");
+
+      if (needed.length > 0) {
+        const stockResults = await Promise.all(needed.map((slot) => {
+          // Use AI-suggested search terms if available, fall back to generic
+          let searchQuery: string;
+          if (slot === "hero" && copy.IMAGE_SEARCH_HERO) {
+            searchQuery = copy.IMAGE_SEARCH_HERO;
+          } else if (slot === "about" && copy.IMAGE_SEARCH_ABOUT) {
+            searchQuery = copy.IMAGE_SEARCH_ABOUT;
+          } else if (slot === "whyus" && copy.IMAGE_SEARCH_WHYUS) {
+            searchQuery = copy.IMAGE_SEARCH_WHYUS;
+          } else {
+            // Fallback to generic terms
+            const variant = slot === "hero" ? "wide hero" : slot === "about" ? "team working" : "professional";
+            searchQuery = `${businessType} ${variant}`;
+          }
+          console.log(`[generate] Stock photo search for ${slot}: "${searchQuery}"`);
+          return fetchUnsplashPhotoUrl([searchQuery]);
+        }));
+        needed.forEach((slot, i) => {
+          const url = stockResults[i] || "";
+          if (slot === "hero") heroImageUrl = url;
+          else if (slot === "about") aboutImageUrl = url;
+          else if (slot === "whyus") whyUsImageUrl = url;
+        });
+      }
+    }
+    console.log(`[generate] Final photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"}`);
+
+    // ── AI-DRIVEN SECTION REMOVAL — remove sections AI says don't apply ──
+    const sectionsToRemove = (copy.SECTIONS_TO_REMOVE || "").split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+    // Also force-remove testimonials if noTestimonials flag is set
+    if (noTestimonials && !sectionsToRemove.includes("testimonials")) {
+      sectionsToRemove.push("testimonials");
+    }
+    console.log(`[generate] Sections to remove: ${sectionsToRemove.length > 0 ? sectionsToRemove.join(", ") : "none"}`);
+
     // ── Render conditional sections + repeating COUPONS block ────────────
     let html = templateHTML;
     html = applyConditional(html, "SHOW_FINANCING", showFinancing);
@@ -725,6 +755,29 @@ Return this exact JSON structure (every field required, no empty strings unless 
       })));
     } else {
       html = renderMustacheSection(html, "COUPONS", []);
+    }
+
+    // ── SMART SECTION REMOVAL — remove entire HTML sections when data is missing ──
+    for (const section of sectionsToRemove) {
+      // Build regex patterns for common section class naming conventions
+      const patterns = [
+        // <section class="...testimonial...">...</section>
+        new RegExp(`<section[^>]*class="[^"]*${section}[^"]*"[^>]*>[\\s\\S]*?<\\/section>`, 'gi'),
+        // <div class="...testimonial-section...">...</div> (followed by another major element)
+        new RegExp(`<div[^>]*class="[^"]*${section}[^"]*-section[^"]*"[^>]*>[\\s\\S]*?<\\/div>\\s*(?=<(?:section|div[^>]*class="[^"]*section|footer))`, 'gi'),
+        // <section id="testimonials">...</section>
+        new RegExp(`<section[^>]*id="[^"]*${section}[^"]*"[^>]*>[\\s\\S]*?<\\/section>`, 'gi'),
+        // data-section="testimonials"
+        new RegExp(`<[^>]*data-section="[^"]*${section}[^"]*"[^>]*>[\\s\\S]*?<\\/(?:section|div)>`, 'gi'),
+      ];
+      for (const pattern of patterns) {
+        const before = html.length;
+        html = html.replace(pattern, '');
+        if (html.length < before) {
+          console.log(`[generate] Removed section: ${section} (${before - html.length} chars)`);
+          break; // Only need one pattern to match
+        }
+      }
     }
 
     // ── Build LOGO_HTML and MAP_HTML ─────────────────────────────────────
@@ -1114,6 +1167,21 @@ Return this exact JSON structure (every field required, no empty strings unless 
       console.warn(`[generate] ${remainingPlaceholders.length} unfilled placeholders being stripped:`, remainingPlaceholders.slice(0, 10).join(", "));
     }
     html = html.replace(/\{\{[^}]+\}\}/g, "");
+
+    // ── Clean up empty data artifacts in footer/address ─────────────────
+    const hasAddress = !!(intake.street_address || intake.business_address || intake.address);
+    if (!hasAddress) {
+      // Remove ", 90210" or standalone zip codes when no street address exists
+      html = html.replace(/,\s*\d{5}(?:-\d{4})?/g, '');
+      // Remove elements that only contain a comma or whitespace
+      html = html.replace(/<(?:span|p|div)[^>]*>\s*,?\s*<\/(?:span|p|div)>/g, '');
+      // Remove "City, ST" pattern if city is also empty
+      if (!city) {
+        html = html.replace(/<(?:span|p|div|a)[^>]*>\s*,\s*<\/(?:span|p|div|a)>/g, '');
+      }
+    }
+    // Remove doubled URLs in social links (e.g., https://instagram.com/https://www.instagram.com/...)
+    html = html.replace(/https?:\/\/[a-z]+\.com\/(https?:\/\/)/gi, '$1');
 
     // ── CALL 2 REMOVED ─────────────────────────────────────────────────────
     // The "customization" call previously gave Claude the full HTML and asked
