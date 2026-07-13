@@ -116,11 +116,32 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "client_id required" }), { status: 400, headers: corsHeaders });
   }
 
-  try {
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 1: FETCH ALL DATA
-    // ═════════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════════════
+  // PHASE A — FAST SETUP (must finish quickly, before we return the 202)
+  // ═════════════════════════════════════════════════════════════════════════
 
+  let phaseAContext: {
+    siteData: any; clientData: any; intake: any; callNotes: any;
+    templateId: string; templateHTML: string; templateCSS: string;
+    businessName: string; businessType: string; city: string; state: string;
+    phone: string; phoneRaw: string; email: string; address: string;
+    yearsInBusiness: string; googleRating: string; googleReviewCount: string;
+    aboutStory: string; ownerName: string; ownerTitle: string; tagline: string;
+    noTestimonials: boolean;
+    portfolioPhotos: string[]; teamPhotos: string[];
+    services: any[]; awards: any[]; coupons: any[]; serviceAreas: any[]; faqItems: any[];
+    showFinancing: boolean; showCoupons: boolean; showAwards: boolean;
+    serviceNames: string[]; clientServiceAreaNames: string[];
+    allowStock: boolean;
+    heroImageUrl: string; aboutImageUrl: string; whyUsImageUrl: string;
+    logoUrlResolved: string;
+    primaryColorResolved: string; accentColorResolved: string;
+    headingFontResolved: string; bodyFontResolved: string;
+    business: Record<string, unknown>;
+    ANTHROPIC_API_KEY: string;
+  };
+
+  try {
     // Bump attempt counter
     const { data: existingSite } = await supabase
       .from("sites").select("generation_attempts").eq("client_id", clientId).maybeSingle();
@@ -162,7 +183,6 @@ serve(async (req) => {
       intake_snapshot_saved_at: new Date().toISOString(),
     } as any).eq("client_id", clientId);
 
-    // Fetch call notes (expert instructions from onboarding call)
     const applicationId = (clientData as any)?.application_id;
     const { data: callNotes } = applicationId
       ? await supabase.from("call_notes").select("*").eq("application_id", applicationId).maybeSingle()
@@ -172,10 +192,7 @@ serve(async (req) => {
       await supabase.from("sites").update({ call_notes_snapshot: callNotes } as any).eq("client_id", clientId);
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 2: LOAD TEMPLATE
-    // ═════════════════════════════════════════════════════════════════════════
-
+    // Template load
     const selectedTemplate =
       intake?.template_selected ||
       (callNotes as any)?.template_selected ||
@@ -198,35 +215,10 @@ serve(async (req) => {
 
     if (!htmlFile) throw new Error(`Template not found: ${templateId}/index.html`);
 
-    // ── Restaurant template: fully isolated pipeline ─────────────────────
-    if (templateId === RESTAURANT_TEMPLATE_ID) {
-      try {
-        const result = await generateRestaurantSite({
-          supabase: supabase as any, clientId, intake, callNotes,
-          clientData, siteData,
-          supabaseUrl, serviceKey,
-        });
-        return new Response(
-          JSON.stringify({ success: true, status: result.status, staging_url: result.stagingUrl }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      } catch (e: any) {
-        console.error("[generate/restaurant] error:", e);
-        await markFailed(supabase, clientId, e.message || String(e));
-        return new Response(
-          JSON.stringify({ success: false, error: e.message || String(e) }),
-          { status: 500, headers: corsHeaders },
-        );
-      }
-    }
-
     let templateHTML = await htmlFile.text();
     const templateCSS = cssFile ? await cssFile.text() : "";
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 3: RESOLVE BUSINESS CONTEXT
-    // ═════════════════════════════════════════════════════════════════════════
-
+    // Business context
     const businessName = (clientData as any)?.business_name || intake.business_name || "Business";
     const businessType = (clientData as any)?.business_type || "Service Business";
     const city = intake.business_city || intake.city || "";
@@ -260,7 +252,6 @@ serve(async (req) => {
       typeof s === "string" ? s : s?.name || s?.title || ""
     ).filter(Boolean);
 
-    // Client-provided service areas
     const clientServiceAreaNames: string[] = serviceAreas
       .map((a: any) => (typeof a === "string" ? a : (a?.name || a?.city || a?.title || "")).toString().trim())
       .filter(Boolean);
@@ -268,7 +259,7 @@ serve(async (req) => {
     console.log(`[generate] Mode: ${mode} | Template: ${templateId} | Client: ${clientId}`);
     console.log(`[generate] Business: "${businessName}" (${businessType}) in ${city}, ${state}`);
 
-    // ── Photo resolution ─────────────────────────────────────────────────
+    // Photo resolution
     const allowStock =
       intake.use_stock_photos !== false &&
       (siteData as any).using_stock_photos !== false;
@@ -280,15 +271,13 @@ serve(async (req) => {
     let heroImageUrl = heroCandidates[0] || "";
     let aboutImageUrl = aboutCandidates[0] || "";
     let whyUsImageUrl = whyUsCandidates[0] || "";
-
     const logoUrlResolved = intake.logo_url || "";
     console.log(`[generate] Photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"} logo:${logoUrlResolved ? "✓" : "✗"} allowStock=${allowStock}`);
 
-    // ── Apply brand colors + fonts to template ───────────────────────────
+    // Brand colors + fonts
     if (templateId === "business-professional") {
       templateHTML = applyBusinessProfessionalFonts(templateHTML, intake);
     }
-
     const __brand = { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null };
     const __colorRes = applyBrandColorsToHTML(templateHTML, __brand, templateId);
     templateHTML = __colorRes.html;
@@ -310,20 +299,11 @@ serve(async (req) => {
     }
     console.log(`[generate] Brand — primary=${primaryColorResolved || "(none)"}, heading="${headingFontResolved}", body="${bodyFontResolved}"`);
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 4: ONE SMART AI CALL
-    // ═════════════════════════════════════════════════════════════════════════
-
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
     if (!ANTHROPIC_API_KEY && !Deno.env.get("LOVABLE_API_KEY")) {
       throw new Error("No AI provider configured");
     }
 
-    await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
-
-    // ── Build the "whatever is known" business object ────────────────────
-    // Field-agnostic: unknowns are omitted. The engine's prompt sees only what
-    // actually has a value.
     const business: Record<string, unknown> = {
       business_name: businessName,
       category: businessType,
@@ -350,19 +330,89 @@ serve(async (req) => {
       team_photos: teamPhotos.length ? teamPhotos.join(", ") : undefined,
     };
 
-    console.log("[generate] Authoring page via new engine (Claude authors, doesn't fill)...");
-    const genResult = await generateSite({
-      business,
-      designReference: templateHTML,   // downloaded template = LOOK reference only
-      mode: "client",                  // this function is the client pipeline
-      callAI: (p: string) => callAI(ANTHROPIC_API_KEY, p, "site").then((r) => r.text),
-      maxAttempts: 1,
-    });
+    phaseAContext = {
+      siteData, clientData, intake, callNotes,
+      templateId, templateHTML, templateCSS,
+      businessName, businessType, city, state, phone, phoneRaw, email, address,
+      yearsInBusiness, googleRating, googleReviewCount, aboutStory, ownerName, ownerTitle, tagline,
+      noTestimonials,
+      portfolioPhotos, teamPhotos, services, awards, coupons, serviceAreas, faqItems,
+      showFinancing, showCoupons, showAwards,
+      serviceNames, clientServiceAreaNames,
+      allowStock, heroImageUrl, aboutImageUrl, whyUsImageUrl, logoUrlResolved,
+      primaryColorResolved, accentColorResolved, headingFontResolved, bodyFontResolved,
+      business, ANTHROPIC_API_KEY,
+    };
 
-    if (genResult.status === "needs_review") {
-      const errMsg = `Gate failures: ${genResult.failures.join("; ")}`;
-      console.warn("[generate] Gate rejected output — not uploading. " + errMsg);
-      try {
+    // Mark authoring in progress right before returning the 202
+    await supabase.from("sites").update({
+      generation_status: "generating",
+      generation_progress: "authoring",
+      generation_error: null,
+    } as any).eq("client_id", clientId);
+  } catch (error: any) {
+    console.error("[generate] phase A error:", error);
+    await markFailed(supabase, clientId, error.message || String(error));
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || String(error) }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // PHASE B — BACKGROUND TASK (slow work, survives past the 202 response)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  const backgroundTask = async () => {
+    const {
+      siteData, clientData, intake, callNotes,
+      templateId, templateHTML, templateCSS,
+      businessName, businessType, city, state, phone, phoneRaw, email, address,
+      yearsInBusiness, googleRating, googleReviewCount, tagline, ownerName, ownerTitle,
+      noTestimonials, portfolioPhotos, teamPhotos, serviceNames,
+      heroImageUrl, aboutImageUrl, whyUsImageUrl, logoUrlResolved,
+      primaryColorResolved, accentColorResolved, headingFontResolved, bodyFontResolved,
+      allowStock, business, ANTHROPIC_API_KEY,
+    } = phaseAContext;
+
+    try {
+      await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
+
+      // ── Restaurant template: fully isolated pipeline ─────────────────────
+      if (templateId === RESTAURANT_TEMPLATE_ID) {
+        try {
+          const result = await generateRestaurantSite({
+            supabase: supabase as any, clientId, intake, callNotes,
+            clientData, siteData,
+            supabaseUrl, serviceKey,
+          });
+          console.log(`[generate/restaurant] ✓ ${result.status} → ${result.stagingUrl}`);
+        } catch (e: any) {
+          console.error("[generate/restaurant] error:", e);
+          await markFailed(supabase, clientId, e.message || String(e));
+        }
+        return;
+      }
+
+      // ── AI authoring (guarded by generous timeout) ───────────────────────
+      const BG_AI_TIMEOUT_MS = 120_000;
+      console.log("[generate] Authoring page via new engine (Claude authors, doesn't fill)...");
+      const genResult = await Promise.race([
+        generateSite({
+          business,
+          designReference: templateHTML,
+          mode: "client",
+          callAI: (p: string) => callAI(ANTHROPIC_API_KEY, p, "site").then((r) => r.text),
+          maxAttempts: 1,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`AI authoring timed out after ${BG_AI_TIMEOUT_MS}ms`)), BG_AI_TIMEOUT_MS)
+        ),
+      ]);
+
+      if (genResult.status === "needs_review") {
+        const errMsg = `Gate failures: ${genResult.failures.join("; ")}`;
+        console.warn("[generate] Gate rejected output — not uploading. " + errMsg);
         await supabase.from("sites").update({
           generation_status: "needs_review",
           generation_progress: "failed_gate",
@@ -373,45 +423,28 @@ serve(async (req) => {
           status: "needs_review",
           error_message: `[gate] ${errMsg}`,
         });
-      } catch (markErr) {
-        console.error("[generate] failed to mark needs_review:", markErr);
+        return;
       }
-      return new Response(
-        JSON.stringify({
-          success: false,
-          status: "needs_review",
-          failures: genResult.failures,
-          warnings: genResult.warnings,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
 
-    if (genResult.warnings.length) {
-      console.warn("[generate] Gate warnings (non-blocking):", genResult.warnings.join(" | "));
-    }
-
-    let html = genResult.html;
-
-
-    // ── 7h: Footer/address cleanup ───────────────────────────────────────
-    const hasAddress = !!(intake.street_address || intake.business_address || intake.address);
-    if (!hasAddress) {
-      html = html.replace(/,\s*\d{5}(?:-\d{4})?/g, "");
-      html = html.replace(/<(?:span|p|div)[^>]*>\s*,?\s*<\/(?:span|p|div)>/g, "");
-      if (!city) {
-        html = html.replace(/<(?:span|p|div|a)[^>]*>\s*,\s*<\/(?:span|p|div|a)>/g, "");
+      if (genResult.warnings.length) {
+        console.warn("[generate] Gate warnings (non-blocking):", genResult.warnings.join(" | "));
       }
-    }
-    // Remove doubled URLs in social links
-    html = html.replace(/https?:\/\/[a-z]+\.com\/(https?:\/\/)/gi, "$1");
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 8: POST-PROCESSING (forms, analytics, favicon, validation)
-    // ═════════════════════════════════════════════════════════════════════════
+      let html = genResult.html;
 
-    // Safety net: force animate-on-scroll visible
-    const safetyNet = `
+      // Footer/address cleanup
+      const hasAddress = !!(intake.street_address || intake.business_address || intake.address);
+      if (!hasAddress) {
+        html = html.replace(/,\s*\d{5}(?:-\d{4})?/g, "");
+        html = html.replace(/<(?:span|p|div)[^>]*>\s*,?\s*<\/(?:span|p|div)>/g, "");
+        if (!city) {
+          html = html.replace(/<(?:span|p|div|a)[^>]*>\s*,\s*<\/(?:span|p|div|a)>/g, "");
+        }
+      }
+      html = html.replace(/https?:\/\/[a-z]+\.com\/(https?:\/\/)/gi, "$1");
+
+      // Safety net: force animate-on-scroll visible
+      const safetyNet = `
 <script>
 (function(){
   function reveal(){
@@ -429,239 +462,168 @@ serve(async (req) => {
 })();
 </script>
 `;
-    html = html.replace("</body>", safetyNet + "\n</body>");
+      html = html.replace("</body>", safetyNet + "\n</body>");
 
-    // Analytics tags
-    html = addAnalyticsTags(html, "home");
+      // Analytics tags
+      html = addAnalyticsTags(html, "home");
 
-    // Tracker script
-    const planToTrackerTier = (plan: string | null | undefined): string =>
-      plan === "pro" ? "premium" : "growth";
-    const clientTier = planToTrackerTier((clientData as any)?.plan);
-    const analyticsScript = `
+      // Tracker script
+      const planToTrackerTier = (plan: string | null | undefined): string =>
+        plan === "pro" ? "premium" : "growth";
+      const clientTier = planToTrackerTier((clientData as any)?.plan);
+      const analyticsScript = `
 <script async
   src="${supabaseUrl}/functions/v1/tracker-v5"
   data-client-id="${clientId}"
   data-endpoint="${supabaseUrl}/functions/v1/track-event"
   data-form-endpoint="${supabaseUrl}/functions/v1/track-form-submission"
   data-tier="${clientTier}"></script>`;
-    html = html.replace("</body>", analyticsScript + "\n</body>");
+      html = html.replace("</body>", analyticsScript + "\n</body>");
 
-    // Wire contact forms
-    html = wireContactForms(html, clientId, supabaseUrl);
+      // Wire contact forms
+      html = wireContactForms(html, clientId, supabaseUrl);
 
-    // Favicon
-    const faviconTag = buildFaviconHTML({
-      faviconUrl: intake.favicon_url || "",
-      logoUrl: logoUrlResolved,
-      businessName,
-      primaryColor: primaryColorResolved,
-    });
-    html = injectFavicon(html, faviconTag);
+      // Favicon
+      const faviconTag = buildFaviconHTML({
+        faviconUrl: intake.favicon_url || "",
+        logoUrl: logoUrlResolved,
+        businessName,
+        primaryColor: primaryColorResolved,
+      });
+      html = injectFavicon(html, faviconTag);
 
-    // Pre-upload validation
-    const finalValidator = new HTMLValidator(html);
-    const validationReport = finalValidator.validate();
-    console.log(`[generate] Fidelity score: ${validationReport.fidelityScore}/100`);
-    if (validationReport.issues.length > 0) {
-      const critical = validationReport.issues.filter(i => i.severity === "critical");
-      const high = validationReport.issues.filter(i => i.severity === "high");
-      if (critical.length > 0) console.warn(`[generate] ${critical.length} CRITICAL:`, critical.map(i => i.message).join("; "));
-      if (high.length > 0) console.warn(`[generate] ${high.length} HIGH:`, high.map(i => i.message).join("; "));
-    }
-    try {
+      // Pre-upload validation
+      const finalValidator = new HTMLValidator(html);
+      const validationReport = finalValidator.validate();
+      console.log(`[generate] Fidelity score: ${validationReport.fidelityScore}/100`);
+      if (validationReport.issues.length > 0) {
+        const critical = validationReport.issues.filter(i => i.severity === "critical");
+        const high = validationReport.issues.filter(i => i.severity === "high");
+        if (critical.length > 0) console.warn(`[generate] ${critical.length} CRITICAL:`, critical.map(i => i.message).join("; "));
+        if (high.length > 0) console.warn(`[generate] ${high.length} HIGH:`, high.map(i => i.message).join("; "));
+      }
+      try {
+        await supabase.from("generation_logs").insert({
+          client_id: clientId,
+          template_id: templateId,
+          status: "validation_complete",
+          generation_notes: `Fidelity: ${validationReport.fidelityScore}/100. Issues: ${validationReport.issues.length}.`,
+        } as any);
+      } catch (e: any) { console.warn("[generate] Log failed:", e.message); }
+
+      // ── UPLOAD ──
+      await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
+
+      const projectRefForBanner = (Deno.env.get("SUPABASE_URL") || "").replace("https://", "").split(".")[0];
+      const prospectBannerTag = `<script async src="https://${projectRefForBanner}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
+      const htmlWithBanner = html.includes("</body>")
+        ? html.replace("</body>", `${prospectBannerTag}\n</body>`)
+        : html + prospectBannerTag;
+      const stagingHTML = injectNoindex(htmlWithBanner);
+
+      try {
+        await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/index.html`, stagingHTML);
+        console.log("[generate] ✓ index.html → Hostinger staging");
+      } catch (e: any) {
+        throw new Error(`Hostinger staging upload failed: ${e.message}`);
+      }
+
+      const { error: backupErr } = await supabase.storage
+        .from("generated-sites")
+        .upload(`${clientId}/deploy/index.html`, new Blob([html], { type: "text/html" }), { upsert: true, contentType: "text/html; charset=utf-8" });
+      if (backupErr) throw new Error(`Failed to save deploy backup: ${backupErr.message}`);
+
+      // copy-data.json (used by generate-extra-pages)
+      const copyDataPayload = {
+        businessName, businessType, city, state, phone, phoneRaw, email, address,
+        yearsInBusiness, googleRating, googleReviewCount, tagline, ownerName, ownerTitle,
+        logoUrl: logoUrlResolved, faviconUrl: intake.favicon_url || "", serviceNames, noTestimonials,
+        portfolioPhotos, teamPhotos,
+        heroImageUrl, aboutImageUrl, whyUsImageUrl,
+        stockTerms: buildStockSearchTerms(businessType, serviceNames[0] || "", tagline, businessName),
+        allowStock,
+        primaryColor: primaryColorResolved,
+        accentColor: accentColorResolved,
+      };
+      await supabase.storage.from("generated-sites").upload(
+        `${clientId}/copy-data.json`,
+        new Blob([JSON.stringify(copyDataPayload)], { type: "application/json" }),
+        { upsert: true, contentType: "application/json" }
+      );
+
+      // site-meta.json
+      const classNames = [...new Set(
+        [...templateCSS.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[{,]/g)].map(m => m[1])
+      )].filter(c => c.length > 1).slice(0, 200);
+      const primaryColorMatch = templateCSS.match(/--color-primary\s*:\s*([^;]+)/);
+      const accentColorMatch = templateCSS.match(/--color-accent\s*:\s*([^;]+)/);
+      const fontHeadingMatch = templateCSS.match(/--font-heading\s*:\s*'([^']+)'/) || templateCSS.match(/--font-heading\s*:\s*"([^"]+)"/);
+      const fontBodyMatch = templateCSS.match(/--font-body\s*:\s*'([^']+)'/) || templateCSS.match(/--font-body\s*:\s*"([^"]+)"/);
+      const siteMeta = {
+        primaryColor: primaryColorMatch ? primaryColorMatch[1].trim() : "",
+        accentColor: accentColorMatch ? accentColorMatch[1].trim() : "",
+        fontHeading: fontHeadingMatch ? fontHeadingMatch[1] : "",
+        fontBody: fontBodyMatch ? fontBodyMatch[1] : "",
+        classes: classNames,
+        generatedAt: new Date().toISOString(),
+      };
+      await supabase.storage.from("generated-sites").upload(
+        `${clientId}/deploy/site-meta.json`,
+        new Blob([JSON.stringify(siteMeta, null, 2)], { type: "application/json" }),
+        { upsert: true, contentType: "application/json; charset=utf-8" },
+      );
+
+      const stagingURL = `${STAGING_BASE_URL}/${clientId}/index.html`;
+
+      await supabase.from("sites").update({
+        generation_status: "complete",
+        generation_progress: "complete",
+        generated_at: new Date().toISOString(),
+        staging_url: stagingURL,
+        template_used: templateId,
+      } as any).eq("client_id", clientId);
+
       await supabase.from("generation_logs").insert({
         client_id: clientId,
         template_id: templateId,
-        status: "validation_complete",
-        generation_notes: `Fidelity: ${validationReport.fidelityScore}/100. Issues: ${validationReport.issues.length}. Unfilled stripped: ${remainingPlaceholders.length}.`,
+        status: "homepage_complete",
+        generation_notes: `Homepage generated. Template: ${templateId}. Fidelity: ${validationReport.fidelityScore}/100.`,
       } as any);
-    } catch (e: any) { console.warn("[generate] Log failed:", e.message); }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 9: UPLOAD TO HOSTINGER + SUPABASE BACKUPS
-    // ═════════════════════════════════════════════════════════════════════════
+      console.log(`[generate] ✓ Homepage complete → ${stagingURL}`);
 
-    await supabase.from("sites").update({ generation_progress: "uploading" } as any).eq("client_id", clientId);
-
-    // Prospect banner injection
-    const projectRefForBanner = (Deno.env.get("SUPABASE_URL") || "").replace("https://", "").split(".")[0];
-    const prospectBannerTag = `<script async src="https://${projectRefForBanner}.functions.supabase.co/prospect-banner-js?cid=${clientId}"></script>`;
-    const htmlWithBanner = html.includes("</body>")
-      ? html.replace("</body>", `${prospectBannerTag}\n</body>`)
-      : html + prospectBannerTag;
-    const stagingHTML = injectNoindex(htmlWithBanner);
-
-    try {
-      await uploadFileToHostingerFtp(`${STAGING_FOLDER_ROOT}/${clientId}/index.html`, stagingHTML);
-      console.log("[generate] ✓ index.html → Hostinger staging");
-    } catch (e: any) {
-      throw new Error(`Hostinger staging upload failed: ${e.message}`);
-    }
-
-    // Backup clean version (no noindex) to Supabase storage
-    const { error: backupErr } = await supabase.storage
-      .from("generated-sites")
-      .upload(`${clientId}/deploy/index.html`, new Blob([html], { type: "text/html" }), { upsert: true, contentType: "text/html; charset=utf-8" });
-    if (backupErr) throw new Error(`Failed to save deploy backup: ${backupErr.message}`);
-
-    // ── Persist copy-data.json (used by generate-extra-pages) ────────────
-    const copyDataPayload = {
-      businessName, businessType, city, state, phone, phoneRaw, email, address,
-      yearsInBusiness, googleRating, googleReviewCount, tagline, ownerName, ownerTitle,
-      logoUrl: logoUrlResolved, faviconUrl: intake.favicon_url || "", serviceNames, noTestimonials,
-      portfolioPhotos, teamPhotos,
-      heroImageUrl, aboutImageUrl, whyUsImageUrl,
-      stockTerms: buildStockSearchTerms(businessType, serviceNames[0] || "", tagline, businessName),
-      allowStock,
-      primaryColor: primaryColorResolved,
-      accentColor: accentColorResolved,
-      copy,
-    };
-    await supabase.storage.from("generated-sites").upload(
-      `${clientId}/copy-data.json`,
-      new Blob([JSON.stringify(copyDataPayload)], { type: "application/json" }),
-      { upsert: true, contentType: "application/json" }
-    );
-
-    // ── Persist site-meta.json ───────────────────────────────────────────
-    const classNames = [...new Set(
-      [...templateCSS.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[{,]/g)].map(m => m[1])
-    )].filter(c => c.length > 1).slice(0, 200);
-    const primaryColorMatch = templateCSS.match(/--color-primary\s*:\s*([^;]+)/);
-    const accentColorMatch = templateCSS.match(/--color-accent\s*:\s*([^;]+)/);
-    const fontHeadingMatch = templateCSS.match(/--font-heading\s*:\s*'([^']+)'/) || templateCSS.match(/--font-heading\s*:\s*"([^"]+)"/);
-    const fontBodyMatch = templateCSS.match(/--font-body\s*:\s*'([^']+)'/) || templateCSS.match(/--font-body\s*:\s*"([^"]+)"/);
-    const siteMeta = {
-      primaryColor: primaryColorMatch ? primaryColorMatch[1].trim() : "",
-      accentColor: accentColorMatch ? accentColorMatch[1].trim() : "",
-      fontHeading: fontHeadingMatch ? fontHeadingMatch[1] : "",
-      fontBody: fontBodyMatch ? fontBodyMatch[1] : "",
-      classes: classNames,
-      generatedAt: new Date().toISOString(),
-    };
-    await supabase.storage.from("generated-sites").upload(
-      `${clientId}/deploy/site-meta.json`,
-      new Blob([JSON.stringify(siteMeta, null, 2)], { type: "application/json" }),
-      { upsert: true, contentType: "application/json; charset=utf-8" },
-    );
-
-    const stagingURL = `${STAGING_BASE_URL}/${clientId}/index.html`;
-
-    await supabase.from("sites").update({
-      generation_status: "generating",
-      generation_progress: "building_extra_pages",
-      generated_at: new Date().toISOString(),
-      staging_url: stagingURL,
-      template_used: templateId,
-    } as any).eq("client_id", clientId);
-
-    await supabase.from("generation_logs").insert({
-      client_id: clientId,
-      template_id: templateId,
-      status: "homepage_complete",
-      tokens_used: copyResult.outputTokens,
-      generation_notes: `Homepage generated. Template: ${templateId}. Tokens: ${copyResult.outputTokens}. Fidelity: ${validationReport.fidelityScore}/100.`,
-    } as any);
-
-    console.log(`[generate] ✓ Homepage complete → ${stagingURL}`);
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 10: FEMININE-BOLD SUBPAGES (about.html + services.html)
-    // ═════════════════════════════════════════════════════════════════════════
-
-    if (templateId === "feminine-bold") {
-      const extraPages: Array<{ slug: string; storagePath: string }> = [
-        { slug: "about", storagePath: `${templateId}/about.html` },
-        { slug: "services", storagePath: `${templateId}/services.html` },
-      ];
-
-      for (const page of extraPages) {
-        try {
-          const { data: pageFile, error: pageErr } = await supabase.storage
-            .from("templates")
-            .download(page.storagePath);
-          if (pageErr || !pageFile) {
-            console.warn(`[generate] feminine-bold: ${page.storagePath} not found — skipping`);
-            continue;
-          }
-          let pageHtml = await pageFile.text();
-
-          // Apply brand colors + fonts
-          pageHtml = applyBrandColorsToHTML(pageHtml, { primary: intake.primary_color ?? null, accent: intake.accent_color ?? null }, templateId).html;
-          if (headingFontResolved || bodyFontResolved) {
-            pageHtml = injectFontTokensIntoRoot(pageHtml, {
-              headingFont: headingFontResolved || undefined,
-              bodyFont: bodyFontResolved || undefined,
-            });
-            pageHtml = injectGoogleFontsLink(pageHtml, headingFontResolved, bodyFontResolved);
-          }
-
-          // Logo block
-          pageHtml = pageHtml.replace(headerLogoBlockRe, hasLogo
-            ? logoHTML
-            : `<span class="logo-text">${escapeHTML(businessName)}</span>`);
-
-          // Apply fill map
-          for (const [key, value] of Object.entries(fill)) {
-            pageHtml = pageHtml.split(key).join(value);
-          }
-
-          // Strip leftover placeholders
-          await logUnfilledPlaceholders(supabase as any, clientId, templateId, page.slug, pageHtml);
-          pageHtml = pageHtml.replace(/\{\{[^}]+\}\}/g, "");
-
-          // Post-processing
-          pageHtml = pageHtml.replace("</body>", safetyNet + "\n</body>");
-          pageHtml = pageHtml.replace("</body>", analyticsScript + "\n</body>");
-          pageHtml = wireContactForms(pageHtml, clientId, supabaseUrl);
-          pageHtml = injectFavicon(pageHtml, faviconTag);
-
-          // Upload
-          const stagingPageHTML = injectNoindex(pageHtml);
-          await uploadFileToHostingerFtp(
-            `${STAGING_FOLDER_ROOT}/${clientId}/${page.slug}.html`,
-            stagingPageHTML,
-          );
-          console.log(`[generate] ✓ ${page.slug}.html → Hostinger staging`);
-
-          // Backup
-          await supabase.storage
-            .from("generated-sites")
-            .upload(
-              `${clientId}/deploy/${page.slug}.html`,
-              new Blob([pageHtml], { type: "text/html" }),
-              { upsert: true, contentType: "text/html; charset=utf-8" },
-            );
-        } catch (e: any) {
-          console.error(`[generate] feminine-bold: failed ${page.slug}.html:`, e?.message || e);
-        }
+      // Dispatch extra pages
+      fetch(`${supabaseUrl}/functions/v1/generate-extra-pages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({ client_id: clientId }),
+      }).catch((e) => console.error("[generate] Failed to dispatch extra-pages:", e));
+    } catch (error: any) {
+      console.error("[generate] background error:", error);
+      try {
+        await supabase.from("sites").update({
+          generation_status: "failed",
+          generation_progress: "generation_failed",
+          generation_error: error?.message || String(error),
+        } as any).eq("client_id", clientId);
+        await supabase.from("generation_logs").insert({
+          client_id: clientId,
+          status: "failed",
+          error_message: error?.message || String(error),
+        });
+      } catch (e) {
+        console.error("[generate] failed to mark background failure:", e);
       }
     }
+  };
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 11: DISPATCH EXTRA PAGES
-    // ═════════════════════════════════════════════════════════════════════════
+  // @ts-ignore — EdgeRuntime is globally available in Supabase edge functions
+  EdgeRuntime.waitUntil(backgroundTask());
 
-    fetch(`${supabaseUrl}/functions/v1/generate-extra-pages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({ client_id: clientId }),
-    }).catch((e) => console.error("[generate] Failed to dispatch extra-pages:", e));
-
-    return new Response(
-      JSON.stringify({ success: true, status: "homepage_complete", staging_url: stagingURL }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-
-  } catch (error: any) {
-    console.error("[generate] error:", error);
-    await markFailed(supabase, clientId, error.message);
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: corsHeaders },
-    );
-  }
+  return new Response(
+    JSON.stringify({ success: true, status: "generating", client_id: clientId }),
+    { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 });
 
 
