@@ -394,21 +394,15 @@ serve(async (req) => {
         return;
       }
 
-      // ── AI authoring (guarded by generous timeout) ───────────────────────
-      const BG_AI_TIMEOUT_MS = 120_000;
+      // ── AI authoring (no inner timeout — background task has an overall guard) ──
       console.log("[generate] Authoring page via new engine (Claude authors, doesn't fill)...");
-      const genResult = await Promise.race([
-        generateSite({
-          business,
-          designReference: templateHTML,
-          mode: "client",
-          callAI: (p: string) => callAI(ANTHROPIC_API_KEY, p, "site").then((r) => r.text),
-          maxAttempts: 1,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`AI authoring timed out after ${BG_AI_TIMEOUT_MS}ms`)), BG_AI_TIMEOUT_MS)
-        ),
-      ]);
+      const genResult = await generateSite({
+        business,
+        designReference: templateHTML,
+        mode: "client",
+        callAI: (p: string) => callAI(ANTHROPIC_API_KEY, p, "site").then((r) => r.text),
+        maxAttempts: 1,
+      });
 
       if (genResult.status === "needs_review") {
         const errMsg = `Gate failures: ${genResult.failures.join("; ")}`;
