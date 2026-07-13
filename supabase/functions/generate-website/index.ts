@@ -354,7 +354,7 @@ serve(async (req) => {
       designReference: templateHTML,   // downloaded template = LOOK reference only
       mode: "client",                  // this function is the client pipeline
       callAI: (p: string) => callAI(ANTHROPIC_API_KEY, p, "site").then((r) => r.text),
-      maxAttempts: 2,
+      maxAttempts: 1,
     });
 
     if (genResult.status === "needs_review") {
@@ -810,7 +810,7 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
         },
         body: JSON.stringify({
           model: AI_MODEL,
-          max_tokens: 16000,
+          max_tokens: 12000,
           messages: [{ role: "user", content }],
         }),
       });
