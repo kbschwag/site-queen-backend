@@ -28,6 +28,7 @@ import { generateRestaurantSite, RESTAURANT_TEMPLATE_ID } from "../_shared/resta
 import { applyBrandColorsToHTML, logColorApplication, type ColorPlacement, type SkippedBrandColor } from "../_shared/color-system.ts";
 // SmartTextReplacer not used directly — truncation is inline for simplicity
 import { HTMLValidator } from "../_shared/html-validator.ts";
+import { generateSite } from "../_shared/website-generator.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONSTANTS
