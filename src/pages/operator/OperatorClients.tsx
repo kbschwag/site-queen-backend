@@ -218,10 +218,15 @@ export default function OperatorClients() {
       {/* Detail panel */}
       {selected && (
         <Sheet open onOpenChange={() => setSelected(null)}>
-          <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetContent side="right" className="w-screen max-w-none sm:max-w-none p-6 overflow-y-auto">
             <SheetHeader>
-              <div className="flex items-center justify-between">
-                <SheetTitle>{selected.business_name}</SheetTitle>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setSelected(null)} className="gap-1">
+                    <ArrowLeft className="h-4 w-4" /> Back
+                  </Button>
+                  <SheetTitle className="text-2xl">{selected.business_name}</SheetTitle>
+                </div>
                 {isOwner && (
                   <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => {
                     setDeleteTarget({ id: selected.id, name: selected.business_name });
@@ -232,6 +237,8 @@ export default function OperatorClients() {
                 )}
               </div>
             </SheetHeader>
+
+            <div className="max-w-6xl mx-auto w-full">
 
             {/* Quick stats bar */}
             <div className="grid grid-cols-2 gap-2 mt-4">
