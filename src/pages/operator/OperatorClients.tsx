@@ -18,7 +18,7 @@ import { SoftDeleteModal } from "@/components/operator/SoftDeleteModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Search, Globe, ExternalLink, Users, Trash2, Mail, Loader2 } from "lucide-react";
+import { Search, Globe, ExternalLink, Users, Trash2, Mail, Loader2, ArrowLeft } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 
 export default function OperatorClients() {
