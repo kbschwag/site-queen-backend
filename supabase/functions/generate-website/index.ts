@@ -319,427 +319,78 @@ serve(async (req) => {
 
     await supabase.from("sites").update({ generation_progress: "generating_copy" } as any).eq("client_id", clientId);
 
-    const copyPrompt = buildCopyPrompt({
-      templateId, mode, businessName, businessType, city, state, phone, email,
-      address, yearsInBusiness, googleRating, googleReviewCount, aboutStory,
-      ownerName, ownerTitle, tagline, serviceNames, clientServiceAreaNames,
-      noTestimonials, showFinancing, showAwards, showCoupons,
-      intake, callNotes,
+    // ── Build the "whatever is known" business object ────────────────────
+    // Field-agnostic: unknowns are omitted. The engine's prompt sees only what
+    // actually has a value.
+    const business: Record<string, unknown> = {
+      business_name: businessName,
+      category: businessType,
+      city, state, phone, email,
+      address: address || undefined,
+      services: serviceNames.length
+        ? serviceNames.join(", ")
+        : (typeof (intake as any).services === "string" ? (intake as any).services : undefined),
+      rating: googleRating || undefined,
+      review_count: googleReviewCount || undefined,
+      brand_color: primaryColorResolved || undefined,
+      about_story: aboutStory || undefined,
+      owner_name: ownerName || undefined,
+      owner_title: ownerTitle || undefined,
+      tagline: tagline || undefined,
+      hours: typeof (intake as any).business_hours === "string" ? (intake as any).business_hours : undefined,
+      service_areas: clientServiceAreaNames.length ? clientServiceAreaNames.join(", ") : undefined,
+      years_in_business: yearsInBusiness || undefined,
+      hero_photo_url: heroImageUrl || undefined,
+      about_photo_url: aboutImageUrl || undefined,
+      whyus_photo_url: whyUsImageUrl || undefined,
+      logo_url: logoUrlResolved || undefined,
+      portfolio_photos: portfolioPhotos.length ? portfolioPhotos.join(", ") : undefined,
+      team_photos: teamPhotos.length ? teamPhotos.join(", ") : undefined,
+    };
+
+    console.log("[generate] Authoring page via new engine (Claude authors, doesn't fill)...");
+    const genResult = await generateSite({
+      business,
+      designReference: templateHTML,   // downloaded template = LOOK reference only
+      mode: "client",                  // this function is the client pipeline
+      callAI: (p: string) => callAI(ANTHROPIC_API_KEY, p, "site").then((r) => r.text),
+      maxAttempts: 2,
     });
 
-    console.log("[generate] Calling AI for site blueprint...");
-    const copyResult = await callAI(ANTHROPIC_API_KEY, copyPrompt, "site-blueprint");
-
-    // Parse AI response
-    let copy: any = {};
-    try {
-      let rawCopy = stripMarkdown(copyResult.text);
-      // JSON repair: trailing commas, BOM, extract JSON object
-      rawCopy = rawCopy.replace(/,\s*([}\]])/g, "$1");
-      rawCopy = rawCopy.replace(/(["'])\s*\n\s*/g, "$1 ");
-      rawCopy = rawCopy.replace(/[\u200B-\u200D\uFEFF]/g, "");
-      const jsonStart = rawCopy.indexOf("{");
-      const jsonEnd = rawCopy.lastIndexOf("}");
-      if (jsonStart >= 0 && jsonEnd > jsonStart) {
-        rawCopy = rawCopy.slice(jsonStart, jsonEnd + 1);
-      }
-      copy = JSON.parse(rawCopy);
-    } catch (e) {
-      console.error("[generate] JSON parse failed:", e);
-      // Regex fallback: extract key-value pairs
+    if (genResult.status === "needs_review") {
+      const errMsg = `Gate failures: ${genResult.failures.join("; ")}`;
+      console.warn("[generate] Gate rejected output — not uploading. " + errMsg);
       try {
-        const fallbackCopy: any = {};
-        const kvMatches = copyResult.text.matchAll(/"([A-Z_0-9]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
-        for (const m of kvMatches) {
-          fallbackCopy[m[1]] = m[2].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-        }
-        if (Object.keys(fallbackCopy).length > 10) {
-          console.warn(`[generate] Regex fallback extracted ${Object.keys(fallbackCopy).length} fields`);
-          copy = fallbackCopy;
-        } else {
-          throw new Error("AI returned invalid JSON (all repair attempts failed)");
-        }
-      } catch (e2) {
-        throw new Error("AI returned invalid JSON (all repair attempts failed)");
-      }
-    }
-
-    console.log(`[generate] AI returned ${Object.keys(copy).length} fields (${copyResult.outputTokens} tokens)`);
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 5: VALIDATE & TRUNCATE COPY
-    // ═════════════════════════════════════════════════════════════════════════
-
-    await supabase.from("sites").update({ generation_progress: "filling_template" } as any).eq("client_id", clientId);
-
-    // Truncate copy fields that exceed character limits
-    const charLimits: Record<string, number> = {
-      HERO_HEADLINE_LINE1: 30,
-      HERO_HEADLINE_HIGHLIGHT: 25,
-      HERO_HEADLINE_LINE2: 30,
-      HERO_SUBHEADING: 200,
-      ABOUT_HEADLINE: 45,
-      SERVICE_1_NAME: 30, SERVICE_2_NAME: 30, SERVICE_3_NAME: 30,
-      SERVICE_4_NAME: 30, SERVICE_5_NAME: 30, SERVICE_6_NAME: 30,
-      SERVICE_1_DESC: 200, SERVICE_2_DESC: 200, SERVICE_3_DESC: 200,
-      SERVICE_4_DESC: 200, SERVICE_5_DESC: 200, SERVICE_6_DESC: 200,
-      TESTIMONIAL_1_TEXT: 250, TESTIMONIAL_2_TEXT: 250, TESTIMONIAL_3_TEXT: 250,
-      WHY_US_1_TITLE: 30, WHY_US_2_TITLE: 30, WHY_US_3_TITLE: 30, WHY_US_4_TITLE: 30,
-      WHY_US_1_DESC: 200, WHY_US_2_DESC: 200, WHY_US_3_DESC: 200, WHY_US_4_DESC: 200,
-      STAT_1_NUMBER: 8, STAT_2_NUMBER: 8, STAT_3_NUMBER: 8, STAT_4_NUMBER: 8,
-      STAT_1_LABEL: 20, STAT_2_LABEL: 20, STAT_3_LABEL: 20, STAT_4_LABEL: 20,
-      FOOTER_TAGLINE: 50,
-      ABOUT_STORY: 600,
-    };
-    for (const [key, maxLen] of Object.entries(charLimits)) {
-      if (copy[key] && copy[key].length > maxLen) {
-        console.warn(`[generate] Truncated ${key}: ${copy[key].length} → ${maxLen}`);
-        copy[key] = copy[key].substring(0, maxLen - 3) + "...";
-      }
-    }
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 6: FETCH STOCK IMAGES (using AI's scene descriptions)
-    // ═════════════════════════════════════════════════════════════════════════
-
-    if (allowStock) {
-      const needed: Array<"hero" | "about" | "whyus"> = [];
-      if (!heroImageUrl) needed.push("hero");
-      if (!aboutImageUrl) needed.push("about");
-      if (!whyUsImageUrl) needed.push("whyus");
-
-      if (needed.length > 0) {
-        const stockResults = await Promise.all(needed.map((slot) => {
-          let searchQuery: string;
-          if (slot === "hero" && copy.IMAGE_SEARCH_HERO) {
-            searchQuery = copy.IMAGE_SEARCH_HERO;
-          } else if (slot === "about" && copy.IMAGE_SEARCH_ABOUT) {
-            searchQuery = copy.IMAGE_SEARCH_ABOUT;
-          } else if (slot === "whyus" && copy.IMAGE_SEARCH_WHYUS) {
-            searchQuery = copy.IMAGE_SEARCH_WHYUS;
-          } else {
-            // Fallback: use business type + slot context
-            const variant = slot === "hero" ? "professional workspace" : slot === "about" ? "team working" : "quality results";
-            searchQuery = `${businessType} ${variant}`;
-          }
-          console.log(`[generate] Stock search for ${slot}: "${searchQuery}"`);
-          return fetchUnsplashPhotoUrl([searchQuery, `${businessType} professional`]);
-        }));
-        needed.forEach((slot, i) => {
-          const url = stockResults[i] || "";
-          if (slot === "hero") heroImageUrl = url;
-          else if (slot === "about") aboutImageUrl = url;
-          else if (slot === "whyus") whyUsImageUrl = url;
+        await supabase.from("sites").update({
+          generation_status: "needs_review",
+          generation_progress: "failed_gate",
+          generation_error: errMsg,
+        } as any).eq("client_id", clientId);
+        await supabase.from("generation_logs").insert({
+          client_id: clientId,
+          status: "needs_review",
+          error_message: `[gate] ${errMsg}`,
         });
+      } catch (markErr) {
+        console.error("[generate] failed to mark needs_review:", markErr);
       }
-    }
-    console.log(`[generate] Final photos — hero:${heroImageUrl ? "✓" : "✗"} about:${aboutImageUrl ? "✓" : "✗"} whyus:${whyUsImageUrl ? "✓" : "✗"}`);
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // PHASE 7: DETERMINISTIC TEMPLATE EXECUTION
-    // ═════════════════════════════════════════════════════════════════════════
-    // AI never touches HTML. This phase is pure string replacement.
-
-    let html = templateHTML;
-
-    // ── 7a: Section removal ──────────────────────────────────────────────
-    const sectionsToRemove = parseSectionsToRemove(copy.SECTIONS_TO_REMOVE, {
-      noTestimonials,
-      noAddress: !address && !city,
-      noServiceAreas: serviceAreas.length === 0 && !city,
-    });
-    console.log(`[generate] Removing sections: ${sectionsToRemove.length > 0 ? sectionsToRemove.join(", ") : "none"}`);
-
-    for (const section of sectionsToRemove) {
-      html = removeSection(html, section);
-    }
-
-    // ── 7b: Conditional sections (Mustache-style) ────────────────────────
-    html = applyConditional(html, "SHOW_FINANCING", showFinancing);
-    html = applyConditional(html, "SHOW_AWARDS", showAwards);
-    html = applyConditional(html, "SHOW_COUPONS", showCoupons);
-
-    // Render repeating COUPONS block
-    if (showCoupons && coupons.length > 0) {
-      html = renderMustacheSection(html, "COUPONS", coupons.map((c: any) => ({
-        COUPON_AMOUNT: c.amount || c.COUPON_AMOUNT || "",
-        COUPON_DESCRIPTION: c.description || c.COUPON_DESCRIPTION || "",
-        COUPON_EXPIRY: c.expiry || c.COUPON_EXPIRY || "",
-        COUPON_CODE: c.code || c.COUPON_CODE || "",
-      })));
-    } else {
-      html = renderMustacheSection(html, "COUPONS", []);
-    }
-
-    // ── 7c: Build fill map ───────────────────────────────────────────────
-    const hasLogo = !!logoUrlResolved;
-    const logoHTML = hasLogo
-      ? `<img src="${logoUrlResolved}" alt="${escapeAttr(businessName)} logo" class="logo-img" />`
-      : "";
-
-    const mapBuild = buildMapHTML({
-      locationType: intake.location_type || intake.business_location_type || "",
-      streetAddress: intake.street_address || intake.business_address || intake.address || "",
-      city, state,
-      zip: intake.business_zip || intake.zip || intake.postal_code || intake.zip_code || "",
-      serviceArea: intake.service_area || "",
-    });
-
-    const serviceOptionsHTML = serviceNames.length
-      ? serviceNames.map((s: string) => `<option value="${escapeAttr(s)}">${escapeHTML(s)}</option>`).join("\n")
-      : `<option value="general">General Inquiry</option>`;
-
-    // Social links — clean, no doubled URLs
-    const socialLinks = intake.social_links || {};
-    const instagramUrl = socialLinks.instagram
-      ? (socialLinks.instagram.startsWith("http") ? socialLinks.instagram : `https://instagram.com/${String(socialLinks.instagram).replace("@", "")}`)
-      : "";
-
-    const fill: Record<string, string> = {
-      // ── Business basics ──
-      "{{BUSINESS_NAME}}": businessName,
-      "{{BUSINESS_PHONE}}": phone,
-      "{{BUSINESS_PHONE_RAW}}": phoneRaw,
-      "{{BUSINESS_EMAIL}}": email,
-      "{{BUSINESS_ADDRESS}}": address,
-      "{{BUSINESS_CITY}}": city,
-      "{{BUSINESS_STATE}}": state,
-      "{{GOOGLE_RATING}}": String(googleRating || "4.9"),
-      "{{GOOGLE_REVIEW_COUNT}}": String(googleReviewCount || "100"),
-      "{{SERVICE_AREA}}": intake.service_area || (city ? `${city} & Surrounding Areas` : ""),
-      "{{YEARS_IN_BUSINESS}}": String(yearsInBusiness || "10"),
-      "{{COPYRIGHT_YEAR}}": String(new Date().getFullYear()),
-      "{{CITY}}": city || "LOCAL",
-      "{{CLIENT_TYPE}}": businessType.toLowerCase().includes("plumb") ? "HOMEOWNERS" : "CUSTOMERS",
-      "{{HAPPY_CUSTOMERS}}": copy.HAPPY_CUSTOMERS || "500",
-      "{{REVIEW_PLATFORMS}}": copy.REVIEW_PLATFORMS || "Google",
-      "{{META_DESCRIPTION}}": copy.META_DESCRIPTION || `${businessName} — ${businessType} in ${city}, ${state}.`,
-
-      // ── Hero ──
-      "{{HERO_BADGE}}": copy.HERO_BADGE || "",
-      "{{HERO_HEADLINE_LINE1}}": copy.HERO_HEADLINE_LINE1 || "",
-      "{{HERO_HEADLINE_HIGHLIGHT}}": copy.HERO_HEADLINE_HIGHLIGHT || "",
-      "{{HERO_HEADLINE_LINE2}}": copy.HERO_HEADLINE_LINE2 || "",
-      "{{HERO_HEADLINE_LINE3}}": copy.HERO_HEADLINE_LINE3 || "",
-      "{{HERO_HEADLINE_COMMA}}": (copy.HERO_HEADLINE_LINE2 || copy.HERO_HEADLINE_LINE3) ? "," : "",
-      "{{HERO_SUBHEADING}}": copy.HERO_SUBHEADING || "",
-      "{{TRUST_ITEM_3}}": copy.TRUST_ITEM_3 || "FAMILY OWNED",
-
-      // ── About ──
-      "{{ABOUT_HEADLINE}}": copy.ABOUT_HEADLINE || "",
-      "{{ABOUT_STORY}}": copy.ABOUT_STORY || "",
-      "{{ABOUT_POINT_1}}": copy.ABOUT_POINT_1 || "",
-      "{{ABOUT_POINT_2}}": copy.ABOUT_POINT_2 || "",
-      "{{ABOUT_POINT_3}}": copy.ABOUT_POINT_3 || "",
-      "{{ABOUT_POINT_4}}": copy.ABOUT_POINT_4 || "",
-
-      // ── Stats ──
-      "{{STAT_1_NUMBER}}": copy.STAT_1_NUMBER || "500+",
-      "{{STAT_1_LABEL}}": copy.STAT_1_LABEL || "JOBS COMPLETED",
-      "{{STAT_2_NUMBER}}": copy.STAT_2_NUMBER || (googleRating ? `${googleRating}★` : "4.9★"),
-      "{{STAT_2_LABEL}}": copy.STAT_2_LABEL || "GOOGLE RATING",
-      "{{STAT_3_NUMBER}}": copy.STAT_3_NUMBER || "24/7",
-      "{{STAT_3_LABEL}}": copy.STAT_3_LABEL || "EMERGENCY SERVICE",
-      "{{STAT_4_NUMBER}}": copy.STAT_4_NUMBER || "100%",
-      "{{STAT_4_LABEL}}": copy.STAT_4_LABEL || "SATISFACTION GUARANTEED",
-
-      // ── Services ──
-      "{{SERVICES_HEADLINE}}": copy.SERVICES_HEADLINE || "OUR SERVICES",
-      "{{SERVICES_SUBHEADING}}": copy.SERVICES_SUBHEADING || "",
-      "{{SERVICES_INTRO}}": copy.SERVICES_INTRO || copy.SERVICES_SUBTEXT || "",
-      "{{SERVICES_SUBTEXT}}": copy.SERVICES_SUBTEXT || copy.SERVICES_INTRO || "",
-      "{{SERVICE_1_NAME}}": copy.SERVICE_1_NAME || serviceNames[0] || "",
-      "{{SERVICE_1_DESC}}": copy.SERVICE_1_DESC || "",
-      "{{SERVICE_2_NAME}}": copy.SERVICE_2_NAME || serviceNames[1] || "",
-      "{{SERVICE_2_DESC}}": copy.SERVICE_2_DESC || "",
-      "{{SERVICE_3_NAME}}": copy.SERVICE_3_NAME || serviceNames[2] || "",
-      "{{SERVICE_3_DESC}}": copy.SERVICE_3_DESC || "",
-      "{{SERVICE_4_NAME}}": copy.SERVICE_4_NAME || serviceNames[3] || "",
-      "{{SERVICE_4_DESC}}": copy.SERVICE_4_DESC || "",
-      "{{SERVICE_5_NAME}}": copy.SERVICE_5_NAME || serviceNames[4] || "",
-      "{{SERVICE_5_DESC}}": copy.SERVICE_5_DESC || "",
-      "{{SERVICE_6_NAME}}": copy.SERVICE_6_NAME || serviceNames[5] || "",
-      "{{SERVICE_6_DESC}}": copy.SERVICE_6_DESC || "",
-      "{{SERVICE_OPTIONS}}": serviceOptionsHTML,
-
-      // ── About page hero (business-professional) ──
-      "{{ABOUT_HEADLINE_LINE1}}": copy.ABOUT_HEADLINE_LINE1 || copy.ABOUT_HEADLINE || "",
-      "{{ABOUT_HEADLINE_LINE2}}": copy.ABOUT_HEADLINE_LINE2 || "",
-      "{{ABOUT_STORY_SHORT}}": (copy.ABOUT_STORY || "").split(/\n\n/)[0] || copy.ABOUT_STORY || "",
-
-      // ── Who We Serve (business-professional) ──
-      "{{SERVE_HEADLINE}}": copy.SERVE_HEADLINE || "WHO WE SERVE",
-      "{{SERVE_SUBHEADING}}": copy.SERVE_SUBHEADING || "",
-      "{{SERVE_BODY}}": copy.SERVE_BODY || "",
-      "{{SERVE_1}}": copy.SERVE_1 || "",
-      "{{SERVE_2}}": copy.SERVE_2 || "",
-      "{{SERVE_3}}": copy.SERVE_3 || "",
-      "{{SERVE_4}}": copy.SERVE_4 || "",
-
-      // ── Footer ──
-      "{{FOOTER_LEGAL_NOTE}}": copy.FOOTER_LEGAL_NOTE || "",
-      "{{FOOTER_TAGLINE}}": copy.FOOTER_TAGLINE || tagline || "",
-      "{{FOOTER_NEWSLETTER_TEXT}}": copy.FOOTER_NEWSLETTER_TEXT || "Sign up for exclusive deals and expert tips.",
-      "{{BUSINESS_NAME_PART1}}": businessName,
-      "{{BUSINESS_NAME_PART2}}": "",
-
-      // ── Emergency ──
-      "{{EMERGENCY_HEADLINE}}": copy.EMERGENCY_HEADLINE || "EMERGENCY? WE'RE ON THE WAY.",
-      "{{EMERGENCY_SUBTEXT}}": copy.EMERGENCY_SUBTEXT || "",
-
-      // ── Why Us ──
-      "{{WHY_US_HEADLINE}}": copy.WHY_US_HEADLINE || "",
-      "{{WHY_US_1_TITLE}}": copy.WHY_US_1_TITLE || "",
-      "{{WHY_US_1_DESC}}": copy.WHY_US_1_DESC || "",
-      "{{WHY_US_2_TITLE}}": copy.WHY_US_2_TITLE || "",
-      "{{WHY_US_2_DESC}}": copy.WHY_US_2_DESC || "",
-      "{{WHY_US_3_TITLE}}": copy.WHY_US_3_TITLE || "",
-      "{{WHY_US_3_DESC}}": copy.WHY_US_3_DESC || "",
-      "{{WHY_US_4_TITLE}}": copy.WHY_US_4_TITLE || "",
-      "{{WHY_US_4_DESC}}": copy.WHY_US_4_DESC || "",
-
-      // ── Testimonials ──
-      "{{TESTIMONIAL_1_TEXT}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_TEXT || ""),
-      "{{TESTIMONIAL_1_NAME}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_NAME || ""),
-      "{{TESTIMONIAL_1_LOCATION}}": noTestimonials ? "" : (copy.TESTIMONIAL_1_LOCATION || city),
-      "{{TESTIMONIAL_2_TEXT}}": noTestimonials ? "" : (copy.TESTIMONIAL_2_TEXT || ""),
-      "{{TESTIMONIAL_2_NAME}}": noTestimonials ? "" : (copy.TESTIMONIAL_2_NAME || ""),
-      "{{TESTIMONIAL_2_LOCATION}}": noTestimonials ? "" : (copy.TESTIMONIAL_2_LOCATION || city),
-      "{{TESTIMONIAL_3_TEXT}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_TEXT || ""),
-      "{{TESTIMONIAL_3_NAME}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_NAME || ""),
-      "{{TESTIMONIAL_3_LOCATION}}": noTestimonials ? "" : (copy.TESTIMONIAL_3_LOCATION || city),
-
-      // ── Financing ──
-      "{{FINANCING_HEADLINE}}": showFinancing ? (copy.FINANCING_HEADLINE || "FLEXIBLE FINANCING AVAILABLE") : "",
-      "{{FINANCING_SUBTEXT}}": showFinancing ? (copy.FINANCING_SUBTEXT || "") : "",
-
-      // ── Service Areas ──
-      "{{SERVICE_AREAS_HEADLINE}}": copy.SERVICE_AREAS_HEADLINE || `SERVING ${(city || "OUR AREA").toUpperCase()} & BEYOND`,
-      "{{AREA_1}}": clientServiceAreaNames[0] || copy.AREA_1 || city || "",
-      "{{AREA_2}}": clientServiceAreaNames[1] || copy.AREA_2 || "",
-      "{{AREA_3}}": clientServiceAreaNames[2] || copy.AREA_3 || "",
-      "{{AREA_4}}": clientServiceAreaNames[3] || copy.AREA_4 || "",
-      "{{AREA_5}}": clientServiceAreaNames[4] || copy.AREA_5 || "",
-      "{{AREA_6}}": clientServiceAreaNames[5] || copy.AREA_6 || "",
-      "{{AREA_7}}": clientServiceAreaNames[6] || copy.AREA_7 || "",
-      "{{AREA_8}}": clientServiceAreaNames[7] || copy.AREA_8 || "",
-
-      // ── Awards ──
-      "{{AWARD_1}}": showAwards ? (awards[0] ? (typeof awards[0] === "string" ? awards[0] : awards[0].name) : (copy.AWARD_1 || "")) : "",
-      "{{AWARD_2}}": showAwards ? (awards[1] ? (typeof awards[1] === "string" ? awards[1] : awards[1].name) : (copy.AWARD_2 || "")) : "",
-      "{{AWARD_3}}": showAwards ? (awards[2] ? (typeof awards[2] === "string" ? awards[2] : awards[2].name) : (copy.AWARD_3 || "")) : "",
-      "{{AWARD_4}}": showAwards ? (awards[3] ? (typeof awards[3] === "string" ? awards[3] : awards[3].name) : (copy.AWARD_4 || "")) : "",
-      "{{AWARD_5}}": showAwards ? (awards[4] ? (typeof awards[4] === "string" ? awards[4] : awards[4].name) : (copy.AWARD_5 || "")) : "",
-
-      // ── FAQ ──
-      "{{FAQ_1_Q}}": faqItems[0]?.question || copy.FAQ_1_Q || "",
-      "{{FAQ_1_A}}": faqItems[0]?.answer || copy.FAQ_1_A || "",
-      "{{FAQ_2_Q}}": faqItems[1]?.question || copy.FAQ_2_Q || "",
-      "{{FAQ_2_A}}": faqItems[1]?.answer || copy.FAQ_2_A || "",
-      "{{FAQ_3_Q}}": faqItems[2]?.question || copy.FAQ_3_Q || "",
-      "{{FAQ_3_A}}": faqItems[2]?.answer || copy.FAQ_3_A || "",
-      "{{FAQ_4_Q}}": faqItems[3]?.question || copy.FAQ_4_Q || "",
-      "{{FAQ_4_A}}": faqItems[3]?.answer || copy.FAQ_4_A || "",
-      "{{FAQ_5_Q}}": faqItems[4]?.question || copy.FAQ_5_Q || "",
-      "{{FAQ_5_A}}": faqItems[4]?.answer || copy.FAQ_5_A || "",
-      "{{FAQ_6_Q}}": faqItems[5]?.question || copy.FAQ_6_Q || "",
-      "{{FAQ_6_A}}": faqItems[5]?.answer || copy.FAQ_6_A || "",
-
-      // ── Final CTA ──
-      "{{FINAL_CTA_HEADLINE}}": copy.FINAL_CTA_HEADLINE || "READY TO GET STARTED?",
-      "{{FINAL_CTA_SUBTEXT}}": copy.FINAL_CTA_SUBTEXT || "",
-      "{{FINAL_CTA_EYEBROW}}": copy.FINAL_CTA_EYEBROW || "✦ YOUR NEXT STEP",
-      "{{FINAL_CTA_BODY}}": copy.FINAL_CTA_SUBTEXT || "",
-      "{{FINAL_CTA_BTN}}": copy.FINAL_CTA_BTN || TEMPLATE_DEFAULT_CTAS[templateId] || "GET STARTED",
-
-      // ── Coupons ──
-      "{{COUPONS_NOTE}}": intake.coupons_note || "Print or show on phone. Cannot be combined with other offers.",
-
-      // ── Map ──
-      "{{MAP_HTML}}": mapBuild.html,
-      "{{MAP_EMBED_URL}}": mapBuild.url,
-
-      // ── Logos and images ──
-      "{{LOGO_HTML}}": logoHTML,
-      "{{LOGO_URL}}": logoUrlResolved,
-      "{{HERO_IMAGE_URL}}": heroImageUrl,
-      "{{ABOUT_IMAGE_URL}}": aboutImageUrl,
-      "{{WHY_US_IMAGE_URL}}": whyUsImageUrl,
-      "{{SERVICE_1_IMAGE_URL}}": pickServiceImage(0, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
-      "{{SERVICE_2_IMAGE_URL}}": pickServiceImage(1, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
-      "{{SERVICE_3_IMAGE_URL}}": pickServiceImage(2, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
-      "{{SERVICE_4_IMAGE_URL}}": pickServiceImage(3, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
-      "{{SERVICE_5_IMAGE_URL}}": pickServiceImage(4, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
-      "{{SERVICE_6_IMAGE_URL}}": pickServiceImage(5, portfolioPhotos, [heroImageUrl, aboutImageUrl, whyUsImageUrl]),
-      "{{TRANSFORMATION_IMAGE_URL}}": portfolioPhotos[3] || portfolioPhotos[0] || aboutImageUrl,
-      "{{LEAD_MAGNET_IMAGE_URL}}": portfolioPhotos[4] || portfolioPhotos[0] || heroImageUrl,
-
-      // ── Social links ──
-      "{{SOCIAL_INSTAGRAM_URL}}": instagramUrl,
-      "{{SOCIAL_FACEBOOK_URL}}": socialLinks.facebook || "",
-      "{{SOCIAL_LINKEDIN_URL}}": socialLinks.linkedin || "",
-      "{{SOCIAL_TIKTOK_URL}}": socialLinks.tiktok || "",
-      "{{SOCIAL_PINTEREST_URL}}": socialLinks.pinterest || "",
-      "{{SOCIAL_GOOGLE_URL}}": socialLinks.google_business || socialLinks.google || "",
-      "{{SOCIAL_SUBSTACK_URL}}": socialLinks.substack || "",
-      "{{SOCIAL_PODCAST_URL}}": socialLinks.podcast || "",
-      "{{SOCIAL_BLOG_URL}}": socialLinks.blog || "",
-
-      // ── Misc ──
-      "{{DOMAIN}}": intake.domain || `staging.sitequeen.ai/${clientId}`,
-      "{{CLIENT_ID}}": clientId,
-      "{{SUPABASE_URL}}": supabaseUrl,
-
-      // ── Nav/Hero CTAs ──
-      "{{NAV_CTA}}": copy.NAV_CTA || TEMPLATE_DEFAULT_CTAS[templateId] || "GET STARTED",
-      "{{HERO_CTA_PRIMARY}}": copy.HERO_CTA_PRIMARY || TEMPLATE_DEFAULT_CTAS[templateId] || "GET STARTED",
-      "{{HERO_CTA_SECONDARY}}": copy.HERO_CTA_SECONDARY || "EXPLORE SERVICES",
-
-      // ── Marquee ──
-      "{{MARQUEE_1}}": copy.MARQUEE_1 || copy.PILLAR_1_TITLE || "",
-      "{{MARQUEE_2}}": copy.MARQUEE_2 || copy.PILLAR_2_TITLE || "",
-      "{{MARQUEE_3}}": copy.MARQUEE_3 || copy.PILLAR_3_TITLE || "",
-      "{{MARQUEE_4}}": copy.MARQUEE_4 || "",
-
-      // ── Lead Magnet ──
-      "{{LEAD_MAGNET_EYEBROW}}": copy.LEAD_MAGNET_EYEBROW || "✦ A FREE GUIDE",
-      "{{LEAD_MAGNET_BODY}}": copy.LEAD_MAGNET_BODY || copy.FOOTER_NEWSLETTER_TEXT || "",
-      "{{LEAD_MAGNET_BTN}}": copy.LEAD_MAGNET_BTN || "GET ACCESS",
-      "{{LEAD_MAGNET_NOTE}}": "No spam, ever. Unsubscribe anytime.",
-
-      // ── FAQ eyebrow ──
-      "{{FAQ_EYEBROW}}": "✦ COMMON QUESTIONS",
-
-      // ── feminine-bold template extras ──
-      ...buildFeminineBoldFill(templateId, copy, intake, ownerName, ownerTitle, businessName, businessType, services, portfolioPhotos, teamPhotos, city, noTestimonials, aboutImageUrl, heroImageUrl),
-    };
-
-    // ── 7d: Logo block pre-fill ──────────────────────────────────────────
-    const headerLogoBlockRe = /\{\{LOGO_HTML\}\}\s*<span class="logo-text">\s*\{\{BUSINESS_NAME\}\}\s*<\/span>/g;
-    html = html.replace(headerLogoBlockRe, hasLogo
-      ? logoHTML
-      : `<span class="logo-text">${escapeHTML(businessName)}</span>`);
-
-    // ── 7e: Apply fill map ───────────────────────────────────────────────
-    for (const [key, value] of Object.entries(fill)) {
-      html = html.split(key).join(value);
-    }
-
-    // ── 7f: Inline CSS ───────────────────────────────────────────────────
-    if (templateCSS) {
-      html = html.replace(
-        /<link\s+rel=["']stylesheet["']\s+href=["']styles?\.css["']\s*\/?>/i,
-        `<style>\n${templateCSS}\n</style>`,
+      return new Response(
+        JSON.stringify({
+          success: false,
+          status: "needs_review",
+          failures: genResult.failures,
+          warnings: genResult.warnings,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // ── 7g: Strip remaining placeholders ─────────────────────────────────
-    await logUnfilledPlaceholders(supabase as any, clientId, templateId, "index", html);
-    const remainingPlaceholders = html.match(/\{\{[^}]+\}\}/g) || [];
-    if (remainingPlaceholders.length > 0) {
-      console.warn(`[generate] ${remainingPlaceholders.length} unfilled placeholders stripped:`, remainingPlaceholders.slice(0, 10).join(", "));
+    if (genResult.warnings.length) {
+      console.warn("[generate] Gate warnings (non-blocking):", genResult.warnings.join(" | "));
     }
-    html = html.replace(/\{\{[^}]+\}\}/g, "");
+
+    let html = genResult.html;
+
 
     // ── 7h: Footer/address cleanup ───────────────────────────────────────
     const hasAddress = !!(intake.street_address || intake.business_address || intake.address);
