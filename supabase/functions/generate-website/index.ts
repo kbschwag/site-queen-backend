@@ -406,7 +406,11 @@ serve(async (req) => {
 
       if (genResult.status === "needs_review") {
         const errMsg = `Gate failures: ${genResult.failures.join("; ")}`;
+        const rawHtml = genResult.html || "";
+        const tail = rawHtml.slice(-500);
         console.warn("[generate] Gate rejected output — not uploading. " + errMsg);
+        console.warn(`[generate] Rejected output length: ${rawHtml.length} chars`);
+        console.warn(`[generate] Last 500 chars of rejected output:\n${tail}`);
         await supabase.from("sites").update({
           generation_status: "needs_review",
           generation_progress: "failed_gate",
@@ -415,7 +419,7 @@ serve(async (req) => {
         await supabase.from("generation_logs").insert({
           client_id: clientId,
           status: "needs_review",
-          error_message: `[gate] ${errMsg}`,
+          error_message: `[gate] ${errMsg}\n---last 500 chars---\n${tail}`,
         });
         return;
       }
