@@ -395,6 +395,7 @@ export default function OperatorClients() {
                 />
               </TabsContent>
             </Tabs>
+            </div>
           </SheetContent>
         </Sheet>
       )}
