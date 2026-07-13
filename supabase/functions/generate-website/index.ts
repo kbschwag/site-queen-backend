@@ -43,7 +43,9 @@ const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-sonnet-5";
 const LOVABLE_AI_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const LOVABLE_AI_MODEL = "google/gemini-3-flash-preview";
-const TIMEOUT_MS = 300_000; // 5 minutes — sonnet is faster than opus
+// Keep AI calls below the platform's 150s idle timeout so failures can be
+// caught and written back to the site row instead of leaving it "generating".
+const TIMEOUT_MS = 110_000;
 
 const STAGING_BASE_URL = "https://staging.sitequeen.ai";
 const STAGING_FOLDER_ROOT = "/public_html";
@@ -794,7 +796,7 @@ async function callAI(apiKey: string, content: string, label: string): Promise<{
     return callLovableAI(LOVABLE_API_KEY, content, label);
   }
 
-  const MAX_ATTEMPTS = 2;
+  const MAX_ATTEMPTS = 1;
   let lastErr: Error | null = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const controller = new AbortController();
