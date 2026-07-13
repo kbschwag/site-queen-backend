@@ -899,6 +899,7 @@ serve(async (req) => {
       generation_progress: "building_extra_pages",
       generated_at: new Date().toISOString(),
       staging_url: stagingURL,
+      template_used: templateId,
     } as any).eq("client_id", clientId);
 
     await supabase.from("generation_logs").insert({
