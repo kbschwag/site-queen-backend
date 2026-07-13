@@ -1055,6 +1055,22 @@ OUTPUT: raw HTML only — no markdown, no code fences, no explanation.`;
 
   } catch (error: any) {
     console.error("[extra-pages] fatal error:", error);
+    try {
+      if (clientId) {
+        await supabase.from("sites").update({
+          generation_status: "failed",
+          generation_progress: "extra_pages_failed",
+          generation_error: error?.message || String(error),
+        }).eq("client_id", clientId);
+        await supabase.from("generation_logs").insert({
+          client_id: clientId,
+          status: "failed",
+          error_message: `[extra-pages] ${error?.message || String(error)}`,
+        });
+      }
+    } catch (markErr) {
+      console.error("[extra-pages] failed to mark failure:", markErr);
+    }
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: corsHeaders }
