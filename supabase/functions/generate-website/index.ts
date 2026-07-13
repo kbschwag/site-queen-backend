@@ -45,7 +45,7 @@ const LOVABLE_AI_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions"
 const LOVABLE_AI_MODEL = "google/gemini-3-flash-preview";
 // Keep AI calls below the platform's 150s idle timeout so failures can be
 // caught and written back to the site row instead of leaving it "generating".
-const TIMEOUT_MS = 110_000;
+const TIMEOUT_MS = 280_000;
 
 const STAGING_BASE_URL = "https://staging.sitequeen.ai";
 const STAGING_FOLDER_ROOT = "/public_html";
