@@ -39,7 +39,7 @@ const corsHeaders = {
 };
 
 const AI_ENDPOINT = "https://api.anthropic.com/v1/messages";
-const AI_MODEL = "claude-sonnet-4-20250514";
+const AI_MODEL = "claude-sonnet-5";
 const LOVABLE_AI_ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const LOVABLE_AI_MODEL = "google/gemini-3-flash-preview";
 const TIMEOUT_MS = 300_000; // 5 minutes — sonnet is faster than opus
