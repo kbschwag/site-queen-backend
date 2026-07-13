@@ -394,21 +394,15 @@ serve(async (req) => {
         return;
       }
 
-      // ── AI authoring (guarded by generous timeout) ───────────────────────
-      const BG_AI_TIMEOUT_MS = 120_000;
+      // ── AI authoring (no inner timeout — background task has an overall guard) ──
       console.log("[generate] Authoring page via new engine (Claude authors, doesn't fill)...");
-      const genResult = await Promise.race([
-        generateSite({
-          business,
-          designReference: templateHTML,
-          mode: "client",
-          callAI: (p: string) => callAI(ANTHROPIC_API_KEY, p, "site").then((r) => r.text),
-          maxAttempts: 1,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`AI authoring timed out after ${BG_AI_TIMEOUT_MS}ms`)), BG_AI_TIMEOUT_MS)
-        ),
-      ]);
+      const genResult = await generateSite({
+        business,
+        designReference: templateHTML,
+        mode: "client",
+        callAI: (p: string) => callAI(ANTHROPIC_API_KEY, p, "site").then((r) => r.text),
+        maxAttempts: 1,
+      });
 
       if (genResult.status === "needs_review") {
         const errMsg = `Gate failures: ${genResult.failures.join("; ")}`;
@@ -617,8 +611,36 @@ serve(async (req) => {
     }
   };
 
+  const BG_OVERALL_TIMEOUT_MS = 300_000;
+  const guardedTask = async () => {
+    try {
+      await Promise.race([
+        backgroundTask(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Background generation exceeded ${BG_OVERALL_TIMEOUT_MS / 1000}s`)), BG_OVERALL_TIMEOUT_MS),
+        ),
+      ]);
+    } catch (e: any) {
+      console.error("[generate] guarded background failure:", e);
+      try {
+        await supabase.from("sites").update({
+          generation_status: "failed",
+          generation_progress: "generation_failed",
+          generation_error: e?.message || String(e),
+        } as any).eq("client_id", clientId);
+        await supabase.from("generation_logs").insert({
+          client_id: clientId,
+          status: "failed",
+          error_message: e?.message || String(e),
+        });
+      } catch (err) {
+        console.error("[generate] failed to mark guarded failure:", err);
+      }
+    }
+  };
+
   // @ts-ignore — EdgeRuntime is globally available in Supabase edge functions
-  EdgeRuntime.waitUntil(backgroundTask());
+  EdgeRuntime.waitUntil(guardedTask());
 
   return new Response(
     JSON.stringify({ success: true, status: "generating", client_id: clientId }),
