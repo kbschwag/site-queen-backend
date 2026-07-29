@@ -10,6 +10,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { WebsiteBriefPanel } from "@/components/operator/WebsiteBriefPanel";
+import { SiteFilesPanel } from "@/components/operator/SiteFilesPanel";
+
 import { IntakeForm } from "@/components/intake/IntakeForm";
 import { WebsiteBuildPanel } from "@/components/operator/WebsiteBuildPanel";
 import { GenerationDiagnosticsPanel } from "@/components/operator/GenerationDiagnosticsPanel";
