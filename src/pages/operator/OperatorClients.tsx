@@ -264,8 +264,10 @@ export default function OperatorClients() {
                 <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
                 <TabsTrigger value="build" className="flex-1">Website Build</TabsTrigger>
                 <TabsTrigger value="domain" className="flex-1">Domain</TabsTrigger>
+                <TabsTrigger value="files" className="flex-1">Files</TabsTrigger>
                 <TabsTrigger value="brief" className="flex-1">Brief</TabsTrigger>
                 <TabsTrigger value="intake" className="flex-1">Intake Form</TabsTrigger>
+
               </TabsList>
               <TabsContent value="details" className="space-y-4 mt-4">
                 <div className="flex items-center gap-2 flex-wrap">
