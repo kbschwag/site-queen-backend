@@ -19,6 +19,7 @@ import {
   Folder,
   FileText,
   Upload,
+  UploadCloud,
   Trash2,
   Download,
   RefreshCw,
