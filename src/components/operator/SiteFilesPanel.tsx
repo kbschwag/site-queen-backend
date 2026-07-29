@@ -19,6 +19,7 @@ import {
   Folder,
   FileText,
   Upload,
+  UploadCloud,
   Trash2,
   Download,
   RefreshCw,
@@ -56,6 +57,7 @@ export function SiteFilesPanel({ clientId }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [pushing, setPushing] = useState(false);
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Entry | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -144,6 +146,24 @@ export function SiteFilesPanel({ clientId }: Props) {
     setDeleting(false);
   };
 
+  const handlePushToStaging = async () => {
+    setPushing(true);
+    try {
+      const folder = path.length ? path.join("/") : "deploy";
+      const { data, error } = await supabase.functions.invoke("sync-files-to-staging", {
+        body: { client_id: clientId, folder },
+      });
+      if (error) throw error;
+      const pushed = data?.pushed?.length || 0;
+      const failed = data?.failed?.length || 0;
+      if (failed) toast.warning(`${pushed} pushed, ${failed} failed`);
+      else toast.success(`${pushed} file${pushed === 1 ? "" : "s"} pushed to staging`);
+    } catch (e: any) {
+      toast.error(e?.message || "Push failed");
+    }
+    setPushing(false);
+  };
+
   const handleDownload = async (entry: Entry) => {
     const { data, error } = await supabase.storage.from(BUCKET).download(`${prefix}/${entry.name}`);
     if (error || !data) {
@@ -183,6 +203,10 @@ export function SiteFilesPanel({ clientId }: Props) {
         <Button size="sm" className="gap-2" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           Upload
+        </Button>
+        <Button size="sm" variant="secondary" className="gap-2" disabled={pushing} onClick={handlePushToStaging}>
+          {pushing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          Push to staging
         </Button>
         <input
           ref={fileInputRef}
