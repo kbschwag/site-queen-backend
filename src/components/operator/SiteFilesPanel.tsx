@@ -203,6 +203,10 @@ export function SiteFilesPanel({ clientId }: Props) {
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           Upload
         </Button>
+        <Button size="sm" variant="secondary" className="gap-2" disabled={pushing} onClick={handlePushToStaging}>
+          {pushing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          Push to staging
+        </Button>
         <input
           ref={fileInputRef}
           type="file"
