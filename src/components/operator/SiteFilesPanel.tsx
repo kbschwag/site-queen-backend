@@ -144,6 +144,24 @@ export function SiteFilesPanel({ clientId }: Props) {
     setDeleting(false);
   };
 
+  const handlePushToStaging = async () => {
+    setPushing(true);
+    try {
+      const folder = path.length ? path.join("/") : "deploy";
+      const { data, error } = await supabase.functions.invoke("sync-files-to-staging", {
+        body: { client_id: clientId, folder },
+      });
+      if (error) throw error;
+      const pushed = data?.pushed?.length || 0;
+      const failed = data?.failed?.length || 0;
+      if (failed) toast.warning(`${pushed} pushed, ${failed} failed`);
+      else toast.success(`${pushed} file${pushed === 1 ? "" : "s"} pushed to staging`);
+    } catch (e: any) {
+      toast.error(e?.message || "Push failed");
+    }
+    setPushing(false);
+  };
+
   const handleDownload = async (entry: Entry) => {
     const { data, error } = await supabase.storage.from(BUCKET).download(`${prefix}/${entry.name}`);
     if (error || !data) {
