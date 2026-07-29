@@ -382,7 +382,11 @@ export default function OperatorClients() {
               <TabsContent value="domain" className="mt-4">
                 <DomainDeployTab clientId={selected.id} businessName={selected.business_name} />
               </TabsContent>
+              <TabsContent value="files" className="mt-4">
+                <SiteFilesPanel clientId={selected.id} businessName={selected.business_name} />
+              </TabsContent>
               <TabsContent value="brief" className="mt-4">
+
                 <WebsiteBriefPanel clientId={selected.id} businessName={selected.business_name} />
               </TabsContent>
               <TabsContent value="intake" className="mt-4">
