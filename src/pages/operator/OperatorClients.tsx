@@ -33,6 +33,8 @@ export default function OperatorClients() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [resendingWelcome, setResendingWelcome] = useState(false);
+  const [accessLoading, setAccessLoading] = useState(false);
+
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["operator-clients"],
