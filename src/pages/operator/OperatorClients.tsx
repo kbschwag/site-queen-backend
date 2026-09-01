@@ -33,6 +33,8 @@ export default function OperatorClients() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [resendingWelcome, setResendingWelcome] = useState(false);
+  const [accessLoading, setAccessLoading] = useState(false);
+
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["operator-clients"],
@@ -229,14 +231,41 @@ export default function OperatorClients() {
                   </Button>
                   <SheetTitle className="text-2xl">{selected.business_name}</SheetTitle>
                 </div>
-                {isOwner && (
-                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => {
-                    setDeleteTarget({ id: selected.id, name: selected.business_name });
-                    setShowDeleteModal(true);
-                  }}>
-                    <Trash2 className="h-4 w-4" />
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    disabled={accessLoading}
+                    onClick={async () => {
+                      setAccessLoading(true);
+                      const { data, error } = await supabase.functions.invoke("client-access-link", {
+                        body: { client_id: selected.id, redirect_to: `${window.location.origin}/dashboard` },
+                      });
+                      setAccessLoading(false);
+                      if (error || (data as any)?.error) {
+                        toast.error((data as any)?.error || error?.message || "Could not create access link");
+                        return;
+                      }
+                      const link = (data as any)?.action_link;
+                      if (!link) { toast.error("No link returned"); return; }
+                      window.open(link, "_blank");
+                      toast.success("Opening client portal in a new tab");
+                    }}
+                  >
+                    {accessLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                    Sign in as client
                   </Button>
-                )}
+                  {isOwner && (
+                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => {
+                      setDeleteTarget({ id: selected.id, name: selected.business_name });
+                      setShowDeleteModal(true);
+                    }}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+
               </div>
             </SheetHeader>
 
